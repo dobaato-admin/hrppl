@@ -1,0 +1,129 @@
+# ===========================================================================
+# DEVELOPMENT PROJECT.
+#
+# project_id points at the DEV project (xnrjfrxzahmfdrqfsnnq), not production
+# (astbnkrrgchezumcujgv). `supabase config push` writes to whatever project is
+# linked, so before pushing, confirm the link:
+#
+#     supabase projects list          # the linked one is marked
+#
+# The [auth.email] block below deliberately DISABLES email confirmation. That
+# is correct for development and wrong for production. Pushing this file at a
+# production project would let anyone sign up with an address they do not own.
+# ===========================================================================
+project_id = "xnrjfrxzahmfdrqfsnnq"
+
+# ---------------------------------------------------------------------------
+# Auth / session policy  (Finalization Plan §1 #5 and #6)
+#
+# Issue #6 was "24-hour session expiry cycle not functioning as intended". It
+# could not even be diagnosed, because this file held only project_id: the
+# expiry lived solely in the Supabase dashboard, with no review trail and
+# nothing to diff. Pinning it here makes the policy code.
+#
+# Apply with `supabase link` + `supabase config push`. If the dashboard and
+# this file disagree, THIS FILE is the intended policy — push it rather than
+# editing the dashboard, or #6 regresses silently.
+# ---------------------------------------------------------------------------
+[auth]
+enabled = true
+
+# Where GoTrue sends users after confirmation / recovery, and which origins it
+# will redirect back to. localhost:8080 is here because its absence is what
+# made local sign-in and password reset unusable on the old project: recovery
+# links landed on the deployed site and were consumed there.
+site_url = "http://localhost:8080"
+additional_redirect_urls = [
+  "http://localhost:8080",
+  "http://localhost:8080/reset-password",
+  "http://localhost:8080/auth",
+]
+
+# Access-token lifetime. Short on purpose: it bounds how long a stolen token
+# stays useful, and it is how quickly a suspension or role change is felt by a
+# client that is not making server-fn calls. Suspension itself is enforced on
+# every request by requireActiveUser, so this is a backstop, not the gate.
+jwt_expiry = 3600  # 1 hour
+
+# Refresh-token rotation: each refresh issues a new token and retires the old
+# one. reuse_interval tolerates a genuine race (two tabs refreshing at once)
+# while still treating a replay outside that window as theft.
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10  # seconds
+
+# --------------------------------------------------------------- DEV ONLY
+# enable_confirmations = false means a signup is usable immediately, with no
+# inbox round-trip. That is what lets the demo seed create eight users across
+# two tenants and have every one of them able to sign in straight away.
+#
+# It also means an unverified address can hold an account. Acceptable on a
+# throwaway dev project; NOT acceptable in production. Flip this to true (and
+# review site_url above) before this file is ever pushed at a real project.
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+# Changing an account's email still requires confirming both old and new, so a
+# hijacked session cannot silently move the account to another address.
+double_confirm_changes = true
+
+# The actual answer to #6, and to the "no idle timeout / no absolute cap" half
+# of #5. Enforced by GoTrue server-side, so unlike a client-side timer it
+# cannot be bypassed by ignoring the UI.
+#
+#   timebox            - hard cap. 24h after sign-in the session ends, full
+#                        stop, however active the user has been. This is the
+#                        "24-hour session expiry cycle" the plan asks for.
+#   inactivity_timeout - idle cap. 8h without a refresh ends the session,
+#                        so an unattended browser does not stay usable
+#                        overnight.
+# DISABLED ON THIS PROJECT -- NOT a policy change.
+#
+# `supabase config push` rejects this block with:
+#     402: User sessions can only be configured on Pro Plans and up.
+#
+# The dev project is Free tier, so GoTrue will not accept a timebox or an
+# inactivity timeout here no matter what this file says. Left in place, and
+# uncommented, the 402 aborts the whole push and none of the auth settings
+# above land either.
+#
+# The values are kept verbatim below because §1 #6's actual requirement is that
+# the policy live in code rather than in a dashboard -- reviewable and
+# diffable. That property survives being commented out; what does not survive
+# is enforcement. Concretely, on this project:
+#
+#     * there is NO 24h absolute session cap
+#     * there is NO 8h idle timeout
+#
+# jwt_expiry and refresh-token rotation above DO apply on Free tier, so a
+# stolen access token still expires in an hour. Re-enable this block verbatim
+# the moment the project is on Pro, and re-run `supabase config push`.
+#
+# [auth.sessions]
+# timebox = "24h"
+# inactivity_timeout = "8h"
+
+# ---------------------------------------------------------------------------
+# Multi-factor authentication
+#
+# MFA is MANDATORY in this application -- AuthRouteGate redirects every
+# authenticated request off any route outside MFA_ALLOWED until a factor is
+# enrolled and the session is verified. So if TOTP enrolment is disabled at the
+# project level, nobody can reach the app at all: the gate sends them to
+# /me/security, and supabase.auth.mfa.enroll() there fails with
+# "MFA enroll is disabled for TOTP", leaving a spinner where the QR code should
+# be and no way forward.
+#
+# A fresh Supabase project has all MFA factors OFF by default. The old project
+# had TOTP switched on in its dashboard, which is exactly the kind of setting
+# that does not travel with a schema migration -- invisible until a rebuild.
+#
+# TOTP only. Phone MFA needs an SMS provider and is Pro-gated; WebAuthn is not
+# wired up in the UI (src/routes/me.security.tsx offers TOTP and email OTP
+# only, and email OTP is implemented in-app via mfa_email_challenges rather
+# than by GoTrue).
+[auth.mfa]
+max_enrolled_factors = 10
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true

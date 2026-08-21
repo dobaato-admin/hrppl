@@ -1,0 +1,97 @@
+name: E2E full harness (Playwright)
+
+# Boots the Vite preview, seeds a tenant, sets SMTP + OAuth fixtures, and
+# runs the full Playwright suite end-to-end. Distinct from `e2e-tests.yml`,
+# which only runs the routing-contract subset.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *" # nightly 06:00 UTC
+
+jobs:
+  e2e-full:
+    name: Playwright (full)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      mailpit:
+        image: axllent/mailpit:latest
+        ports:
+          - 1025:1025
+          - 8025:8025
+        options: >-
+          --health-cmd "wget -q -O- http://127.0.0.1:8025/api/v1/info || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CI: "true"
+      # Supabase project — pulled from repo secrets.
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      # SMTP fixture — points at the mailpit service container above.
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1025"
+      SMTP_HTTP_PORT: "8025"
+      # OAuth fixture — dummy values; specs mock the provider response.
+      E2E_FAKE_OAUTH_CLIENT_ID: test-google-client-id
+      E2E_FAKE_OAUTH_CLIENT_SECRET: test-google-secret
+      # Tell Playwright to reuse the preview we boot below.
+      E2E_BASE_URL: http://localhost:4173
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+
+      - name: Wait for mailpit
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://127.0.0.1:8025/api/v1/info >/dev/null; then echo "mailpit ready"; exit 0; fi
+            sleep 2
+          done
+          echo "mailpit never came up"; exit 1
+
+      - name: Seed tenant + admin user
+        run: bun run e2e:seed
+
+      - name: Build preview bundle
+        run: bun run build
+
+      - name: Start preview server
+        run: |
+          bun run preview --port 4173 --host 127.0.0.1 > preview.log 2>&1 &
+          for i in {1..60}; do
+            if curl -sf http://127.0.0.1:4173 >/dev/null; then echo "preview ready"; exit 0; fi
+            sleep 2
+          done
+          echo "preview never came up"; tail -50 preview.log; exit 1
+
+      - name: Run Playwright E2E
+        run: bun run test:e2e 2>&1 | tee playwright.log
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full
+          path: |
+            playwright-report
+            playwright.log
+            preview.log
+            .e2e/seeded.json
+          if-no-files-found: ignore

@@ -1,0 +1,159 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from "recharts";
+import { getOrgReports } from "@/lib/reports.functions";
+
+export const Route = createFileRoute("/org/reports")({
+  head: () => ({ meta: [{ title: "Reports — WorldPay HRMS" }] }),
+  component: ReportsPage,
+});
+
+interface Row { month: string; hires: number; terminations: number; payrollCost: number; leaveDays: number; overtimeHours: number }
+interface Kpis { headcount: number; monthlySalaryBill: number; pendingLeaveRequests: number; overtimeLast: number; currency: string }
+
+function toCsv(rows: any[]): string {
+  if (!rows.length) return "";
+  const cols = Object.keys(rows[0]);
+  const head = cols.join(",");
+  const body = rows.map((r) => cols.map((c) => JSON.stringify(r[c] ?? "")).join(",")).join("\n");
+  return head + "\n" + body;
+}
+function download(name: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+function ReportsPage() {
+  const { user, roles, loading } = useAuth();
+  const navigate = useNavigate();
+  const [months, setMonths] = useState(6);
+  const [kpis, setKpis] = useState<Kpis | null>(null);
+  const [series, setSeries] = useState<Row[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const fnReports = useServerFn(getOrgReports);
+  const canAccess = roles.includes("manager") || roles.includes("org_admin") || roles.includes("super_admin");
+
+  useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [loading, user, navigate]);
+
+  useEffect(() => {
+    if (!user || !canAccess) return;
+    setBusy(true);
+    fnReports({ data: { monthsBack: months } })
+      .then((r) => { setKpis(r.kpis as Kpis); setSeries(r.series as Row[]); })
+      .catch(() => {})
+      .finally(() => setBusy(false));
+  }, [user, canAccess, months]);
+
+  if (loading || !user) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+  if (!canAccess) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Forbidden.</main>;
+
+  return (
+    <main className="min-h-screen bg-background">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div>
+            <h1 className="text-xl font-semibold">Reports & analytics</h1>
+            <p className="text-xs text-muted-foreground">Headcount, payroll, leave, overtime trends.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={String(months)} onValueChange={(v) => setMonths(Number(v))}>
+              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="3">Last 3 months</SelectItem>
+                <SelectItem value="6">Last 6 months</SelectItem>
+                <SelectItem value="12">Last 12 months</SelectItem>
+                <SelectItem value="24">Last 24 months</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" onClick={() => download(`reports-${months}m.csv`, toCsv(series))} disabled={!series.length}>Export CSV</Button>
+            <Link to="/org"><Button variant="outline" size="sm">Back</Button></Link>
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto max-w-6xl px-6 py-8 space-y-6">
+        <div className="grid gap-4 md:grid-cols-4">
+          <Kpi label="Active headcount" value={kpis ? String(kpis.headcount) : "—"} />
+          <Kpi label="Monthly salary bill" value={kpis ? `${kpis.monthlySalaryBill.toLocaleString()} ${kpis.currency}` : "—"} />
+          <Kpi label="Pending leave requests" value={kpis ? String(kpis.pendingLeaveRequests) : "—"} />
+          <Kpi label="Overtime last month (h)" value={kpis ? String(kpis.overtimeLast) : "—"} />
+        </div>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Headcount changes</CardTitle><CardDescription>Hires vs terminations per month.</CardDescription></CardHeader>
+          <CardContent style={{ height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={series}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} />
+                <Tooltip /><Legend />
+                <Bar dataKey="hires" fill="hsl(var(--primary))" />
+                <Bar dataKey="terminations" fill="hsl(var(--destructive))" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Payroll cost (approved)</CardTitle><CardDescription>Total gross by month, in {kpis?.currency ?? "—"}.</CardDescription></CardHeader>
+          <CardContent style={{ height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={series}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} />
+                <Tooltip /><Legend />
+                <Line type="monotone" dataKey="payrollCost" stroke="hsl(var(--primary))" strokeWidth={2} dot />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Approved leave days</CardTitle></CardHeader>
+            <CardContent style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={series}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} /><Tooltip />
+                  <Bar dataKey="leaveDays" fill="hsl(var(--primary))" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Overtime hours</CardTitle></CardHeader>
+            <CardContent style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={series}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} /><Tooltip />
+                  <Line type="monotone" dataKey="overtimeHours" stroke="hsl(var(--primary))" strokeWidth={2} dot />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+
+        {busy && <p className="text-xs text-muted-foreground">Loading…</p>}
+      </section>
+    </main>
+  );
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardDescription>{label}</CardDescription></CardHeader>
+      <CardContent><div className="text-2xl font-semibold">{value}</div></CardContent>
+    </Card>
+  );
+}

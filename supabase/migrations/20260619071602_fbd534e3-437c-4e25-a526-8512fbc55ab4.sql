@@ -1,0 +1,1 @@
+ALTER VIEW public.toil_balances SET (security_invoker = on);

@@ -1,0 +1,1 @@
+REVOKE INSERT, UPDATE, SELECT ON public.blog_posts FROM sandbox_exec;

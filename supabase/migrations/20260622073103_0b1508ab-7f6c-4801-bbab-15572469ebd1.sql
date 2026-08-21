@@ -1,0 +1,1 @@
+ALTER VIEW public.v_timesheet_variance SET (security_invoker = true);

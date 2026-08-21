@@ -1,0 +1,2 @@
+ALTER TABLE public.timesheets ADD COLUMN IF NOT EXISTS consumed_by_run_id uuid REFERENCES public.payroll_runs(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS timesheets_consumption_idx ON public.timesheets (tenant_id, employee_id, status, consumed_by_run_id);

@@ -1,0 +1,5 @@
+
+ALTER TABLE public.offboarding_comms_removal_audit
+  DROP CONSTRAINT IF EXISTS offboarding_comms_removal_audit_case_id_fkey;
+ALTER TABLE public.offboarding_comms_removal_audit
+  DROP CONSTRAINT IF EXISTS offboarding_comms_removal_audit_tenant_id_fkey;

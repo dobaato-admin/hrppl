@@ -1,0 +1,33 @@
+name: Email routes smoke test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type-check email server routes
+        run: |
+          bunx tsc --noEmit \
+            src/lib/email/send-internal.server.ts \
+            src/routes/lovable/email/transactional/send.ts \
+            src/routes/lovable/email/transactional/preview.ts \
+            src/routes/email/unsubscribe.ts \
+            --jsx react-jsx --esModuleInterop --moduleResolution bundler \
+            --module esnext --target es2022 --skipLibCheck \
+            --baseUrl . --paths '{"@/*":["src/*"]}'
+
+      - name: Render email templates (smoke)
+        run: bunx tsx scripts/smoke-email-routes.mjs

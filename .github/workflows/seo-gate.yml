@@ -1,0 +1,72 @@
+name: SEO regression gate
+
+# Runs on every PR/push to main and after deploys. Two jobs:
+#   1) seo-meta-tests — offline vitest suite that asserts every key
+#      public route declares title/description/OG/canonical and that
+#      the root layout ships WebSite + Organization JSON-LD. Fails
+#      fast before deploy.
+#   2) seo-live-scan — after deploy, queries the SEO findings API for
+#      the live deployment and blocks if any failing findings remain.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  seo-meta-tests:
+    name: Static SEO meta regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Run SEO meta tests
+        run: bunx vitest run tests/seo-meta.test.ts
+
+  seo-live-scan:
+    name: Block on failing SEO findings (live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only enforce on push to main / successful deploys.
+    if: github.event_name == 'push' || github.event_name == 'deployment_status' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Query SEO findings portal
+        id: query
+        env:
+          SEO_API_BASE: ${{ vars.SEO_FINDINGS_API_BASE || 'https://hrppl.io' }}
+        run: |
+          set -euo pipefail
+          echo "Querying ${SEO_API_BASE}/_serverFn/countFailingSeoFindings"
+          RESP=$(curl -fsS -X GET \
+            "${SEO_API_BASE}/_serverFn/countFailingSeoFindings" \
+            -H "Accept: application/json" || echo '{"failing":-1}')
+          echo "Response: $RESP"
+          COUNT=$(echo "$RESP" | python3 -c "import sys,json;
+try:
+  d=json.load(sys.stdin)
+  print(d.get('failing', d.get('result',{}).get('failing', -1)))
+except Exception:
+  print(-1)")
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+      - name: Fail if any failing SEO findings
+        run: |
+          COUNT="${{ steps.query.outputs.count }}"
+          if [ "$COUNT" = "-1" ]; then
+            echo "::warning::Could not reach SEO findings portal — not blocking."
+            exit 0
+          fi
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::Blocking release: $COUNT failing SEO finding(s) on live deployment."
+            exit 1
+          fi
+          echo "✅ No failing SEO findings on live deployment."
