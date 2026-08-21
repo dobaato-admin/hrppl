@@ -22,14 +22,17 @@ export const listExpenseCategories = createServerFn({ method: "GET" })
     // alone leaks every tenant's categories to a super_admin, whose policies
     // carry no tenant predicate.
     const tenantId = await getTenantId(supabase, userId);
-    if (!tenantId) return { categories: [] };
+    // Distinguish "you have no organization" from "your organization has no
+    // categories yet". Both render an empty dropdown, but they need different
+    // fixes, and an unexplained empty <Select> reads as a broken page.
+    if (!tenantId) return { categories: [], noTenantScope: true as const };
     const { data, error } = await supabase
       .from("expense_categories")
       .select("*")
       .eq("tenant_id", tenantId)
       .order("name");
     if (error) throw error;
-    return { categories: data ?? [] };
+    return { categories: data ?? [], noTenantScope: false as const };
   });
 
 const CategorySchema = z.object({

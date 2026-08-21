@@ -75,7 +75,21 @@ function MyExpensesPage() {
     const s = await reimb({ data: {} });
     setSummary(s.summary);
   }
-  useEffect(() => { refresh(); cats().then((r) => setCategories(r.categories.filter((c: any) => c.is_active))); }, []);
+  // `noTenantScope` is carried through so the empty dropdown can explain itself.
+  // A platform account (super_admin / regional_admin) has no tenant, so there
+  // are no categories to show — previously that rendered a silent empty Select
+  // that looked like a bug rather than a state.
+  const [catState, setCatState] = useState<"loading" | "ok" | "empty" | "no-tenant">("loading");
+  useEffect(() => {
+    refresh();
+    cats()
+      .then((r) => {
+        const active = (r.categories ?? []).filter((c: any) => c.is_active);
+        setCategories(active);
+        setCatState(r.noTenantScope ? "no-tenant" : active.length ? "ok" : "empty");
+      })
+      .catch(() => setCatState("empty"));
+  }, []);
 
   function downloadStatement() {
     if (!summary) return;
@@ -261,6 +275,20 @@ function MyExpensesPage() {
                 <Label>Line items</Label>
                 <Button size="sm" variant="outline" onClick={() => setLines([...lines, emptyLine()])}><Plus className="h-3.5 w-3.5 mr-1" /> Add line</Button>
               </div>
+              {catState === "no-tenant" && (
+                <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                  Your account isn&rsquo;t attached to an organization, so there are no expense
+                  categories to choose from. Expense claims belong to an organization &mdash; sign
+                  in with an account that has one.
+                </p>
+              )}
+              {catState === "empty" && (
+                <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                  No expense categories have been set up yet. An administrator can add them on{" "}
+                  <Link to="/org/expenses" className="underline">Expenses &rarr; Categories</Link>
+                  {" "}&mdash; there are one-click presets there.
+                </p>
+              )}
               {lines.map((l, i) => (
                 <div key={i} className="grid gap-2 rounded-md border p-3 md:grid-cols-12">
                   <Input type="date" value={l.expense_date} onChange={(e) => setLines(ls => ls.map((x,j) => j===i ? { ...x, expense_date: e.target.value } : x))} className="md:col-span-2" />

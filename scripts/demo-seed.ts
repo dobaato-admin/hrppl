@@ -211,14 +211,26 @@ async function wipe(): Promise<void> {
 
   // 1. Tenant children, then tenants — releases created_by and user_id.
   //
-  // Matched on the `demo-` slug prefix rather than only the two slugs this
-  // script creates. Demo accounts also create organizations through the UI —
-  // walking the org-setup wizard is a normal thing to demo — and those tenants
-  // hold tenants.created_by, which is ON DELETE NO ACTION. A stray tenant
-  // therefore made its founder permanently undeletable and wedged every later
-  // seed run. The prefix is still the documented safety marker, so this
-  // widening cannot reach a real tenant.
-  const { data: tenants } = await admin.from("tenants").select("id").like("slug", "demo-%");
+  // Selected by CREATOR, not by slug. Demo accounts create organizations through
+  // the UI — walking the org-setup wizard is a normal thing to demo — and the
+  // wizard names the tenant after whatever the user typed, so the slug is
+  // arbitrary. A run as rita left a "Rita OG" tenant (slug `rita-og`) that no
+  // slug pattern would catch.
+  //
+  // Two things went wrong because of that. tenants.created_by is ON DELETE
+  // NO ACTION, so the stray tenant made its founder permanently undeletable and
+  // wedged every later seed run. And rita's profile stayed pointed at that
+  // tenant, which had none of the seeded lookup data — so every dropdown in the
+  // app was empty for her, which looks exactly like a broken page.
+  //
+  // Keyed on demo user ids, so the safety guarantee is unchanged: this can only
+  // reach tenants created by an @demo.hrppl.test account.
+  // `in.()` with an empty list is malformed, so fall back to the slug match
+  // alone on a first run when there are no demo users yet.
+  const tenantFilter = userIds.length
+    ? `slug.like.demo-%,created_by.in.(${userIds.join(",")})`
+    : `slug.like.demo-%`;
+  const { data: tenants } = await admin.from("tenants").select("id").or(tenantFilter);
   const tenantIds = (tenants ?? []).map((t: { id: string }) => t.id);
   if (tenantIds.length) {
     for (const table of [
