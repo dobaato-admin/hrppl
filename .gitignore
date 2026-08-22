@@ -56,3 +56,6 @@ test-results/
 coverage/
 *.tsbuildinfo
 
+
+# Vercel build output (Build Output API v3) and local project link
+.vercel/

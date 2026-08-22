@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "bun install",
+  "buildCommand": "bun run build",
+  "crons": [
+    { "path": "/api/public/hooks/leave-accrual", "schedule": "0 2 * * *" },
+    { "path": "/api/public/hooks/audit-retention-run", "schedule": "0 3 * * *" }
+  ]
+}
