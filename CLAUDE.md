@@ -302,6 +302,31 @@ tables in the domains it flags.
 
 ---
 
+## Deployment — Vercel
+
+Live at **https://hrppl.vercel.app**, auto-deploying from `main` via the GitHub integration,
+pointed at the same dev Supabase project (`xnrjfrxzahmfdrqfsnnq`). Full runbook:
+**`docs/deploy-vercel.md`**.
+
+Three things that are easy to break and hard to diagnose:
+
+- **The Nitro preset is `vercel`, set explicitly in `vite.config.ts`.** The Lovable wrapper's
+  zero-config default is `cloudflare-module`. Reverting to it ships a Cloudflare Worker that
+  Vercel cannot serve. `NITRO_PRESET` overrides it without editing the file.
+- **Never commit `.vercel/`.** It was committed once (950 files, `9e752de`) and the deploy
+  served a stale Windows-built bundle that 500'd on every request until the tree was untracked.
+  `.gitignore` covers it now.
+- **`VITE_*` is compiled in at build time, not read at runtime.** Adding or changing one in the
+  Vercel dashboard does nothing until a rebuild. A deploy built without them still returns 200
+  from SSR — the server falls back to `process.env` — while the browser throws and renders the
+  `__root.tsx` error boundary. That boundary and the SSR 500 page in `src/lib/error-page.ts`
+  print the *same* "This page didn't load" string, so check the HTTP status before assuming
+  which one you are looking at. `docs/deploy-vercel.md` §8 has the curl checks.
+
+Cron: Hobby allows 2 jobs/day, wired in `vercel.json` to `leave-accrual` and
+`audit-retention-run`. **Vercel Cron issues GET**, so those two hooks have GET handlers; the
+other 18 remain POST-only and unscheduled (use Supabase `pg_cron` — recipe in the runbook).
+
 ## Current status
 
 The project now runs against a **fresh Supabase dev project** (`xnrjfrxzahmfdrqfsnnq`), with all
