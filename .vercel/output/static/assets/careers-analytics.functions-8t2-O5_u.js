@@ -1,1 +1,0 @@
-import{z as e,E as a,A as d}from"./index-wmDAIwEC.js";const c=e({method:"POST"}).handler(a("42d3e0a1777d41a78dcc6600255e69510ae86dc08fd86634c62cf6d6ce66d79c")),t=e({method:"GET"}).middleware([d]).handler(a("4a60a5f8bb3db34352b3f00ea34128a5f19f42dc0e04ee585fd0b3482ed3a077"));export{t as g,c as t};

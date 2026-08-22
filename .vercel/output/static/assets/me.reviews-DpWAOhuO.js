@@ -1,1 +1,0 @@
-import{j as s,B as r}from"./index-wmDAIwEC.js";const n=({error:t,reset:e})=>s.jsxs("main",{className:"p-6 text-sm text-destructive",children:[s.jsxs("p",{children:["Couldn't load scorecards: ",t.message]}),s.jsx(r,{size:"sm",variant:"outline",onClick:e,className:"mt-2",children:"Retry"})]});export{n as errorComponent};

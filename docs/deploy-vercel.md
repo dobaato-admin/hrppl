@@ -59,6 +59,12 @@ Before importing, fix these placeholders:
   as `REPLACE-ME`. Outbound email will not send until you supply real values. Everything else
   works without them.
 
+> **`VITE_*` vars are baked in at BUILD time, not read at runtime.** If a deploy ran before
+> these were added, its client bundle has no Supabase URL — SSR still returns 200 (the server
+> falls back to `process.env`), but the browser throws on first use and you get the React
+> error boundary in `__root.tsx`: *"This page didn't load"*. Adding the vars afterwards fixes
+> nothing on its own — **you must redeploy**, and the redeploy must not reuse a cached build.
+
 What is intentionally absent:
 
 - `VITE_DEV_BYPASS_MFA` — **never set this in Vercel.** It disables the MFA gate. It is
@@ -67,6 +73,8 @@ What is intentionally absent:
   `/api/public/hooks/stripe-webhook` route stays deployed but unconfigured.
 - `CRON_ALLOW_SERVICE_ROLE_FALLBACK` — leave unset. Setting it makes the service-role key a
   valid bearer token on 20 public endpoints.
+- `NODE_ENV` — Vercel sets this itself. Overriding it is a documented footgun (it can make
+  the install skip devDependencies, and every build tool here is a devDependency).
 
 Anything `VITE_*` is compiled into the browser bundle. The Google Maps key is client-side by
 necessity — **domain-restrict it in Google Cloud Console to your Vercel domain.**
@@ -159,7 +167,40 @@ deliveries.
       builds `connect-src` from `SUPABASE_URL`, so a missing value surfaces here as blocked
       Supabase calls.
 
-## 8. Known limitations on this deployment
+## 8. Troubleshooting: "This page didn't load"
+
+That exact string is rendered by **two different things**, and they mean opposite things.
+Check the page source before doing anything else:
+
+| What you see | Which one | Meaning |
+| --- | --- | --- |
+| System font, `#111` button, no app CSS, page source is a short standalone document | `src/lib/error-page.ts`, served by `src/server.ts` | A genuine **SSR 500**. The server threw. Check Vercel Runtime Logs — `src/server.ts` `console.error`s the real error. |
+| App fonts (Manrope/Sora), Tailwind classes, full app HTML in view-source | `ErrorComponent` in `src/routes/__root.tsx` | SSR **succeeded** (HTTP 200) and the crash happened in the browser. Almost always a missing `VITE_*` var — see below. |
+
+**The common cause:** a deploy whose build ran before the environment variables existed. Confirm
+it directly, without guessing:
+
+```sh
+# 1. Find the client bundle hash
+curl -s https://<domain>/ | grep -o '/assets/index-[A-Za-z0-9_-]*\.js' | head -1
+
+# 2. Check whether the Supabase project ref was compiled into it
+curl -s https://<domain>/assets/index-<HASH>.js | grep -c xnrjfrxzahmfdrqfsnnq
+```
+
+`1` means the vars were baked in correctly. **`0` means they were not** — the build predates
+them. Fix: Vercel → Deployments → ⋯ → **Redeploy**, with **"Use existing Build Cache" unchecked**.
+Adding the variables alone changes nothing until a fresh build runs.
+
+To see whether SSR itself is healthy, independent of the browser:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}' https://<domain>/
+```
+
+200 means SSR is fine and the fault is client-side.
+
+## 9. Known limitations on this deployment
 
 - **Hobby serverless functions time out at 60s.** The whole app is one `__server.func`, so
   long operations — a full-tenant payroll run, a tenant-wide review fan-out, `leave-accrual`

@@ -1,1 +1,0 @@
-import{u as s,c as i,s as u}from"./index-wmDAIwEC.js";function d(){const{user:e}=s(),{data:n,isLoading:t}=i({queryKey:["my-tenant-id",e?.id],enabled:!!e,staleTime:1/0,queryFn:async()=>{const{data:a}=await u.from("profiles").select("tenant_id").eq("id",e.id).maybeSingle();return a?.tenant_id??null}});return{tenantId:e?n:null,isLoading:t&&!!e}}export{d as u};
