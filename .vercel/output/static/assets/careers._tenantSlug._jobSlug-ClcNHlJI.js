@@ -1,0 +1,1 @@
+import{j as o}from"./index-wmDAIwEC.js";const e=()=>o.jsx("div",{className:"min-h-screen flex items-center justify-center text-muted-foreground",children:"Job not found."});export{e as notFoundComponent};

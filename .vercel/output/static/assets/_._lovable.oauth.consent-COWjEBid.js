@@ -1,0 +1,1 @@
+import{j as o}from"./index-wmDAIwEC.js";const e=({error:t})=>o.jsxs("main",{className:"mx-auto max-w-lg p-8 text-sm text-foreground",children:["Could not load this authorization request: ",String(t?.message??t)]});export{e as errorComponent};

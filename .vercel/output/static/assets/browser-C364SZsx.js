@@ -1,0 +1,1 @@
+import o from"./purify.es-DSHCW8nm.js";var e=o;o.sanitize.bind(o);o.isSupported;o.addHook.bind(o);o.removeHook.bind(o);o.removeHooks.bind(o);o.removeAllHooks.bind(o);o.setConfig.bind(o);o.clearConfig.bind(o);o.isValidAttribute.bind(o);o.version;o.removed;export{e as b};

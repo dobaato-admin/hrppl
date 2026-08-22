@@ -1,0 +1,1 @@
+import{aq as o,j as e,B as n}from"./index-wmDAIwEC.js";const i=({error:r,reset:s})=>{const t=o();return e.jsxs("div",{className:"p-6",children:[e.jsx("p",{className:"text-destructive",children:r.message}),e.jsx(n,{onClick:()=>{s(),t.invalidate()},children:"Retry"})]})};export{i as errorComponent};

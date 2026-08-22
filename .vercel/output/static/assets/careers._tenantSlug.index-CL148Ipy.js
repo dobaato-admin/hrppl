@@ -1,0 +1,1 @@
+import{j as e}from"./index-wmDAIwEC.js";const n=()=>e.jsx("div",{className:"min-h-screen flex items-center justify-center text-muted-foreground",children:"Careers page not found."});export{n as notFoundComponent};

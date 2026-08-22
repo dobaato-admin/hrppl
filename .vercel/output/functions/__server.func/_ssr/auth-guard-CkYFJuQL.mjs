@@ -1,0 +1,75 @@
+import { createClient } from "../_libs/supabase__supabase-js.mjs";
+import { c as createMiddleware } from "./createMiddleware-BvN2ghIY.mjs";
+import { a as getRequest } from "./server-BOi2EjMN.mjs";
+const requireSupabaseAuth$1 = createMiddleware({ type: "function" }).server(
+  async ({ next }) => {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY;
+    if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+      const missing = [
+        ...!SUPABASE_URL ? ["SUPABASE_URL"] : [],
+        ...!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []
+      ];
+      const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
+      console.error(`[Supabase] ${message}`);
+      throw new Error(message);
+    }
+    const request = getRequest();
+    if (!request?.headers) {
+      throw new Error("Unauthorized: No request headers available");
+    }
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader) {
+      throw new Error("Unauthorized: No authorization header provided");
+    }
+    if (!authHeader.startsWith("Bearer ")) {
+      throw new Error("Unauthorized: Only Bearer tokens are supported");
+    }
+    const token = authHeader.replace("Bearer ", "");
+    if (!token) {
+      throw new Error("Unauthorized: No token provided");
+    }
+    const supabase = createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        },
+        auth: {
+          storage: void 0,
+          persistSession: false,
+          autoRefreshToken: false
+        }
+      }
+    );
+    const { data, error } = await supabase.auth.getClaims(token);
+    if (error || !data?.claims) {
+      throw new Error("Unauthorized: Invalid token");
+    }
+    if (!data.claims.sub) {
+      throw new Error("Unauthorized: No user ID found in token");
+    }
+    return next({
+      context: {
+        supabase,
+        userId: data.claims.sub,
+        claims: data.claims
+      }
+    });
+  }
+);
+const requireActiveUser = createMiddleware({ type: "function" }).middleware([requireSupabaseAuth$1]).server(async ({ next, context }) => {
+  const { assertAccountActive } = await import("./account-status.server-BRvat4z5.mjs");
+  const { supabase, userId } = context;
+  await assertAccountActive(supabase, userId);
+  return next();
+});
+const requireAuthAllowSuspended = requireSupabaseAuth$1;
+const requireSupabaseAuth = requireActiveUser;
+export {
+  requireAuthAllowSuspended as a,
+  requireSupabaseAuth as r
+};
