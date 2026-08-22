@@ -195,6 +195,35 @@ describe("the company directory works for employees without leaking", () => {
   });
 });
 
+describe("an empty tenant-scoped dropdown explains itself", () => {
+  /**
+   * Scoping the queries fixed a leak but created a new failure mode: a platform
+   * account (super_admin / regional_admin) has no tenant, so every tenant-scoped
+   * list correctly returns nothing — and rendered a silent empty <Select> that
+   * looks exactly like a broken page. It was reported as "the category dropdown
+   * still doesn't work".
+   *
+   * "No organization" and "organization has no categories yet" need different
+   * fixes, so they must be distinguishable.
+   */
+  it("listExpenseCategories reports why it is empty", () => {
+    const C = code(read("src/lib/expenses.functions.ts"));
+    const fn = C.slice(C.indexOf("export const listExpenseCategories"));
+    const handler = fn.slice(0, fn.indexOf("const CategorySchema"));
+    expect(handler).toMatch(/noTenantScope: true/);
+    expect(handler).toMatch(/noTenantScope: false/);
+  });
+
+  it("the claim form renders a reason instead of an empty select", () => {
+    const SRC = code(read("src/routes/me.expenses.tsx"));
+    expect(SRC).toMatch(/catState/);
+    expect(SRC).toMatch(/"no-tenant"/);
+    expect(SRC).toMatch(/"empty"/);
+    // The "no categories yet" case must point somewhere actionable.
+    expect(SRC).toMatch(/\/org\/expenses/);
+  });
+});
+
 describe("no list-style employees query reads across tenants", () => {
   /**
    * The sweep. Individual fixes handle today's leaks; this is what stops the
