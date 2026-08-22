@@ -29,10 +29,21 @@ import {
 import { ScorecardPreview } from "@/components/performance/ScorecardPreview";
 import { validateTemplate, type ValidationIssue } from "@/lib/review-template-validation";
 import { AppShell } from "@/components/AppShell";
+import { AdminGate } from "@/components/AdminGate";
+import { ORG_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/review-templates")({
   head: () => ({ meta: [{ title: "Review templates — WorldPay HRMS" }] }),
-  component: ReviewTemplatesAdmin,
+  // Gated at the route, per CLAUDE.md. This page hand-rolled `canAccess` and
+  // rendered its own chrome-less "no access" panel, so the six roles that
+  // cannot open it landed on a bare page with no sidebar and no way back — the
+  // QA sweep flagged it for 6 of 8 roles. ORG_ADMIN_ONLY matches the set the
+  // inline check used, so access is unchanged.
+  component: () => (
+    <AdminGate allow={ORG_ADMIN_ONLY}>
+      <ReviewTemplatesAdmin />
+    </AdminGate>
+  ),
 });
 
 type Competency = PresetCompetency;
@@ -111,7 +122,6 @@ function ReviewTemplatesAdmin() {
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditEntries, setAuditEntries] = useState<any[]>([]);
 
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
   useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [loading, user, navigate]);
 
   async function load() {
@@ -119,7 +129,7 @@ function ReviewTemplatesAdmin() {
     const { data } = await q;
     setTemplates(((data ?? []) as unknown) as Template[]);
   }
-  useEffect(() => { if (canAccess) load(); }, [canAccess]);
+  useEffect(() => { load(); /* AdminGate guarantees access above */ }, []);
 
   function reset() {
     setPresetKey("none");
@@ -270,21 +280,6 @@ function ReviewTemplatesAdmin() {
   );
 
   if (loading || !user) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
-  if (!canAccess) return (
-    <main className="min-h-screen bg-background">
-      <div className="mx-auto max-w-2xl px-6 py-16 space-y-4">
-        <div className="rounded-lg border border-border bg-card p-6">
-          <h2 className="text-lg font-semibold">You don't have access to Review templates</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            This page is restricted to users with the <span className="font-mono text-foreground">org_admin</span> or{" "}
-            <span className="font-mono text-foreground">super_admin</span> role. Ask your organization administrator to grant access,
-            or open <Link to="/me/reviews" className="underline">My reviews</Link> to view scorecards assigned to you.
-          </p>
-        </div>
-      </div>
-    </main>
-  );
-
   function updateComp(i: number, patch: Partial<Competency>) {
     const next = [...form.competencies];
     next[i] = { ...next[i], ...patch };

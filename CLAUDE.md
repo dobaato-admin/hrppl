@@ -212,6 +212,37 @@ catch silent widening.
 > `docs/rbac.md` section 5 and all of `docs/schema-audit.md` are **proposals**, not committed
 > state. Check the code before assuming either was executed.
 
+### Tenant scoping — RLS is the boundary, not the scope
+
+**Every list-style query must filter `tenant_id` itself.** RLS is the security boundary and stays
+so, but it does not *narrow* for every role: `super_admin`'s policy on `employees`
+("super admin all employees", `20260603213444:100-103`) is `FOR ALL USING has_role(...)` with no
+tenant predicate at all. A query that omits `.eq("tenant_id", …)` and trusts RLS returns **every
+tenant's rows** to that caller. `regional_admin` is the same within its scope countries.
+
+That is not theoretical — it shipped, and it did more than leak. The offboarding employee picker
+listed all 15 employees across 3 tenants; `createOffboarding` then copied `tenant_id` from the
+*selected employee*, so picking any of them built a row that `WITH CHECK` rejected with
+`new row violates row-level security policy`. The leak and the failure were one bug.
+
+- Server: `requireTenantId()` / `getTenantId()` in **`src/lib/tenant-scope.ts`**.
+- Client: **`useMyTenantId()`** in `src/hooks/use-tenant.ts`.
+- `tests/tenant-scoping.test.ts` scans every `employees` list read and fails on an unscoped one.
+
+Two consequences worth knowing:
+
+1. **Platform accounts have no tenant**, so correctly scoped queries return *nothing* for them.
+   An unexplained empty `<Select>` reads as a broken page — carry a `noTenantScope` flag and say
+   so. A tenant switcher is the real fix and is not built yet.
+2. **A picker usually needs the caller excluded too.** You should not be able to offboard,
+   discipline, or approve your own expenses from a dropdown.
+
+Related: `getCompanyDirectory` reads through the **service-role** client on purpose. No policy
+lets a plain `employee` read a colleague, so with the caller's own client the company directory
+returned exactly one row — themselves. The tenant filter there is the only thing keeping it inside
+one tenant, so it must come from the caller's own employee row and the projection must stay free
+of compensation and identifiers.
+
 ### UI shell
 
 `src/components/AppShell.tsx` provides the chrome. Four layout routes (`me.tsx`, `org.tsx`,
@@ -220,6 +251,20 @@ render one too. **`AppShell` is nesting-aware**: a nested instance renders only 
 (keeping its title, subtitle and actions) and skips the chrome. Wrapping a page in `AppShell` is
 therefore always safe. Do not "fix" this by deleting nested shells — see
 `tests/app-shell-nesting.test.ts`.
+
+**`admin.tsx` is the one layout that deliberately does NOT provide chrome** — it is a bare
+`<Outlet />`, pinned by `tests/admin-routes-block.test.ts`. Every page under `/admin` must
+therefore render its own `AppShell`; one that does not has no sidebar and no top bar at all, and
+nothing errors to tell you. `org.tsx` used to have the same shape *by accident*, which silently
+orphaned eight first-class destinations (`/org/employees`, `/org/payroll`, `/org/reports`…). It
+now wraps its `<Outlet />`, excluding `/org/setup` — that route is reachable before the user has
+a tenant, so a full org nav there would offer links that all bounce back.
+
+`title` is optional on `AppShellProps` precisely so a layout can supply chrome without claiming a
+title; the page supplies it. Passing `""` renders an empty `<h1>` in the top bar.
+
+`tests/route-parent-outlet.test.ts` enforces both rules: every authenticated page resolves to a
+chrome provider, and every parent route renders an `<Outlet />`.
 
 ### Database — migration-only
 
@@ -259,32 +304,71 @@ tables in the domains it flags.
 
 ## Current status
 
-Recent work targeted section 1 "Issues to Fix" of the Finalization Plan (DBT-FP-26-001 v3.0).
+The project now runs against a **fresh Supabase dev project** (`xnrjfrxzahmfdrqfsnnq`), with all
+~197 migrations replayed. The blockers the previous version of this section described — the
+unapplied suspension migration, the missing service-role key — are resolved.
 
-**Landed:** account-suspension enforcement (schema, guard, admin UI); security headers
-(`src/lib/security-headers.ts`, applied in `src/server.ts`); cron-auth hardening (service-role
-fallback now off by default, behind `CRON_ALLOW_SERVICE_ROLE_FALLBACK`); session policy pinned in
-`supabase/config.toml`; revoke-on-role-change; duplicate-submit fix in `practice.functions.ts`
-(`writeRow`); onboarding completion and redirect; personal-nav regrouping; admin gating
-standardized on `<AdminGate>`; the `AppShell` nesting fix.
+**Demo data:** `bun --env-file=.env run scripts/demo-seed.ts` builds two tenants (Acme Global AU,
+Globex Nepal NP), 16 accounts covering all 8 roles, and the tenant lookup tables every dropdown
+reads (expense categories, payroll components, recruitment stages, award types, training courses,
+feedback and review templates, TOIL settings). Credentials land in `docs/demo-accounts.md`.
 
-**Blocked on credentials — two pending items, not one:**
+The wipe selects tenants **by creator, not by slug** — demo accounts create orgs through the
+setup wizard and the wizard names them whatever the user typed, so a slug pattern misses them.
+That matters beyond tidiness: `tenants.created_by` is `ON DELETE NO ACTION`, so a stray tenant
+makes its founder permanently undeletable and wedges every later seed run.
 
-1. `supabase/migrations/20260818090000_account_suspension.sql` is **not applied**. Until it is,
-   `is_account_active()` does not exist and `account-status.server.ts` fails open with a loud
-   one-time warning. Suspension is **not being enforced**.
-2. `supabase/config.toml` now holds the session policy (24h `timebox`, 8h `inactivity_timeout`,
-   `jwt_expiry`, refresh rotation), but **`supabase config push` has not run** — the live project
-   still uses its dashboard values.
+**Landed since:** tenant scoping across ~25 query sites (see the Tenant scoping section, which is
+the single most important thing to read before adding a query); the offboarding RLS failure;
+chrome restored on 20 orphaned routes; the always-on loading bar; the `listNotifications` storm
+(once per navigation → once per session); route-parent `<Outlet />` fixes that had made
+`/onboarding/profile` and three other routes unreachable.
 
-Applying either needs `SUPABASE_ACCESS_TOKEN` or the database password.
-`SUPABASE_SERVICE_ROLE_KEY` is also absent from `.env`, so every service-role path (invitations,
-blog, super-admin, `listSuspendedAccounts`) fails locally.
+**Two live bugs found and fixed that were invisible from the app:**
+
+- `tg_block_modify_audit`'s `service_role` escape read the *legacy* `request.jwt.claim.role` GUC,
+  which current PostgREST does not set. So it never passed: **audit retention had never worked**
+  (`audit-retention.functions.ts` archives exactly those tables), and because
+  `offboarding_comms_removal_audit.actor_id` is `ON DELETE SET NULL` — an UPDATE, which the
+  trigger blocks — any user who touched an offboarding case became undeletable. Fixed in
+  `20260821093000`.
+- The MCP `list_employees` tool selected and ordered by `full_name`, a column that does not
+  exist, so every call returned PostgREST 42703.
+
+**Known gaps, in priority order:**
+
+1. **No tenant switcher.** `super_admin` / `regional_admin` have `profiles.tenant_id = NULL`, so
+   every tenant-scoped surface is legitimately empty for them. Before scoping they saw all
+   tenants merged, which was the leak. Until a switcher exists these accounts cannot demo tenant
+   features.
+2. **Three unconnected review systems** share `review_templates` but never reconcile:
+   `performance_reviews` (whole-tenant fan-out on cycle activate), `review_instances`
+   (schedule-generated scorecards), and `duty_review_scores` (duty-based KPI). There is **no
+   assignment table and no targeting UI** — `generateReviewInstances` accepts `employeeIds` but
+   its only caller never passes it, so every "Schedule" blasts the entire tenant.
+   `reviewReviewInstance` (the approve/reject fn) has **zero callers**. The templates page points
+   at "Performance → Cycles", which does not exist under that name; the real control is
+   `/org/performance`.
+3. **Leave trusts a client-computed `days`** (`leave.functions.ts:77`) with no balance check and
+   no weekend/holiday exclusion, and `leave_approval_routes` is authored but never consumed.
+4. **No work-from-home concept at all**, and `clockIn` has no geofence exception — out-of-fence
+   is a hard throw that leaves no trace anywhere.
+
+`scripts/qa-sweep.mjs` walks every nav destination as each seeded role and writes
+`docs/qa-sweep-report.md` — chrome, console errors, status, repeated server-fn calls. Re-run it
+after structural changes.
 
 **Local sign-in:** Google OAuth is configured only for deployed origins. `/dev-session`
 (dev-only, guarded by `import.meta.env.DEV`) imports a session copied from the deployed app —
 both point at the same Supabase project. See `tests/dev-session-guard.test.ts`.
 
-**Known remaining inconsistencies:** 13 of 50 admin routes render no `AppShell`, so they have no
-sidebar (`admin.tsx` is a bare `<Outlet />`); roughly 9 pages render their own `<header>` inside
-a layout that already provides one. Both are residue of section 1 item 10.
+**Chrome coverage: resolved.** The old note here said "13 of 50 admin routes render no
+`AppShell`". The real count was **20** — 12 admin pages plus 8 under `/org`, because `org.tsx`
+was also a bare `<Outlet />`. All 20 now render inside the shell, verified per role in a browser,
+and `tests/route-parent-outlet.test.ts` stops it regressing. Some pages still render their own
+`<header>` beneath the shell's top bar; that is cosmetic, not a loss of navigation.
+
+**Do not run two dev servers at once.** Vite silently falls back to :8081 when :8080 is taken, so
+you end up testing stale code against a second process — and both regenerate `routeTree.gen.ts`
+into the same file, which has corrupted it (a parent route naming a file that no longer existed).
+Check with `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` before starting one.

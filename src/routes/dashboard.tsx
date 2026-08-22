@@ -70,17 +70,14 @@ interface Counts {
 function Dashboard() {
   const { user, roles, loading, rolesLoaded } = useAuth();
   const navigate = useNavigate();
-  const [counts, setCounts] = useState<Counts>({
-    pendingLeave: 0,
-    openTimesheet: 0,
-    pendingReviews: 0,
-    onboardingOpen: 0,
-    recentPayslips: 0,
-  });
-
   const statusFn = useServerFn(getMyOrgStatus);
   const { data: orgStatus } = useQuery({
-    queryKey: ["my-org-status"],
+    // Keyed by user id. Without it the cache entry outlives a sign-out, so the
+    // next account to sign in on this browser read the previous user's tenant,
+    // roles and onboarding state until the 60s default staleTime elapsed —
+    // long enough to drive the redirects below to the wrong place.
+    // AppShell and MfaEnforcementBanner already scope their keys this way.
+    queryKey: ["my-org-status", user?.id],
     queryFn: () => statusFn({}),
     enabled: !!user,
   });
@@ -104,17 +101,28 @@ function Dashboard() {
     orgStatus.roles.includes("org_admin") &&
     !orgStatus.setupProgress?.completed_at;
 
-  useEffect(() => {
-    if (!user) return;
-    let cancelled = false;
-    (async () => {
+  // Dashboard tile counts.
+  //
+  // Was a raw useEffect issuing six uncached Supabase round-trips on every
+  // mount — and since AppShell is per-route, returning to /dashboard re-ran all
+  // six. useQuery gives it the shared cache (the QueryClient lives at
+  // __root.tsx, so it survives navigation) and dedupes concurrent mounts.
+  const { data: countsData } = useQuery({
+    queryKey: ["dashboard-counts", user?.id],
+    enabled: !!user,
+    staleTime: 60_000,
+    queryFn: async (): Promise<Counts> => {
+      const empty: Counts = {
+        pendingLeave: 0, openTimesheet: 0, pendingReviews: 0,
+        onboardingOpen: 0, recentPayslips: 0,
+      };
       const { data: emp } = await supabase
         .from("employees")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", user!.id)
         .maybeSingle();
-      if (!emp || cancelled) return;
-      const empId = (emp as any).id as string;
+      if (!emp) return empty;
+      const empId = (emp as { id: string }).id;
 
       const [leaveR, tsR, revR, onbR, payR] = await Promise.all([
         supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", empId).eq("status", "pending"),
@@ -123,19 +131,19 @@ function Dashboard() {
         supabase.from("onboarding_assignments").select("id", { count: "exact", head: true }).eq("employee_id", empId).eq("status", "in_progress"),
         supabase.from("payroll_payslips").select("id", { count: "exact", head: true }).eq("employee_id", empId),
       ]);
-      if (cancelled) return;
-      setCounts({
+      return {
         pendingLeave: leaveR.count ?? 0,
         openTimesheet: tsR.count ?? 0,
         pendingReviews: revR.count ?? 0,
         onboardingOpen: onbR.count ?? 0,
         recentPayslips: payR.count ?? 0,
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
+      };
+    },
+  });
+  const counts = countsData ?? {
+    pendingLeave: 0, openTimesheet: 0, pendingReviews: 0,
+    onboardingOpen: 0, recentPayslips: 0,
+  };
 
   if (loading || !user) {
     return (
