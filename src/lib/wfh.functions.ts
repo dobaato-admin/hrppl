@@ -89,7 +89,20 @@ export const listMyWfhRequests = createServerFn({ method: "POST" })
       .order("start_date", { ascending: false })
       .limit(100);
     if (error) throw new Error(error.message);
-    return { requests: data ?? [], hasEmployee: true as const };
+
+    // Who will decide this, so the requester is not left staring at a row that
+    // appears to belong to nobody. Their own manager cannot be the answer when
+    // the requester *is* a manager — the rule is simply "not you".
+    const { data: approvers } = await supabase
+      .from("user_roles")
+      .select("role")
+      .in("role", ["manager", "hr", "org_admin"]);
+
+    return {
+      requests: data ?? [],
+      hasEmployee: true as const,
+      approverRoles: [...new Set(((approvers ?? []) as { role: string }[]).map((r) => r.role))],
+    };
   });
 
 // ---------- Employee: request a WFH window ----------
@@ -197,13 +210,22 @@ export const cancelMyWfhRequest = createServerFn({ method: "POST" })
     const employeeId = await getMyEmployeeId(supabase, userId);
     if (!employeeId) throw new Error("No employee record is linked to your account.");
 
-    const { error } = await supabase
+    // Pending *or* approved. The lifecycle trigger decides whether an
+    // approved window may still be withdrawn — a requester may back out before
+    // it opens, but not once it has started, and never once a remote punch has
+    // been taken under it. Filtering to "pending" here would have made the
+    // approved case fail as "0 rows updated", which tells the user nothing.
+    const { data: updated, error } = await supabase
       .from("wfh_requests")
       .update({ status: "cancelled" })
       .eq("id", data.id)
       .eq("employee_id", employeeId)
-      .eq("status", "pending");
+      .in("status", ["pending", "approved"])
+      .select("id");
     if (error) throw new Error(error.message);
+    if (!updated || updated.length === 0) {
+      throw new Error("That request can no longer be withdrawn.");
+    }
     return { ok: true };
   });
 
@@ -297,13 +319,22 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
     if (readErr) throw new Error(readErr.message);
     if (!existing) throw new Error("That request no longer exists.");
 
+    // These checks exist for the error messages, not for enforcement: since
+    // 20260823160000 the wfh_requests lifecycle trigger and the RLS policies
+    // both refuse self-decision and illegal transitions, so a caller who skips
+    // this function entirely still cannot get past them. Duplicating them here
+    // just means the UI can explain the refusal in a sentence instead of
+    // surfacing a Postgres error.
+    //
     // Assert the tenant rather than trusting the row we just read. Reading it
     // proves RLS let us see it, and for super_admin RLS lets us see everything.
     if (existing.tenant_id !== tenantId) {
       throw new Error("That request belongs to a different organisation.");
     }
     if (myEmployeeId && existing.employee_id === myEmployeeId) {
-      throw new Error("You cannot decide your own work-from-home request.");
+      throw new Error(
+        "You cannot decide your own work-from-home request. It has to be approved by your manager, HR, or an organisation administrator.",
+      );
     }
     if (existing.status !== "pending") {
       throw new Error(`That request has already been ${existing.status}.`);

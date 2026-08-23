@@ -196,7 +196,12 @@ function MyWfhPage() {
                 <div className="flex items-center justify-between gap-4">
                   <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    You can only have one pending or approved request covering any given day.
+                    <span>
+                      One pending or approved request per day, and dates cannot be in the past. Your
+                      manager, HR or an organisation administrator decides it —{" "}
+                      <span className="font-medium">never you</span>, even if you hold one of those
+                      roles yourself.
+                    </span>
                   </p>
                   <Button onClick={submit} disabled={busy}>
                     <Plus className="mr-1.5 h-4 w-4" /> Send request
@@ -247,7 +252,14 @@ function MyWfhPage() {
                             ) : null}
                           </TableCell>
                           <TableCell className="text-right">
-                            {r.status === "pending" ? (
+                            {/* Withdrawable while pending, and while approved
+                                but not yet started — plans change, and making
+                                someone chase an approver to release a day they
+                                no longer need is friction for its own sake.
+                                Once the window opens it is an approver's call,
+                                because a remote punch may already depend on it. */}
+                            {r.status === "pending" ||
+                            (r.status === "approved" && r.start_date > today) ? (
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -256,6 +268,10 @@ function MyWfhPage() {
                               >
                                 Withdraw
                               </Button>
+                            ) : r.status === "approved" ? (
+                              <span className="text-xs text-muted-foreground">
+                                Started — ask your approver
+                              </span>
                             ) : null}
                           </TableCell>
                         </TableRow>

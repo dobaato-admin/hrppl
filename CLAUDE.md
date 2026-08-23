@@ -307,6 +307,79 @@ every historical shift onto a different date.
   nests. It hides itself for accounts with no employee record, and only asks for
   location when the tenant actually has fences.
 
+### Requests — one shape, six tables, rules in the database
+
+Six tables model "somebody asked, somebody decides": `leave_requests`,
+`wfh_requests`, `expense_claims`, `support_tickets`, `toil_requests`,
+`grievances`. **`src/lib/requests-inbox.functions.ts`** normalises all six —
+including their six different status vocabularies — into one `InboxRow`.
+
+- `/me/requests` — personal only: what *I* asked for.
+- `/admin/requests` — the organisation-wide repository: everything, every state,
+  with filters and history.
+- Both render through `src/components/requests/RequestList.tsx` so they cannot
+  drift apart.
+
+It is a **read model**. Deciding still happens on the page that owns the rules,
+because approving leave touches balances and approving WFH changes what
+`clockIn` accepts. An unknown status groups as `pending` rather than being
+dropped — silently hiding a request is the one behaviour that would make the
+screen untrustworthy. `tests/requests-links.test.ts` pins every deep link
+against `FileRoutesByFullPath` (not the `path:` literals, which are relative to
+the parent and report every nested route as dead).
+
+**The work-from-home lifecycle is enforced in Postgres**, by
+`tg_wfh_lifecycle` plus RLS — not in the server fn, which only exists to
+produce readable errors:
+
+| From | To | Who |
+| --- | --- | --- |
+| pending | approved / rejected | an approver who is **not** the requester |
+| pending | cancelled | the requester (or an approver) |
+| approved | cancelled | requester **before the window opens**; approver any time |
+| anything else | — | refused |
+
+Plus: requests cannot start non-`pending`, cannot be wholly in the past, cannot
+overlap another pending/approved window for the same employee, freeze their
+dates and owner once decided, and **cannot be revoked once a remote punch has
+been taken under them** — that punch was made in good faith and attendance is
+the input to pay.
+
+A manager may raise a request and may never decide it, whatever roles they hold.
+That is why `/admin/requests` shows their own row (a repository must be
+complete) while the actionable queue hides it (you cannot act on it).
+
+### SECURITY DEFINER: `current_user` is the owner, not the caller
+
+Worth its own note because it produced a guard that silently did nothing.
+
+Inside a `SECURITY DEFINER` function, `current_user` is the **function owner**
+(`postgres`), and `session_user` is the *connection's* role, which never follows
+`SET ROLE`. Neither identifies the caller. A trigger that tried to exempt
+trusted server paths with
+
+```sql
+current_user IN ('postgres','supabase_admin')   -- always true in SECURITY DEFINER
+session_user IN ('postgres','supabase_admin')   -- never true via PostgREST's pooled connection
+```
+
+matched on **every** call and disabled the entire state machine below it.
+
+Use the request context instead:
+
+```sql
+jwt_role := auth.role();
+IF jwt_role IS NULL              -- migration, seed, psql: no JWT at all
+   OR jwt_role = 'service_role'  -- the backend acting deliberately
+THEN RETURN NEW; END IF;         -- everything else is a person: enforce
+```
+
+This is also what makes the rules *testable*: a session that sets
+`request.jwt.claims` with role `authenticated` is subject to them exactly as a
+browser is. A guard that exempts itself under the conditions you test it in is
+worse than no guard — verify RLS and triggers under a real JWT, never as
+`postgres`.
+
 ### Public hook endpoints must not echo caught errors
 
 `/api/public/hooks/*` authenticates with a bearer secret rather than a session,
