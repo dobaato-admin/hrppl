@@ -2,6 +2,7 @@
 // alert_type has retry policy enabled. Configure pg_cron to POST here every
 // few minutes. Protected by CRON_SECRET header if set.
 import { createFileRoute } from '@tanstack/react-router';
+import { hookFailure } from '@/lib/hook-response.server';
 import { processDueAutoRetries } from '@/lib/billing-admin.functions';
 import { isAuthorizedCronRequest } from '@/lib/cron-auth.server';
 
@@ -17,10 +18,8 @@ export const Route = createFileRoute('/api/public/hooks/auto-retry-alerts')({
           return new Response(JSON.stringify({ status: 'ok', ...out }), {
             status: 200, headers: { 'content-type': 'application/json' },
           });
-        } catch (e: any) {
-          return new Response(JSON.stringify({ ok: false, error: e?.message ?? String(e) }), {
-            status: 500, headers: { 'content-type': 'application/json' },
-          });
+        } catch (e: unknown) {
+          return hookFailure('auto-retry-alerts', e);
         }
       },
     },

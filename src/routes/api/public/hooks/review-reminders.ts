@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 // Daily cron hits this route. For each active cycle in each tenant, finds reviews in
@@ -245,11 +246,8 @@ export const Route = createFileRoute("/api/public/hooks/review-reminders")({
           return new Response(JSON.stringify({ ok: true, sent, inAppCreated }), {
             status: 200, headers: { "Content-Type": "application/json" },
           });
-        } catch (e: any) {
-          console.error("[review-reminders] failed", e);
-          return new Response(JSON.stringify({ ok: false, error: e?.message ?? String(e) }), {
-            status: 500, headers: { "Content-Type": "application/json" },
-          });
+        } catch (e: unknown) {
+          return hookFailure("review-reminders", e);
         }
       },
     },

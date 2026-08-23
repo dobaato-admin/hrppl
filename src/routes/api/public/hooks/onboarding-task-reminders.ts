@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 // Daily cron. Scans onboarding control-room tasks that are still open (pending or
@@ -103,12 +104,8 @@ export const Route = createFileRoute("/api/public/hooks/onboarding-task-reminder
           return new Response(JSON.stringify({ ok: true, sent }), {
             headers: { "Content-Type": "application/json" },
           });
-        } catch (e: any) {
-          console.error("[onboarding-task-reminders]", e);
-          return new Response(JSON.stringify({ error: e?.message ?? "error" }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
+        } catch (e: unknown) {
+          return hookFailure("onboarding-task-reminders", e);
         }
       },
     },

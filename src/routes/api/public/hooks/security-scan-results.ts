@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
+import { hookFailure } from "@/lib/hook-response.server";
 import { ingestFindingsAndAlert } from "@/lib/security-alerts.server";
 
 /**
@@ -47,8 +48,21 @@ export const Route = createFileRoute("/api/public/hooks/security-scan-results")(
           return new Response("Invalid signature", { status: 401 });
         }
         let payload: z.infer<typeof Body>;
-        try { payload = Body.parse(JSON.parse(raw)); }
-        catch (e: any) { return new Response(`Invalid payload: ${e.message}`, { status: 400 }); }
+        try {
+          payload = Body.parse(JSON.parse(raw));
+        } catch (e: unknown) {
+          // A schema violation is the caller's own payload described back to
+          // them, so the field paths are safe and genuinely useful to an
+          // integrator. Anything else — a JSON syntax error, a thrown
+          // internal — is redacted, since only the first case is about them.
+          if (e instanceof z.ZodError) {
+            return Response.json(
+              { ok: false, error: "Invalid payload", issues: e.issues },
+              { status: 400 },
+            );
+          }
+          return hookFailure("security-scan-results", e, 400);
+        }
 
         const scanned_at = payload.scanned_at ?? new Date().toISOString();
         const result = await ingestFindingsAndAlert(

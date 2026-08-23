@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 import { processDueRetries } from "@/lib/teams.functions";
 
@@ -22,11 +23,8 @@ export const Route = createFileRoute("/api/public/hooks/id-request-retries")({
           return new Response(JSON.stringify({ ok: true, ...result }), {
             headers: { "Content-Type": "application/json" },
           });
-        } catch (e: any) {
-          return new Response(JSON.stringify({ ok: false, error: String(e?.message ?? e) }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
+        } catch (e: unknown) {
+          return hookFailure("id-request-retries", e);
         }
       },
       GET: async ({ request }) => {

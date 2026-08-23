@@ -9,6 +9,7 @@
  * contribution whose `payment_due_date < today` and is still pending.
  */
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 const PENDING_STATUSES = ["pending", "queued", "scheduled", "draft"];
@@ -31,12 +32,7 @@ export const Route = createFileRoute("/api/public/hooks/super-sla-sweep")({
           .lt("payment_due_date", today)
           .in("status", PENDING_STATUSES)
           .select("id,tenant_id");
-        if (error) {
-          console.error("super-sla-sweep error", error);
-          return new Response(JSON.stringify({ ok: false, error: error.message }), {
-            status: 500, headers: { "Content-Type": "application/json" },
-          });
-        }
+        if (error) return hookFailure("super-sla-sweep", error);
         return new Response(JSON.stringify({
           ok: true, swept: data?.length ?? 0, at: new Date().toISOString(),
         }), { headers: { "Content-Type": "application/json" } });

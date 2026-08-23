@@ -10,6 +10,7 @@
  * this endpoint its own credential.
  */
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 function isAuthorized(request: Request): boolean {
@@ -24,12 +25,9 @@ function isAuthorized(request: Request): boolean {
 async function runRetention() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin.rpc("run_audit_retention");
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
-  }
+  // Redacted on purpose: this endpoint is internet-reachable and the raw
+  // Postgres message would name tables and constraints.
+  if (error) return hookFailure("audit-retention", error);
   return new Response(JSON.stringify({ ok: true, summary: data ?? [] }), {
     headers: { "content-type": "application/json" },
   });
