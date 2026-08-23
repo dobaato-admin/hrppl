@@ -451,7 +451,7 @@ export const listApprovalQueue = createServerFn({ method: "POST" })
           group: statusGroup(r.status as string),
           createdAt: r.created_at as string,
           period: null,
-          href: "/admin/support",
+          href: "/admin/requests",
           employeeId: r.employee_id as string,
           employeeName: name(r.employees),
         }),
@@ -459,9 +459,14 @@ export const listApprovalQueue = createServerFn({ method: "POST" })
     ]);
 
     let rows = results.flatMap((r) => r.rows).sort(newestFirst);
-    // You should not be able to approve your own request from the queue, the
-    // same rule the offboarding and expense pickers needed.
-    if (myEmployeeId) {
+    // Your own requests are hidden from the *actionable queue* — you cannot
+    // decide them, so offering them there is an invitation to try. They stay in
+    // the "all" view, which is a repository rather than a work list: a record of
+    // everything the organisation has asked for is wrong if it omits yours, and
+    // seeing a row is not the same as being able to act on it. Self-decision is
+    // refused by the wfh_requests lifecycle trigger and by RLS regardless of
+    // what any list shows.
+    if (myEmployeeId && pendingOnly) {
       rows = rows.filter((r) => r.employeeId !== myEmployeeId);
     }
 
