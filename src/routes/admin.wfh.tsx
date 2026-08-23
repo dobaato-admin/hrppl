@@ -32,6 +32,7 @@ import { EmptyState } from "@/components/monday";
 import { toast } from "sonner";
 import { House, Check, X, MapPin } from "lucide-react";
 import { decideWfhRequest, listWfhForApproval } from "@/lib/wfh.functions";
+import { PlatformAccountNotice } from "@/components/PlatformAccountNotice";
 
 export const Route = createFileRoute("/admin/wfh")({
   head: () => ({ meta: [{ title: "Work-from-home approvals — hrppl" }] }),
@@ -64,6 +65,7 @@ function WfhApprovalsPage() {
 
   const [status, setStatus] = useState<StatusFilter>("pending");
   const [rows, setRows] = useState<Row[]>([]);
+  const [noTenantScope, setNoTenantScope] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -73,6 +75,7 @@ function WfhApprovalsPage() {
     try {
       const res = await fnList({ data: { status } });
       setRows(res.requests as Row[]);
+      setNoTenantScope(!!res.noTenantScope);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Could not load requests");
     } finally {
@@ -127,6 +130,8 @@ function WfhApprovalsPage() {
           <CardContent>
             {loading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+            ) : noTenantScope ? (
+              <PlatformAccountNotice subject="Work-from-home requests" />
             ) : rows.length === 0 ? (
               <EmptyState
                 icon={House}

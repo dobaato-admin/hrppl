@@ -16,7 +16,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { getMyEmployeeId, requireTenantId } from "@/lib/tenant-scope";
+import { getMyEmployeeId, getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 /** See the same note in attendance.functions.ts — wfh_requests is new in 20260823060000. */
 type PendingSchema = any;
@@ -114,9 +114,11 @@ export const requestWfh = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const tenantId = await requireTenantId(supabase, userId);
+    // Employee first: a platform account fails both checks, and "no employee
+    // record" is the accurate and more useful of the two messages for it.
     const employeeId = await getMyEmployeeId(supabase, userId);
     if (!employeeId) throw new Error("No employee record is linked to your account.");
+    const tenantId = await requireTenantId(supabase, userId);
 
     // Overlap, not just duplication. A range unique index cannot express this,
     // so it is enforced here — two overlapping approvals would make it
@@ -228,7 +230,13 @@ export const listWfhForApproval = createServerFn({ method: "POST" })
     // super_admin, whose policy carries no tenant predicate — trusting it here
     // would list every tenant's requests. See the tenant-scoping section of
     // CLAUDE.md.
-    const tenantId = await requireTenantId(supabase, userId);
+    //
+    // A platform account genuinely has no tenant, so report that rather than
+    // throwing: "not attached to an organization" is a correct description of
+    // super_admin, not a failure, and the page should say so instead of
+    // showing an error toast.
+    const tenantId = await getTenantId(supabase, userId);
+    if (!tenantId) return { requests: [], noTenantScope: true as const };
     const myEmployeeId = await getMyEmployeeId(supabase, userId);
 
     let q = (supabase as PendingSchema)
@@ -248,6 +256,7 @@ export const listWfhForApproval = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
 
     return {
+      noTenantScope: false as const,
       requests: ((rows ?? []) as PendingSchema[]).map((r) => ({
         id: r.id as string,
         employeeId: r.employee_id as string,
