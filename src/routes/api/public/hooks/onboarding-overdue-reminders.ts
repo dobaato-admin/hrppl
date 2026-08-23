@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 // Daily cron. For each in-progress onboarding assignment with a due date in the past,
@@ -148,12 +149,8 @@ export const Route = createFileRoute("/api/public/hooks/onboarding-overdue-remin
             JSON.stringify({ ok: true, processed: (assignments ?? []).length, emailsSent: sent, inAppCreated }),
             { headers: { "Content-Type": "application/json" } },
           );
-        } catch (e: any) {
-          console.error("onboarding-overdue-reminders error", e);
-          return new Response(JSON.stringify({ ok: false, error: String(e?.message ?? e) }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
+        } catch (e: unknown) {
+          return hookFailure("onboarding-overdue-reminders", e);
         }
       },
     },

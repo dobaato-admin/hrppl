@@ -6,6 +6,7 @@
  * and bumps last_reminder_at + reminder_count so we never double-send.
  */
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 export const Route = createFileRoute("/api/public/hooks/compliance-attestation-reminders")({
@@ -149,10 +150,8 @@ export const Route = createFileRoute("/api/public/hooks/compliance-attestation-r
             status: 200, headers: { "Content-Type": "application/json" },
           });
 
-        } catch (e: any) {
-          return new Response(JSON.stringify({ ok: false, error: e?.message ?? String(e) }), {
-            status: 500, headers: { "Content-Type": "application/json" },
-          });
+        } catch (e: unknown) {
+          return hookFailure("compliance-attestation-reminders", e);
         }
       },
     },

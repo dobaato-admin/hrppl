@@ -2,6 +2,7 @@
 // an active Stripe subscription, then runs reconciliation. Any unhandled
 // failure raises a super-admin alert in billing_admin_alerts.
 import { createFileRoute } from '@tanstack/react-router';
+import { hookFailure } from '@/lib/hook-response.server';
 import { isAuthorizedCronRequest } from '@/lib/cron-auth.server';
 
 export const Route = createFileRoute('/api/public/hooks/monthly-billing-cycle')({
@@ -65,7 +66,9 @@ export const Route = createFileRoute('/api/public/hooks/monthly-billing-cycle')(
             message: e?.message ?? String(e),
             context: { year, month },
           });
-          return new Response(JSON.stringify({ ok: false, error: e?.message ?? String(e) }), { status: 500 });
+          // The message above goes to billing_admin_alerts (internal); the
+          // response body must not repeat it.
+          return hookFailure('monthly-billing-cycle', e);
         }
       },
     },

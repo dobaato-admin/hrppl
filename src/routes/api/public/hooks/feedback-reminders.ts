@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 
 export const Route = createFileRoute("/api/public/hooks/feedback-reminders")({
@@ -33,11 +34,8 @@ export const Route = createFileRoute("/api/public/hooks/feedback-reminders")({
           return new Response(JSON.stringify({ ok: true, reminded: bumped }), {
             status: 200, headers: { "Content-Type": "application/json" },
           });
-        } catch (e: any) {
-          console.error("[feedback-reminders] failed", e);
-          return new Response(JSON.stringify({ ok: false, error: e?.message ?? String(e) }), {
-            status: 500, headers: { "Content-Type": "application/json" },
-          });
+        } catch (e: unknown) {
+          return hookFailure("feedback-reminders", e);
         }
       },
     },

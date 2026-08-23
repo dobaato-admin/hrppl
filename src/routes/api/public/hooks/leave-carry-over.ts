@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { hookFailure } from "@/lib/hook-response.server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
 import { runCarryOverSystem } from "@/lib/leave-accruals.functions";
 
@@ -16,11 +17,8 @@ export const Route = createFileRoute("/api/public/hooks/leave-carry-over")({
           return new Response(JSON.stringify({ ok: true, fromYear, ...summary }), {
             status: 200, headers: { "Content-Type": "application/json" },
           });
-        } catch (e: any) {
-          console.error("[leave-carry-over] failed", e);
-          return new Response(JSON.stringify({ ok: false, error: e?.message ?? String(e) }), {
-            status: 500, headers: { "Content-Type": "application/json" },
-          });
+        } catch (e: unknown) {
+          return hookFailure("leave-carry-over", e);
         }
       },
     },

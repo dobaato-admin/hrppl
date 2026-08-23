@@ -2,6 +2,7 @@
 // events into billing_audit_log + tenant_invoices, updates tenant_subscriptions,
 // and raises super-admin alerts on failed payments / unhandled errors.
 import { createFileRoute } from '@tanstack/react-router';
+import { hookFailure } from '@/lib/hook-response.server';
 
 export const Route = createFileRoute('/api/public/hooks/stripe-webhook')({
   server: {
@@ -19,8 +20,12 @@ export const Route = createFileRoute('/api/public/hooks/stripe-webhook')({
         let event: any;
         try {
           event = stripe.webhooks.constructEvent(body, sig, secret);
-        } catch (e: any) {
-          return new Response(`Invalid signature: ${e?.message}`, { status: 400 });
+        } catch (e: unknown) {
+          // Stripe's own message is logged; the response says only that
+          // verification failed. It distinguishes "no secret configured" from
+          // "timestamp outside tolerance", which is a probe an attacker can
+          // run without ever holding the signing secret.
+          return hookFailure('stripe-webhook', e, 400);
         }
 
         const { supabaseAdmin } = await import('@/integrations/supabase/client.server');

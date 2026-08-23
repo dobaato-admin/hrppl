@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth.server";
+import { hookFailure, hookUnauthorized } from "@/lib/hook-response.server";
 import { runMonthlyAccrualSystem } from "@/lib/leave-accruals.functions";
 
 /**
@@ -21,21 +22,12 @@ async function runAccrual(year: number, month: number) {
   });
 }
 
-function unauthorized() {
-  return new Response(JSON.stringify({ error: "Unauthorized" }), {
-    status: 401,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+const unauthorized = () => hookUnauthorized();
 
-function failed(e: unknown) {
-  console.error("[leave-accrual] failed", e);
-  const message = e instanceof Error ? e.message : String(e);
-  return new Response(JSON.stringify({ ok: false, error: message }), {
-    status: 500,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+// The caught error is logged in full server-side and redacted in the response —
+// this endpoint is internet-reachable, so a Postgres error message here would
+// hand a prober the schema. See src/lib/hook-response.server.ts.
+const failed = (e: unknown) => hookFailure("leave-accrual", e);
 
 export const Route = createFileRoute("/api/public/hooks/leave-accrual")({
   server: {
