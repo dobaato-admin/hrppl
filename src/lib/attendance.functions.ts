@@ -248,6 +248,16 @@ export const clockIn = createServerFn({ method: "POST" })
     const emp = await getEmployeeForUser(supabase, userId);
     if (!emp) throw new Error("No employee record");
 
+    // Started before the timezone lookup rather than after it: the fences do
+    // not depend on the resolved zone, and clocking in is the most
+    // latency-sensitive action in the product — every serialised round-trip
+    // here is time an employee spends watching a spinner.
+    const fencesPromise = supabase
+      .from("sign_geofences")
+      .select("id,name,latitude,longitude,radius_meters,min_accuracy_meters")
+      .eq("tenant_id", emp.tenant_id)
+      .eq("is_active", true);
+
     const timeZone = await resolveWorkTimeZone(supabase, emp);
     const punch = resolvePunchInstant(data?.clientTime, new Date());
     // The working day is a *local* calendar concept. Deriving it from the UTC
@@ -264,11 +274,7 @@ export const clockIn = createServerFn({ method: "POST" })
     };
 
     const [{ data: fences }, wfhRes] = await Promise.all([
-      supabase
-        .from("sign_geofences")
-        .select("id,name,latitude,longitude,radius_meters,min_accuracy_meters")
-        .eq("tenant_id", emp.tenant_id)
-        .eq("is_active", true),
+      fencesPromise,
       supabase.rpc("has_approved_wfh", { _employee_id: emp.id, _work_date: workDate }).then(
         (r) => r,
         // Absent until 20260823060000 is applied. "No approved WFH day" is
@@ -948,7 +954,7 @@ export const getClockStatus = createServerFn({ method: "POST" })
         .lte("work_date", workDate),
       supabase
         .from("sign_geofences")
-        .select("id", { count: "exact", head: true })
+        .select("id,name,latitude,longitude,radius_meters,min_accuracy_meters")
         .eq("tenant_id", emp.tenant_id)
         .eq("is_active", true),
       supabase.rpc("has_approved_wfh", { _employee_id: emp.id, _work_date: workDate }).then(
@@ -997,9 +1003,23 @@ export const getClockStatus = createServerFn({ method: "POST" })
           }
         : null,
       weekHours: Math.round(weekHours * 100) / 100,
-      // Drives whether the widget asks the browser for a position at all. No
-      // fences means no reason to prompt for a permission we will not use.
-      geofenceCount: fenceRes?.count ?? 0,
+      // The fences themselves, not just a count.
+      //
+      // They drive whether the widget asks for a position at all — no fences
+      // means no reason to prompt for a permission we will not use — but
+      // shipping the rows lets the widget run the same evaluateGeofence() the
+      // server will, so it can show "inside Sydney HQ, plus or minus 12m"
+      // *before* the button is pressed instead of only reporting a refusal
+      // afterwards. These are not secret: every employee can already read them
+      // through the "sign_geofences tenant read" policy.
+      geofences: (fenceRes?.data ?? []).map((f) => ({
+        id: f.id as string,
+        name: f.name as string,
+        latitude: Number(f.latitude),
+        longitude: Number(f.longitude),
+        radius_meters: Number(f.radius_meters),
+        min_accuracy_meters: Number(f.min_accuracy_meters ?? 100),
+      })),
       approvedWfhToday: wfhRes?.data === true,
       upcomingWfh: (pendingWfhRes?.data ?? []).map((w) => ({
         id: w.id as string,
