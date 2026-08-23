@@ -139,6 +139,10 @@ export function ClockWidget() {
     enabled: !!user,
     staleTime: STATUS_STALE_MS,
     refetchOnWindowFocus: true,
+    // One attempt, not four. This query runs on every authenticated page, so a
+    // persistent server-side failure would otherwise turn each navigation into
+    // a burst of retries — the shape of the listNotifications storm.
+    retry: false,
   });
 
   const entry = status && "entry" in status ? status.entry : null;
