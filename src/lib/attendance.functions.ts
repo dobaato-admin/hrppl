@@ -31,6 +31,62 @@ import {
  */
 type PendingSchema = any;
 
+/**
+ * Columns and functions that only exist once 20260823060000 has been applied.
+ *
+ * Listed explicitly so a punch can still be written against the old schema.
+ * Without this, deploying the code ahead of the migration does not degrade the
+ * feature — it breaks clocking in outright with a PostgREST 42703, which is a
+ * far worse failure than losing the provenance fields for one deploy window.
+ */
+const POST_MIGRATION_COLUMNS = [
+  "work_timezone",
+  "work_location",
+  "needs_review",
+  "review_reason",
+  "clock_in_recorded_at",
+  "clock_out_recorded_at",
+  "clock_in_skew_seconds",
+  "clock_out_skew_seconds",
+  "clock_in_accuracy_meters",
+  "clock_out_accuracy_meters",
+  "clock_out_latitude",
+  "clock_out_longitude",
+  "clock_out_geofence_id",
+  "clock_out_distance_meters",
+] as const;
+
+/**
+ * PostgREST's two ways of saying "that column does not exist": 42703 straight
+ * from Postgres, and PGRST204 when its own schema cache has not seen it.
+ */
+export function isUnknownColumnError(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  if (!e) return false;
+  if (e.code === "42703" || e.code === "PGRST204") return true;
+  return /column .* does not exist|could not find the .* column/i.test(e.message ?? "");
+}
+
+export function withoutPostMigrationColumns(payload: Record<string, unknown>) {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (!(POST_MIGRATION_COLUMNS as readonly string[]).includes(k)) out[k] = v;
+  }
+  return out;
+}
+
+/** Warn once per process rather than on every punch. */
+let warnedAboutPendingMigration = false;
+function warnPendingMigration() {
+  if (warnedAboutPendingMigration) return;
+  warnedAboutPendingMigration = true;
+  console.warn(
+    "[attendance] migration 20260823060000 is not applied — recording punches " +
+      "without timezone, location-quality and review provenance. Apply it with " +
+      "scripts/apply-migration.mjs, then regenerate types.ts.",
+  );
+}
+
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -58,7 +114,10 @@ async function getRoles(supabase: any, userId: string): Promise<string[]> {
  * correcting a tenant's timezone setting later cannot retroactively move every
  * historical shift onto a different date.
  */
-async function resolveWorkTimeZone(supabase: any, emp: { tenant_id: string; branch_id?: string | null }) {
+async function resolveWorkTimeZone(
+  supabase: any,
+  emp: { tenant_id: string; branch_id?: string | null },
+) {
   const [branchRes, tenantRes] = await Promise.all([
     emp.branch_id
       ? supabase.from("tenant_branches").select("timezone").eq("id", emp.branch_id).maybeSingle()
@@ -113,7 +172,11 @@ async function recordPerimeterEvent(args: {
       accuracy_m: args.position.accuracyMeters ?? null,
       is_suspicious: args.suspicious ?? false,
       suspicious_reason: args.suspiciousReason ?? null,
-      metadata: { outcome: args.outcome, employee_id: args.employeeId, ...(args.metadata ?? {}) } as PendingSchema,
+      metadata: {
+        outcome: args.outcome,
+        employee_id: args.employeeId,
+        ...(args.metadata ?? {}),
+      } as PendingSchema,
     });
   } catch (e) {
     console.error("[attendance] perimeter audit write failed (punch was not blocked)", e);
@@ -214,7 +277,14 @@ export const clockIn = createServerFn({ method: "POST" })
         .select("id,name,latitude,longitude,radius_meters,min_accuracy_meters")
         .eq("tenant_id", emp.tenant_id)
         .eq("is_active", true),
-      (supabase as PendingSchema).rpc("has_approved_wfh", { _employee_id: emp.id, _work_date: workDate }),
+      (supabase as PendingSchema)
+        .rpc("has_approved_wfh", { _employee_id: emp.id, _work_date: workDate })
+        .then(
+          (r: PendingSchema) => r,
+          // Absent until 20260823060000 is applied. "No approved WFH day" is
+          // the correct reading of a workforce that cannot yet request one.
+          () => ({ data: null }),
+        ),
     ]);
     const approvedWfh = wfhRes?.data === true;
 
@@ -225,9 +295,10 @@ export const clockIn = createServerFn({ method: "POST" })
     let matchedDistance: number | null = null;
     let needsReview = false;
     const reviewReasons: string[] = [];
-    let pendingReview:
-      | null
-      | { mismatchType: "wfh_outside_fence" | "accuracy_low"; details: Record<string, unknown> } = null;
+    let pendingReview: null | {
+      mismatchType: "wfh_outside_fence" | "accuracy_low";
+      details: Record<string, unknown>;
+    } = null;
 
     switch (outcome.kind) {
       case "no_fences":
@@ -387,20 +458,23 @@ export const clockIn = createServerFn({ method: "POST" })
     };
     if (typeof data?.latitude === "number") punchFields.clock_in_latitude = data.latitude;
     if (typeof data?.longitude === "number") punchFields.clock_in_longitude = data.longitude;
-    if (typeof data?.accuracyMeters === "number") punchFields.clock_in_accuracy_meters = data.accuracyMeters;
+    if (typeof data?.accuracyMeters === "number")
+      punchFields.clock_in_accuracy_meters = data.accuracyMeters;
     if (matchedFenceId) punchFields.clock_in_geofence_id = matchedFenceId;
     if (matchedDistance !== null) punchFields.clock_in_distance_meters = matchedDistance;
 
-    let entryId: string;
-    if (existing) {
-      const { error } = await (supabase as PendingSchema)
-        .from("attendance_entries")
-        .update({ ...punchFields, clock_out: null, status: "open" })
-        .eq("id", existing.id);
-      if (error) throw new Error(error.message);
-      entryId = existing.id;
-    } else {
-      const { data: inserted, error } = await (supabase as PendingSchema)
+    // Retry once without the post-migration columns rather than failing the
+    // punch. Losing provenance for a deploy window is recoverable; refusing to
+    // let anyone start work is not.
+    const writeEntry = async (payload: Record<string, unknown>) => {
+      if (existing) {
+        const res = await (supabase as PendingSchema)
+          .from("attendance_entries")
+          .update({ ...payload, clock_out: null, status: "open" })
+          .eq("id", existing.id);
+        return { id: existing.id as string, error: res.error };
+      }
+      const res = await (supabase as PendingSchema)
         .from("attendance_entries")
         .insert({
           tenant_id: emp.tenant_id,
@@ -408,13 +482,20 @@ export const clockIn = createServerFn({ method: "POST" })
           work_date: workDate,
           source: "web",
           status: "open",
-          ...punchFields,
+          ...payload,
         })
         .select("id")
         .single();
-      if (error) throw new Error(error.message);
-      entryId = inserted.id;
+      return { id: res.data?.id as string | undefined, error: res.error };
+    };
+
+    let written = await writeEntry(punchFields);
+    if (written.error && isUnknownColumnError(written.error)) {
+      warnPendingMigration();
+      written = await writeEntry(withoutPostMigrationColumns(punchFields));
     }
+    if (written.error) throw new Error(written.error.message);
+    const entryId = written.id as string;
 
     if (pendingReview) {
       await queueForReview({
@@ -436,7 +517,11 @@ export const clockIn = createServerFn({ method: "POST" })
         attendanceEntryId: entryId,
         eventTime: punch.instant,
         mismatchType: "clock_skew",
-        details: { work_date: workDate, skew_seconds: punch.skewSeconds, client_time: data?.clientTime },
+        details: {
+          work_date: workDate,
+          skew_seconds: punch.skewSeconds,
+          client_time: data?.clientTime,
+        },
       });
     }
 
@@ -477,7 +562,7 @@ export const clockOut = createServerFn({ method: "POST" })
     // the entry open forever with no hours on it.
     let { data: entry } = await (supabase as PendingSchema)
       .from("attendance_entries")
-      .select("id,clock_in,break_minutes,work_date,needs_review,review_reason")
+      .select("*")
       .eq("employee_id", emp.id)
       .eq("work_date", workDate)
       .maybeSingle();
@@ -487,7 +572,7 @@ export const clockOut = createServerFn({ method: "POST" })
       const previousWorkDate = workDateInZone(previous, timeZone);
       const { data: overnight } = await (supabase as PendingSchema)
         .from("attendance_entries")
-        .select("id,clock_in,break_minutes,work_date,needs_review,review_reason")
+        .select("*")
         .eq("employee_id", emp.id)
         .eq("work_date", previousWorkDate)
         .is("clock_out", null)
@@ -523,7 +608,8 @@ export const clockOut = createServerFn({ method: "POST" })
     };
     if (typeof data?.latitude === "number") update.clock_out_latitude = data.latitude;
     if (typeof data?.longitude === "number") update.clock_out_longitude = data.longitude;
-    if (typeof data?.accuracyMeters === "number") update.clock_out_accuracy_meters = data.accuracyMeters;
+    if (typeof data?.accuracyMeters === "number")
+      update.clock_out_accuracy_meters = data.accuracyMeters;
 
     // Clock-out is recorded but not enforced — someone who has already started a
     // shift should not be trapped on site to end it, and blocking the punch
@@ -548,7 +634,16 @@ export const clockOut = createServerFn({ method: "POST" })
       }
     }
 
-    const { error } = await (supabase as PendingSchema).from("attendance_entries").update(update).eq("id", entry.id);
+    // Same retry-without-the-new-columns rule as clockIn: an unapplied
+    // migration must cost provenance, never the ability to close a shift.
+    const applyUpdate = (payload: Record<string, unknown>) =>
+      (supabase as PendingSchema).from("attendance_entries").update(payload).eq("id", entry.id);
+
+    let { error } = await applyUpdate(update);
+    if (error && isUnknownColumnError(error)) {
+      warnPendingMigration();
+      ({ error } = await applyUpdate(withoutPostMigrationColumns(update)));
+    }
     if (error) throw new Error(error.message);
 
     if (punch.rejectedClientTime) {
@@ -559,7 +654,11 @@ export const clockOut = createServerFn({ method: "POST" })
         attendanceEntryId: entry.id,
         eventTime: punch.instant,
         mismatchType: "clock_skew",
-        details: { work_date: entry.work_date, skew_seconds: punch.skewSeconds, phase: "clock_out" },
+        details: {
+          work_date: entry.work_date,
+          skew_seconds: punch.skewSeconds,
+          phase: "clock_out",
+        },
       });
     }
 
@@ -577,13 +676,15 @@ export const clockOut = createServerFn({ method: "POST" })
 export const upsertAttendanceEntry = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({
-      workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      clockIn: z.string().optional().nullable(),
-      clockOut: z.string().optional().nullable(),
-      breakMinutes: z.number().int().min(0).max(720).default(0),
-      notes: z.string().max(1000).optional().nullable(),
-    }).parse(d),
+    z
+      .object({
+        workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        clockIn: z.string().optional().nullable(),
+        clockOut: z.string().optional().nullable(),
+        breakMinutes: z.number().int().min(0).max(720).default(0),
+        notes: z.string().max(1000).optional().nullable(),
+      })
+      .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -592,7 +693,11 @@ export const upsertAttendanceEntry = createServerFn({ method: "POST" })
 
     let hours = 0;
     if (data.clockIn && data.clockOut) {
-      const minutes = Math.max(0, (new Date(data.clockOut).getTime() - new Date(data.clockIn).getTime()) / 60000 - data.breakMinutes);
+      const minutes = Math.max(
+        0,
+        (new Date(data.clockOut).getTime() - new Date(data.clockIn).getTime()) / 60000 -
+          data.breakMinutes,
+      );
       hours = Math.round((minutes / 60) * 100) / 100;
     }
 
@@ -617,11 +722,18 @@ export const upsertAttendanceEntry = createServerFn({ method: "POST" })
     };
 
     if (existing) {
-      const { error } = await supabase.from("attendance_entries").update(payload).eq("id", existing.id);
+      const { error } = await supabase
+        .from("attendance_entries")
+        .update(payload)
+        .eq("id", existing.id);
       if (error) throw new Error(error.message);
       return { ok: true, entryId: existing.id };
     }
-    const { data: ins, error } = await supabase.from("attendance_entries").insert(payload).select("id").single();
+    const { data: ins, error } = await supabase
+      .from("attendance_entries")
+      .insert(payload)
+      .select("id")
+      .single();
     if (error) throw new Error(error.message);
     return { ok: true, entryId: ins.id };
   });
@@ -630,11 +742,13 @@ export const upsertAttendanceEntry = createServerFn({ method: "POST" })
 export const submitTimesheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({
-      periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      notes: z.string().max(1000).optional(),
-    }).parse(d),
+    z
+      .object({
+        periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        notes: z.string().max(1000).optional(),
+      })
+      .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -649,10 +763,16 @@ export const submitTimesheet = createServerFn({ method: "POST" })
       .gte("work_date", data.periodStart)
       .lte("work_date", data.periodEnd);
 
-    const totalHours = (entries ?? []).reduce((s: number, e: any) => s + Number(e.hours_worked || 0), 0);
+    const totalHours = (entries ?? []).reduce(
+      (s: number, e: any) => s + Number(e.hours_worked || 0),
+      0,
+    );
 
     const { data: tenant } = await admin
-      .from("tenants").select("country_code").eq("id", emp.tenant_id).maybeSingle();
+      .from("tenants")
+      .select("country_code")
+      .eq("id", emp.tenant_id)
+      .maybeSingle();
     let weeklyHours = 40;
     let otMultiplier = 1.5;
     if (tenant?.country_code) {
@@ -666,7 +786,10 @@ export const submitTimesheet = createServerFn({ method: "POST" })
         otMultiplier = Number(cps.overtime_multiplier);
       }
     }
-    const days = Math.max(1, (new Date(data.periodEnd).getTime() - new Date(data.periodStart).getTime()) / 86400000 + 1);
+    const days = Math.max(
+      1,
+      (new Date(data.periodEnd).getTime() - new Date(data.periodStart).getTime()) / 86400000 + 1,
+    );
     const weeks = days / 7;
     const expected = weeklyHours * weeks;
     const overtime = Math.max(0, totalHours - expected);
@@ -703,7 +826,11 @@ export const submitTimesheet = createServerFn({ method: "POST" })
       if (error) throw new Error(error.message);
       timesheetId = existing.id;
     } else {
-      const { data: ins, error } = await admin.from("timesheets").insert(payload).select("id").single();
+      const { data: ins, error } = await admin
+        .from("timesheets")
+        .insert(payload)
+        .select("id")
+        .single();
       if (error) throw new Error(error.message);
       timesheetId = ins.id;
     }
@@ -730,20 +857,30 @@ export const approveTimesheet = createServerFn({ method: "POST" })
     }
     const { error } = await supabase
       .from("timesheets")
-      .update({ status: "approved", approved_at: new Date().toISOString(), approved_by: userId, rejection_reason: null })
+      .update({
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        approved_by: userId,
+        rejection_reason: null,
+      })
       .eq("id", data.timesheetId);
     if (error) throw new Error(error.message);
 
     const admin = await loadAdmin();
     await admin.from("audit_log").insert({
-      actor_id: userId, entity_type: "timesheet", entity_id: data.timesheetId, action: "approve",
+      actor_id: userId,
+      entity_type: "timesheet",
+      entity_id: data.timesheetId,
+      action: "approve",
     });
     return { ok: true };
   });
 
 export const rejectTimesheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ timesheetId: z.string().uuid(), reason: z.string().max(1000).optional() }).parse(d))
+  .inputValidator((d) =>
+    z.object({ timesheetId: z.string().uuid(), reason: z.string().max(1000).optional() }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
@@ -752,13 +889,21 @@ export const rejectTimesheet = createServerFn({ method: "POST" })
     }
     const { error } = await supabase
       .from("timesheets")
-      .update({ status: "rejected", rejection_reason: data.reason ?? null, approved_at: null, approved_by: null })
+      .update({
+        status: "rejected",
+        rejection_reason: data.reason ?? null,
+        approved_at: null,
+        approved_by: null,
+      })
       .eq("id", data.timesheetId);
     if (error) throw new Error(error.message);
 
     const admin = await loadAdmin();
     await admin.from("audit_log").insert({
-      actor_id: userId, entity_type: "timesheet", entity_id: data.timesheetId, action: "reject",
+      actor_id: userId,
+      entity_type: "timesheet",
+      entity_id: data.timesheetId,
+      action: "reject",
       metadata: { reason: data.reason ?? null },
     });
     return { ok: true };
@@ -799,9 +944,9 @@ export const getClockStatus = createServerFn({ method: "POST" })
     const [entryRes, weekRes, fenceRes, wfhRes, pendingWfhRes] = await Promise.all([
       (supabase as PendingSchema)
         .from("attendance_entries")
-        .select(
-          "id,work_date,clock_in,clock_out,break_minutes,hours_worked,status,work_location,needs_review,review_reason,work_timezone",
-        )
+        // Wide rather than enumerated: several of these columns arrive with
+        // migration 20260823060000 and naming them would 42703 until it lands.
+        .select("*")
         .eq("employee_id", emp.id)
         .eq("work_date", workDate)
         .maybeSingle(),
@@ -816,10 +961,12 @@ export const getClockStatus = createServerFn({ method: "POST" })
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", emp.tenant_id)
         .eq("is_active", true),
-      (supabase as PendingSchema).rpc("has_approved_wfh", {
-        _employee_id: emp.id,
-        _work_date: workDate,
-      }),
+      (supabase as PendingSchema)
+        .rpc("has_approved_wfh", { _employee_id: emp.id, _work_date: workDate })
+        .then(
+          (r: PendingSchema) => r,
+          () => ({ data: null }),
+        ),
       (supabase as PendingSchema)
         .from("wfh_requests")
         .select("id,start_date,end_date,status")
@@ -827,7 +974,11 @@ export const getClockStatus = createServerFn({ method: "POST" })
         .in("status", ["pending", "approved"])
         .gte("end_date", workDate)
         .order("start_date")
-        .limit(5),
+        .limit(5)
+        .then(
+          (r: PendingSchema) => r,
+          () => ({ data: [] }),
+        ),
     ]);
 
     const entry = (entryRes?.data ?? null) as PendingSchema;
