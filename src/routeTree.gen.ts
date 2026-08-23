@@ -80,6 +80,7 @@ import { Route as OrgDangerRouteImport } from './routes/org.danger'
 import { Route as OrgBranchesRouteImport } from './routes/org.branches'
 import { Route as OrgAnalyticsRouteImport } from './routes/org.analytics'
 import { Route as OnboardingProfileRouteImport } from './routes/onboarding.profile'
+import { Route as MeWfhRouteImport } from './routes/me.wfh'
 import { Route as MeTrainingRouteImport } from './routes/me.training'
 import { Route as MeToilRouteImport } from './routes/me.toil'
 import { Route as MeTimelineRouteImport } from './routes/me.timeline'
@@ -105,6 +106,7 @@ import { Route as EmailUnsubscribeRouteImport } from './routes/email/unsubscribe
 import { Route as DownloadsSplatRouteImport } from './routes/downloads.$'
 import { Route as CareersSlugRouteImport } from './routes/careers.$slug'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
+import { Route as AdminWfhRouteImport } from './routes/admin.wfh'
 import { Route as AdminTrainingRouteImport } from './routes/admin.training'
 import { Route as AdminToilRouteImport } from './routes/admin.toil'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
@@ -559,6 +561,11 @@ const OnboardingProfileRoute = OnboardingProfileRouteImport.update({
   path: '/onboarding/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MeWfhRoute = MeWfhRouteImport.update({
+  id: '/wfh',
+  path: '/wfh',
+  getParentRoute: () => MeRoute,
+} as any)
 const MeTrainingRoute = MeTrainingRouteImport.update({
   id: '/training',
   path: '/training',
@@ -683,6 +690,11 @@ const BlogSlugRoute = BlogSlugRouteImport.update({
   id: '/blog/$slug',
   path: '/blog/$slug',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminWfhRoute = AdminWfhRouteImport.update({
+  id: '/wfh',
+  path: '/wfh',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AdminTrainingRoute = AdminTrainingRouteImport.update({
   id: '/training',
@@ -1286,6 +1298,7 @@ export interface FileRoutesByFullPath {
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
   '/admin/training': typeof AdminTrainingRoute
+  '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/careers/$slug': typeof CareersSlugRoute
   '/downloads/$': typeof DownloadsSplatRoute
@@ -1311,6 +1324,7 @@ export interface FileRoutesByFullPath {
   '/me/timeline': typeof MeTimelineRoute
   '/me/toil': typeof MeToilRoute
   '/me/training': typeof MeTrainingRoute
+  '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
   '/org/branches': typeof OrgBranchesRoute
@@ -1479,6 +1493,7 @@ export interface FileRoutesByTo {
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
   '/admin/training': typeof AdminTrainingRoute
+  '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/careers/$slug': typeof CareersSlugRoute
   '/downloads/$': typeof DownloadsSplatRoute
@@ -1504,6 +1519,7 @@ export interface FileRoutesByTo {
   '/me/timeline': typeof MeTimelineRoute
   '/me/toil': typeof MeToilRoute
   '/me/training': typeof MeTrainingRoute
+  '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
   '/org/branches': typeof OrgBranchesRoute
@@ -1674,6 +1690,7 @@ export interface FileRoutesById {
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
   '/admin/training': typeof AdminTrainingRoute
+  '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/careers/$slug': typeof CareersSlugRoute
   '/downloads/$': typeof DownloadsSplatRoute
@@ -1699,6 +1716,7 @@ export interface FileRoutesById {
   '/me/timeline': typeof MeTimelineRoute
   '/me/toil': typeof MeToilRoute
   '/me/training': typeof MeTrainingRoute
+  '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
   '/org/branches': typeof OrgBranchesRoute
@@ -1872,6 +1890,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/admin/toil'
     | '/admin/training'
+    | '/admin/wfh'
     | '/blog/$slug'
     | '/careers/$slug'
     | '/downloads/$'
@@ -1897,6 +1916,7 @@ export interface FileRouteTypes {
     | '/me/timeline'
     | '/me/toil'
     | '/me/training'
+    | '/me/wfh'
     | '/onboarding/profile'
     | '/org/analytics'
     | '/org/branches'
@@ -2065,6 +2085,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/admin/toil'
     | '/admin/training'
+    | '/admin/wfh'
     | '/blog/$slug'
     | '/careers/$slug'
     | '/downloads/$'
@@ -2090,6 +2111,7 @@ export interface FileRouteTypes {
     | '/me/timeline'
     | '/me/toil'
     | '/me/training'
+    | '/me/wfh'
     | '/onboarding/profile'
     | '/org/analytics'
     | '/org/branches'
@@ -2259,6 +2281,7 @@ export interface FileRouteTypes {
     | '/admin/templates'
     | '/admin/toil'
     | '/admin/training'
+    | '/admin/wfh'
     | '/blog/$slug'
     | '/careers/$slug'
     | '/downloads/$'
@@ -2284,6 +2307,7 @@ export interface FileRouteTypes {
     | '/me/timeline'
     | '/me/toil'
     | '/me/training'
+    | '/me/wfh'
     | '/onboarding/profile'
     | '/org/analytics'
     | '/org/branches'
@@ -2970,6 +2994,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/me/wfh': {
+      id: '/me/wfh'
+      path: '/wfh'
+      fullPath: '/me/wfh'
+      preLoaderRoute: typeof MeWfhRouteImport
+      parentRoute: typeof MeRoute
+    }
     '/me/training': {
       id: '/me/training'
       path: '/training'
@@ -3144,6 +3175,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/blog/$slug'
       preLoaderRoute: typeof BlogSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/wfh': {
+      id: '/admin/wfh'
+      path: '/wfh'
+      fullPath: '/admin/wfh'
+      preLoaderRoute: typeof AdminWfhRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/admin/training': {
       id: '/admin/training'
@@ -3883,6 +3921,7 @@ interface AdminRouteChildren {
   AdminTemplatesRoute: typeof AdminTemplatesRoute
   AdminToilRoute: typeof AdminToilRoute
   AdminTrainingRoute: typeof AdminTrainingRoute
+  AdminWfhRoute: typeof AdminWfhRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminEmployeesEmployeeIdRoute: typeof AdminEmployeesEmployeeIdRoute
 }
@@ -3936,6 +3975,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminTemplatesRoute: AdminTemplatesRoute,
   AdminToilRoute: AdminToilRoute,
   AdminTrainingRoute: AdminTrainingRoute,
+  AdminWfhRoute: AdminWfhRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminEmployeesEmployeeIdRoute: AdminEmployeesEmployeeIdRoute,
 }
@@ -3960,6 +4000,7 @@ interface MeRouteChildren {
   MeTimelineRoute: typeof MeTimelineRoute
   MeToilRoute: typeof MeToilRoute
   MeTrainingRoute: typeof MeTrainingRoute
+  MeWfhRoute: typeof MeWfhRoute
   MeIndexRoute: typeof MeIndexRoute
 }
 
@@ -3981,6 +4022,7 @@ const MeRouteChildren: MeRouteChildren = {
   MeTimelineRoute: MeTimelineRoute,
   MeToilRoute: MeToilRoute,
   MeTrainingRoute: MeTrainingRoute,
+  MeWfhRoute: MeWfhRoute,
   MeIndexRoute: MeIndexRoute,
 }
 

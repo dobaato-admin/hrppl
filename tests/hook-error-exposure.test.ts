@@ -52,9 +52,7 @@ function findings(src: string): string[] {
   // passed the variable in, so matching only the literal shape reports it clean,
   // which is the one answer this test must never give.
   const aliases = [...body.matchAll(ERROR_DERIVED_ASSIGN)].map((m) => m[1]);
-  const aliasRe = aliases.length
-    ? new RegExp(`\\b(${aliases.join("|")})\\b`)
-    : null;
+  const aliasRe = aliases.length ? new RegExp(`\\b(${aliases.join("|")})\\b`) : null;
 
   const out: string[] = [];
   lines.forEach((text, i) => {
@@ -99,7 +97,9 @@ describe("public hook endpoints do not expose error detail", () => {
     });
 
     it("catches a body wrapped onto the following line", () => {
-      const src = [`return new Response(`, `  JSON.stringify({ error: err.message }),`, `);`].join("\n");
+      const src = [`return new Response(`, `  JSON.stringify({ error: err.message }),`, `);`].join(
+        "\n",
+      );
       expect(findings(src)).toHaveLength(1);
     });
 
@@ -140,7 +140,7 @@ describe("public hook endpoints do not expose error detail", () => {
     console.error = (...args: unknown[]) => void logged.push(args);
     let body: { ok: boolean; error: string; ref: string };
     try {
-      const res = hookFailure("test-scope", new Error("relation \"secret_table\" does not exist"));
+      const res = hookFailure("test-scope", new Error('relation "secret_table" does not exist'));
       expect(res.status).toBe(500);
       body = await res.json();
     } finally {

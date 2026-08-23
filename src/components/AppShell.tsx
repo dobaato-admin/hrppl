@@ -40,10 +40,12 @@ import {
   DoorOpen,
   ArrowLeft,
   HelpCircle,
+  House,
 } from "lucide-react";
 import { HelpMenu } from "@/components/HelpMenu";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { useAuth } from "@/hooks/use-auth";
+import { ClockWidget } from "@/components/ClockWidget";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyOnboardingCompletion } from "@/lib/onboarding.functions";
@@ -139,6 +141,7 @@ const MY_SECTIONS: NavSection[] = [
       { title: "My leave", to: "/leave", icon: CalendarDays, accent: "bg-status-done" },
       { title: "Attendance", to: "/attendance", icon: ClipboardCheck, accent: "bg-status-working" },
       { title: "My TOIL", to: "/me/toil", icon: Clock, accent: "bg-status-working" },
+      { title: "Work from home", to: "/me/wfh", icon: House, accent: "bg-status-info" },
     ],
   },
   {
@@ -986,6 +989,15 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     feature: "org.biometric",
                   },
                   {
+                    // Sits beside geofences on purpose: an approval here is
+                    // precisely an exception to the perimeter configured there.
+                    title: "Work-from-home approvals",
+                    to: "/admin/wfh",
+                    icon: House,
+                    accent: "bg-status-info",
+                    feature: "org.wfhApprovals",
+                  },
+                  {
                     title: "Signing geofences",
                     to: "/admin/geofences",
                     icon: MapPin,
@@ -1281,6 +1293,14 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
         <MfaEnforcementBanner />
         <main className="flex-1 min-w-0">{children}</main>
       </div>
+
+      {/* Clocking in is the first thing most people do each day and the one
+          action every downstream number depends on, so it lives here rather
+          than three navigation steps into a 101-item sidebar. Rendered inside
+          ShellInner, which runs exactly once per page even when child routes
+          nest their own AppShell, so there is never a second widget. It hides
+          itself for accounts with no employee record. */}
+      <ClockWidget />
     </div>
   );
 }
