@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.15"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       admin_audit_log: {
@@ -381,67 +356,116 @@ export type Database = {
         Row: {
           break_minutes: number
           clock_in: string | null
+          clock_in_accuracy_meters: number | null
           clock_in_distance_meters: number | null
           clock_in_geofence_id: string | null
           clock_in_latitude: number | null
           clock_in_longitude: number | null
+          clock_in_recorded_at: string | null
+          clock_in_skew_seconds: number | null
           clock_out: string | null
+          clock_out_accuracy_meters: number | null
+          clock_out_distance_meters: number | null
+          clock_out_geofence_id: string | null
+          clock_out_latitude: number | null
+          clock_out_longitude: number | null
+          clock_out_recorded_at: string | null
+          clock_out_skew_seconds: number | null
           created_at: string
           employee_id: string
           hours_worked: number
           id: string
+          needs_review: boolean
           notes: string | null
+          review_reason: string | null
           source: string
           status: string
           tenant_id: string
           timesheet_id: string | null
           updated_at: string
           work_date: string
+          work_location: string | null
+          work_timezone: string | null
         }
         Insert: {
           break_minutes?: number
           clock_in?: string | null
+          clock_in_accuracy_meters?: number | null
           clock_in_distance_meters?: number | null
           clock_in_geofence_id?: string | null
           clock_in_latitude?: number | null
           clock_in_longitude?: number | null
+          clock_in_recorded_at?: string | null
+          clock_in_skew_seconds?: number | null
           clock_out?: string | null
+          clock_out_accuracy_meters?: number | null
+          clock_out_distance_meters?: number | null
+          clock_out_geofence_id?: string | null
+          clock_out_latitude?: number | null
+          clock_out_longitude?: number | null
+          clock_out_recorded_at?: string | null
+          clock_out_skew_seconds?: number | null
           created_at?: string
           employee_id: string
           hours_worked?: number
           id?: string
+          needs_review?: boolean
           notes?: string | null
+          review_reason?: string | null
           source?: string
           status?: string
           tenant_id: string
           timesheet_id?: string | null
           updated_at?: string
           work_date: string
+          work_location?: string | null
+          work_timezone?: string | null
         }
         Update: {
           break_minutes?: number
           clock_in?: string | null
+          clock_in_accuracy_meters?: number | null
           clock_in_distance_meters?: number | null
           clock_in_geofence_id?: string | null
           clock_in_latitude?: number | null
           clock_in_longitude?: number | null
+          clock_in_recorded_at?: string | null
+          clock_in_skew_seconds?: number | null
           clock_out?: string | null
+          clock_out_accuracy_meters?: number | null
+          clock_out_distance_meters?: number | null
+          clock_out_geofence_id?: string | null
+          clock_out_latitude?: number | null
+          clock_out_longitude?: number | null
+          clock_out_recorded_at?: string | null
+          clock_out_skew_seconds?: number | null
           created_at?: string
           employee_id?: string
           hours_worked?: number
           id?: string
+          needs_review?: boolean
           notes?: string | null
+          review_reason?: string | null
           source?: string
           status?: string
           tenant_id?: string
           timesheet_id?: string | null
           updated_at?: string
           work_date?: string
+          work_location?: string | null
+          work_timezone?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "attendance_entries_clock_in_geofence_id_fkey"
             columns: ["clock_in_geofence_id"]
+            isOneToOne: false
+            referencedRelation: "sign_geofences"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_entries_clock_out_geofence_id_fkey"
+            columns: ["clock_out_geofence_id"]
             isOneToOne: false
             referencedRelation: "sign_geofences"
             referencedColumns: ["id"]
@@ -12730,6 +12754,79 @@ export type Database = {
           },
         ]
       }
+      wfh_requests: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          created_by: string | null
+          decision_note: string | null
+          employee_id: string
+          end_date: string
+          id: string
+          reason: string | null
+          start_date: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          work_address: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          decision_note?: string | null
+          employee_id: string
+          end_date: string
+          id?: string
+          reason?: string | null
+          start_date: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          work_address?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          created_by?: string | null
+          decision_note?: string | null
+          employee_id?: string
+          end_date?: string
+          id?: string
+          reason?: string | null
+          start_date?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          work_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wfh_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wfh_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "wfh_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       white_label_settings: {
         Row: {
           accent_color: string | null
@@ -13024,6 +13121,10 @@ export type Database = {
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
         Returns: number
+      }
+      has_approved_wfh: {
+        Args: { _employee_id: string; _work_date: string }
+        Returns: boolean
       }
       has_branch_access: {
         Args: { _branch_id: string; _user_id: string }
@@ -13535,9 +13636,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       account_status: ["active", "suspended"],

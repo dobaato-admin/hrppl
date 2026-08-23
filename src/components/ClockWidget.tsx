@@ -190,7 +190,9 @@ export function ClockWidget() {
     qc.invalidateQueries({ queryKey: ["clock-status", user?.id] });
   }, [qc, user?.id]);
 
-  const needsLocation = (status && "geofenceCount" in status ? status.geofenceCount : 0) > 0;
+  // `count` comes back nullable from a head-only PostgREST query, so default it
+  // rather than letting `undefined > 0` decide whether we ask for location.
+  const needsLocation = (status && "geofenceCount" in status ? (status.geofenceCount ?? 0) : 0) > 0;
 
   const onClockIn = useCallback(async () => {
     setBusy("in");
