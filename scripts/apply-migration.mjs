@@ -6,15 +6,19 @@
  * append-only with ~194 files, so migrations have been applied by hand through
  * the Management API. This makes that repeatable.
  *
- *   SUPABASE_ACCESS_TOKEN=sbp_... node scripts/apply-migration.mjs 20260823060000_attendance_time_geo_and_wfh.sql
+ *   node scripts/apply-migration.mjs 20260823060000_attendance_time_geo_and_wfh.sql
+ *   node scripts/apply-migration.mjs --types          # regenerate types.ts
  *   node scripts/apply-migration.mjs --check          # verify credentials only
  *   node scripts/apply-migration.mjs --sql "select 1" # ad-hoc query
  *
  * `SUPABASE_ACCESS_TOKEN` is a *personal access token* from
  * https://supabase.com/dashboard/account/tokens — not the anon key, not the
- * service-role key. It is account-wide and grants full control of every project
- * on the account, so keep it out of .env and out of the repo: pass it on the
- * command line for the run that needs it.
+ * service-role key. It is read from `.env`, which is gitignored and untracked.
+ *
+ * Treat it as the most powerful credential in the project: it is account-wide,
+ * grants full control of every Supabase project on the account, and unlike the
+ * service-role key it is not scoped to one database. If `.env` is ever shared,
+ * pasted, or committed, rotate it at the URL above.
  *
  * The project ref comes from SUPABASE_PROJECT_ID in .env.
  *
@@ -24,7 +28,7 @@
  * applied. Every migration in this repo is written with IF NOT EXISTS / DROP
  * POLICY IF EXISTS guards for exactly that reason — re-running is the recovery.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -42,14 +46,14 @@ function envFromDotEnv(name) {
   return undefined;
 }
 
-const TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
+const TOKEN = envFromDotEnv("SUPABASE_ACCESS_TOKEN");
 const PROJECT = envFromDotEnv("SUPABASE_PROJECT_ID");
 
 if (!TOKEN) {
   console.error(
     "SUPABASE_ACCESS_TOKEN is not set.\n\n" +
-      "Create a personal access token at https://supabase.com/dashboard/account/tokens\n" +
-      "and pass it for this run only:\n\n" +
+      "Create a personal access token at https://supabase.com/dashboard/account/tokens,\n" +
+      "then either put it in .env (which is gitignored) or pass it per run:\n\n" +
       "  SUPABASE_ACCESS_TOKEN=sbp_xxx node scripts/apply-migration.mjs <file.sql>\n",
   );
   process.exit(2);
@@ -82,10 +86,51 @@ async function runSql(sql) {
   }
 }
 
+/**
+ * Regenerate `src/integrations/supabase/types.ts` from the live schema.
+ *
+ * The generated file is marked "automatically generated" and CLAUDE.md forbids
+ * hand-editing it, so this is the only correct way to teach the codebase about
+ * a migration that has just been applied. Run it immediately after applying
+ * one — the gap between the two is exactly when `as any` casts breed.
+ */
+async function regenerateTypes() {
+  const res = await fetch(
+    `https://api.supabase.com/v1/projects/${PROJECT}/types/typescript?included_schemas=public`,
+    {
+      headers: { Authorization: `Bearer ${TOKEN}`, "User-Agent": "curl/8.5.0" },
+    },
+  );
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 2000)}`);
+  let types;
+  try {
+    types = JSON.parse(text).types;
+  } catch {
+    types = text;
+  }
+  if (typeof types !== "string" || types.length < 1000) {
+    throw new Error(`Unexpected typegen response (${String(types).slice(0, 300)})`);
+  }
+  const out = join(ROOT, "src/integrations/supabase/types.ts");
+  const previous = existsSync(out) ? readFileSync(out, "utf8") : "";
+  // Refuse a suspiciously small result rather than truncating a 10k-line file
+  // that everything imports.
+  if (previous && types.length < previous.length * 0.5) {
+    throw new Error(
+      `Refusing to write: generated types are ${types.length} bytes against ${previous.length} on disk.`,
+    );
+  }
+  writeFileSync(out, types, "utf8");
+  console.log(`Wrote ${out} (${types.length} bytes, was ${previous.length}).`);
+}
+
 const sqlFlag = argv.indexOf("--sql");
 
 try {
-  if (argv.includes("--check")) {
+  if (argv.includes("--types")) {
+    await regenerateTypes();
+  } else if (argv.includes("--check")) {
     const out = await runSql("select current_user, current_database(), version()");
     console.log("Connected:", JSON.stringify(out, null, 2));
   } else if (sqlFlag >= 0) {

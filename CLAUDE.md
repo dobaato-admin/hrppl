@@ -352,16 +352,32 @@ There is no Supabase CLI here. Apply a migration with
 `scripts/apply-migration.mjs`, which drives the Management API as `postgres`:
 
 ```sh
-SUPABASE_ACCESS_TOKEN=sbp_... node scripts/apply-migration.mjs 20260823060000_attendance_time_geo_and_wfh.sql
-SUPABASE_ACCESS_TOKEN=sbp_... node scripts/apply-migration.mjs --check
+node scripts/apply-migration.mjs 20260823060000_attendance_time_geo_and_wfh.sql
+node scripts/apply-migration.mjs --types    # regenerate types.ts — do this every time
+node scripts/apply-migration.mjs --check
 ```
 
-That token is a **personal access token** (dashboard → account → tokens), not
-the anon or service-role key, and it is account-wide — pass it per run, never
-put it in `.env`. The endpoint is not transactional across statements, which is
-why every migration here uses `IF NOT EXISTS` / `DROP POLICY IF EXISTS` guards:
-re-running is the recovery. Regenerate `src/integrations/supabase/types.ts`
-afterwards.
+`SUPABASE_ACCESS_TOKEN` is a **personal access token** (dashboard → account →
+tokens), not the anon or service-role key, and it lives in `.env` (gitignored,
+untracked). It is account-wide and grants full control of every project on the
+account — the most powerful credential here — so rotate it if `.env` is ever
+shared or committed.
+
+The endpoint is not transactional across statements, which is why every
+migration here uses `IF NOT EXISTS` / `DROP POLICY IF EXISTS` guards: re-running
+is the recovery. **Always follow an apply with `--types`** — the gap between a
+migration landing and `types.ts` catching up is exactly where `as any` casts
+breed.
+
+Verify RLS changes under a real JWT rather than as `postgres`, which bypasses
+it entirely:
+
+```sql
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', '<user-uuid>', 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM your_table;   -- then RESET ROLE
+```
 
 **Before `CREATE OR REPLACE` on an existing function, grep for every prior definition.** Several
 have been revised repeatedly, and rebuilding one from an old copy silently reverts later fixes.
@@ -421,15 +437,6 @@ Cron: Hobby allows 2 jobs/day, wired in `vercel.json` to `leave-accrual` and
 other 18 remain POST-only and unscheduled (use Supabase `pg_cron` — recipe in the runbook).
 
 ## Current status
-
-> **One migration is written but NOT applied:**
-> `20260823060000_attendance_time_geo_and_wfh.sql` (attendance time/geo columns,
-> `wfh_requests`, `has_approved_wfh()`, new `geofence_reconciliation` mismatch
-> types). Apply it with `scripts/apply-migration.mjs`, then regenerate
-> `types.ts` and delete the `as PendingSchema` casts in
-> `attendance.functions.ts` and `wfh.functions.ts` — they exist only because the
-> generated types cannot know about unapplied schema, and they suppress real
-> type checking on those queries until removed.
 
 The project now runs against a **fresh Supabase dev project** (`xnrjfrxzahmfdrqfsnnq`), with all
 ~197 migrations replayed. The blockers the previous version of this section described — the

@@ -18,9 +18,6 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { getMyEmployeeId, getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
-/** See the same note in attendance.functions.ts — wfh_requests is new in 20260823060000. */
-type PendingSchema = any;
-
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
@@ -59,7 +56,7 @@ async function notify(args: {
   if (!args.userId) return;
   try {
     const admin = await loadAdmin();
-    await (admin as PendingSchema).from("in_app_notifications").insert({
+    await admin.from("in_app_notifications").insert({
       tenant_id: args.tenantId,
       user_id: args.userId,
       kind: args.kind,
@@ -83,7 +80,7 @@ export const listMyWfhRequests = createServerFn({ method: "POST" })
     const employeeId = await getMyEmployeeId(supabase, userId);
     if (!employeeId) return { requests: [], hasEmployee: false as const };
 
-    const { data, error } = await (supabase as PendingSchema)
+    const { data, error } = await supabase
       .from("wfh_requests")
       .select(
         "id,start_date,end_date,reason,work_address,status,approved_at,decision_note,created_at",
@@ -92,7 +89,7 @@ export const listMyWfhRequests = createServerFn({ method: "POST" })
       .order("start_date", { ascending: false })
       .limit(100);
     if (error) throw new Error(error.message);
-    return { requests: (data ?? []) as PendingSchema[], hasEmployee: true as const };
+    return { requests: data ?? [], hasEmployee: true as const };
   });
 
 // ---------- Employee: request a WFH window ----------
@@ -124,21 +121,21 @@ export const requestWfh = createServerFn({ method: "POST" })
     // so it is enforced here — two overlapping approvals would make it
     // ambiguous which one a punch was taken under, and reviewers would be
     // resolving the same day twice.
-    const { data: clashes } = await (supabase as PendingSchema)
+    const { data: clashes } = await supabase
       .from("wfh_requests")
       .select("id,start_date,end_date,status")
       .eq("employee_id", employeeId)
       .in("status", ["pending", "approved"])
       .lte("start_date", data.endDate)
       .gte("end_date", data.startDate);
-    if ((clashes ?? []).length > 0) {
-      const c = (clashes as PendingSchema[])[0];
+    const clash = (clashes ?? [])[0];
+    if (clash) {
       throw new Error(
-        `You already have a ${c.status} work-from-home request covering ${c.start_date} to ${c.end_date}.`,
+        `You already have a ${clash.status} work-from-home request covering ${clash.start_date} to ${clash.end_date}.`,
       );
     }
 
-    const { data: inserted, error } = await (supabase as PendingSchema)
+    const { data: inserted, error } = await supabase
       .from("wfh_requests")
       .insert({
         tenant_id: tenantId,
@@ -159,22 +156,20 @@ export const requestWfh = createServerFn({ method: "POST" })
     // tomorrow, by which point the day it was for has already happened.
     try {
       const admin = await loadAdmin();
-      const { data: emp } = await (admin as PendingSchema)
+      const { data: emp } = await admin
         .from("employees")
         .select("first_name,last_name,manager_id")
         .eq("id", employeeId)
         .maybeSingle();
       const name = `${emp?.first_name ?? ""} ${emp?.last_name ?? ""}`.trim() || "An employee";
 
-      const { data: approvers } = await (admin as PendingSchema)
+      const { data: approvers } = await admin
         .from("user_roles")
         .select("user_id,role,profiles!inner(tenant_id)")
         .in("role", ["manager", "hr", "org_admin"])
         .eq("profiles.tenant_id", tenantId);
 
-      const targets = new Set<string>(
-        ((approvers ?? []) as PendingSchema[]).map((r) => r.user_id as string),
-      );
+      const targets = new Set<string>((approvers ?? []).map((r) => r.user_id as string));
       targets.delete(userId); // never ask someone to approve their own request
       for (const target of targets) {
         await notify({
@@ -190,7 +185,7 @@ export const requestWfh = createServerFn({ method: "POST" })
       console.error("[wfh] approver notification failed", e);
     }
 
-    return { ok: true, id: (inserted as PendingSchema).id as string };
+    return { ok: true, id: inserted.id };
   });
 
 // ---------- Employee: withdraw a pending request ----------
@@ -202,7 +197,7 @@ export const cancelMyWfhRequest = createServerFn({ method: "POST" })
     const employeeId = await getMyEmployeeId(supabase, userId);
     if (!employeeId) throw new Error("No employee record is linked to your account.");
 
-    const { error } = await (supabase as PendingSchema)
+    const { error } = await supabase
       .from("wfh_requests")
       .update({ status: "cancelled" })
       .eq("id", data.id)
@@ -239,11 +234,14 @@ export const listWfhForApproval = createServerFn({ method: "POST" })
     if (!tenantId) return { requests: [], noTenantScope: true as const };
     const myEmployeeId = await getMyEmployeeId(supabase, userId);
 
-    let q = (supabase as PendingSchema)
+    let q = supabase
       .from("wfh_requests")
+      // One string literal, deliberately. TypeScript types `"a" + "b"` as plain
+      // `string`, not `"ab"`, and supabase-js parses this argument at the type
+      // level — split across a concatenation it degrades to GenericStringError
+      // and every field of the result silently becomes untyped.
       .select(
-        "id,employee_id,start_date,end_date,reason,work_address,status,approved_at,decision_note,created_at," +
-          "employees!inner(first_name,last_name,job_title)",
+        "id,employee_id,start_date,end_date,reason,work_address,status,approved_at,decision_note,created_at,employees!inner(first_name,last_name,job_title)",
       )
       .eq("tenant_id", tenantId)
       .order("start_date", { ascending: false })
@@ -257,7 +255,7 @@ export const listWfhForApproval = createServerFn({ method: "POST" })
 
     return {
       noTenantScope: false as const,
-      requests: ((rows ?? []) as PendingSchema[]).map((r) => ({
+      requests: (rows ?? []).map((r) => ({
         id: r.id as string,
         employeeId: r.employee_id as string,
         employeeName: `${r.employees?.first_name ?? ""} ${r.employees?.last_name ?? ""}`.trim(),
@@ -291,7 +289,7 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
     const tenantId = await requireTenantId(supabase, userId);
     const myEmployeeId = await getMyEmployeeId(supabase, userId);
 
-    const { data: existing, error: readErr } = await (supabase as PendingSchema)
+    const { data: existing, error: readErr } = await supabase
       .from("wfh_requests")
       .select("id,employee_id,tenant_id,status,start_date,end_date")
       .eq("id", data.id)
@@ -301,17 +299,17 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
 
     // Assert the tenant rather than trusting the row we just read. Reading it
     // proves RLS let us see it, and for super_admin RLS lets us see everything.
-    if ((existing as PendingSchema).tenant_id !== tenantId) {
+    if (existing.tenant_id !== tenantId) {
       throw new Error("That request belongs to a different organisation.");
     }
-    if (myEmployeeId && (existing as PendingSchema).employee_id === myEmployeeId) {
+    if (myEmployeeId && existing.employee_id === myEmployeeId) {
       throw new Error("You cannot decide your own work-from-home request.");
     }
-    if ((existing as PendingSchema).status !== "pending") {
-      throw new Error(`That request has already been ${(existing as PendingSchema).status}.`);
+    if (existing.status !== "pending") {
+      throw new Error(`That request has already been ${existing.status}.`);
     }
 
-    const { error } = await (supabase as PendingSchema)
+    const { error } = await supabase
       .from("wfh_requests")
       .update({
         status: data.decision,
@@ -325,10 +323,10 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
 
     try {
       const admin = await loadAdmin();
-      const { data: emp } = await (admin as PendingSchema)
+      const { data: emp } = await admin
         .from("employees")
         .select("user_id")
-        .eq("id", (existing as PendingSchema).employee_id)
+        .eq("id", existing.employee_id)
         .maybeSingle();
       await notify({
         tenantId,
@@ -337,13 +335,13 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
         title: data.decision === "approved" ? "Work-from-home approved" : "Work-from-home declined",
         body:
           data.decision === "approved"
-            ? `You can clock in remotely from ${(existing as PendingSchema).start_date} to ${(existing as PendingSchema).end_date}.`
-            : `Your request for ${(existing as PendingSchema).start_date} to ${(existing as PendingSchema).end_date} was declined.` +
+            ? `You can clock in remotely from ${existing.start_date} to ${existing.end_date}.`
+            : `Your request for ${existing.start_date} to ${existing.end_date} was declined.` +
               (data.note ? ` Reason: ${data.note}` : ""),
         link: "/me/wfh",
       });
 
-      await (admin as PendingSchema).from("audit_log").insert({
+      await admin.from("audit_log").insert({
         actor_id: userId,
         entity_type: "wfh_request",
         entity_id: data.id,
