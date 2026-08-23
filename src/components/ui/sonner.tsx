@@ -6,6 +6,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       className="toaster group"
+      // Top-right, not sonner's bottom-right default. The clock widget is a
+      // fixed element in the bottom-right corner, so the default stacked toasts
+      // directly on top of it — and the toast that appears right after a punch
+      // is precisely when you next want to touch the widget.
+      position="top-right"
+      // Sonner's default is 4s; long enough to be in the way, short enough to
+      // miss. Success messages here are confirmations you have already seen the
+      // result of, so they get less. Errors override this per-call.
+      duration={3000}
       toastOptions={{
         classNames: {
           toast:

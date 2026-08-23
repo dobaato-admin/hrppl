@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/AppShell";
 import { KpiTile, PageHeader, SkeletonRows } from "@/components/monday";
+import { RequestsSummary } from "@/components/dashboard/RequestsSummary";
 import { BoardCard, BoardRow, AdminTile } from "@/components/dashboard-tiles";
 import { getMyOrgStatus } from "@/lib/org-signup.functions";
 import {
@@ -260,6 +261,12 @@ function Dashboard() {
             icon={Receipt}
           />
         </section>
+
+        {/* What am I waiting on, and what is waiting on me. Sits above the
+            boards because an unactioned approval is the most time-sensitive
+            thing on this page — a same-day work-from-home request is worthless
+            if nobody sees it until tomorrow. */}
+        <RequestsSummary />
 
         {/* Boards */}
         <section className="grid gap-4 lg:grid-cols-3">
