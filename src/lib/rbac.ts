@@ -63,6 +63,7 @@ export type Feature =
   | "org.offboarding"
   | "org.biometric"
   | "org.geofences"
+  | "org.wfhApprovals"
   | "org.requests"
   | "org.idRequests"
   | "org.analytics"
@@ -148,6 +149,10 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "org.offboarding": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.biometric": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.geofences": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  // Must stay equal to WFH_APPROVER_ROLES and to the RLS policy on
+  // wfh_requests. A nav entry wider than the policy just moves the failure
+  // from "not shown" to "Postgres rejected your update".
+  "org.wfhApprovals": SET("super_admin", "org_admin", "manager", "hr"),
   "org.requests": SET("super_admin", "org_admin", "branch_admin", "hr", "manager"),
   "org.idRequests": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.analytics": SET("super_admin", "org_admin", "branch_admin", "hr", "finance"),
@@ -263,6 +268,22 @@ export const SUPER_ADMIN_ONLY: ReadonlySet<AppRole> = SET("super_admin");
  * the boundary and drifting from the policy just moves the error later.
  */
 export const OFFBOARDING_ROLES: ReadonlySet<AppRole> = SET(
+  "super_admin",
+  "org_admin",
+  "manager",
+  "hr",
+);
+
+/**
+ * Who may review work-from-home requests.
+ *
+ * Mirrors the `"wfh tenant approver manages"` policy in migration
+ * 20260823060000 exactly — manager, hr, org_admin, plus super_admin through its
+ * own separate policy. Same warning as OFFBOARDING_ROLES above: widen the
+ * policy in the same change, or HR reaches the page and Postgres rejects the
+ * update.
+ */
+export const WFH_APPROVER_ROLES: ReadonlySet<AppRole> = SET(
   "super_admin",
   "org_admin",
   "manager",

@@ -14,6 +14,7 @@ import { clockIn, clockOut, upsertAttendanceEntry, submitTimesheet } from "@/lib
 import { AppShell } from "@/components/AppShell";
 import { KpiTile, CardRail, StatusChip, statusTone } from "@/components/monday";
 import { Clock, Timer, AlarmClock, FileCheck2 } from "lucide-react";
+import { browserTimeZone, localYmd } from "@/lib/work-date";
 
 export const Route = createFileRoute("/attendance")({
   head: () => ({ meta: [{ title: "My attendance — WorldPay HRMS" }] }),
@@ -39,7 +40,17 @@ function startOfWeek(d: Date) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
-function ymd(d: Date) { return d.toISOString().slice(0, 10); }
+/**
+ * The local calendar date, NOT the UTC one.
+ *
+ * This function used to be `d.toISOString().slice(0, 10)`, and it is the reason
+ * entries appeared against the wrong day. Every cell of the week grid is built
+ * from a *local* midnight Date; converting that to UTC first lands on the
+ * previous calendar day for any positive offset, so each column queried the day
+ * before the one it was labelled with — and today's entry showed up in
+ * tomorrow's row. See src/lib/work-date.ts for the full write-up.
+ */
+const ymd = localYmd;
 
 function AttendancePage() {
   const { user, loading } = useAuth();
@@ -96,13 +107,26 @@ function AttendancePage() {
   const isClockedIn = !!todayEntry?.clock_in && !todayEntry?.clock_out;
   const totalWeekHours = entries.reduce((s, e) => s + Number(e.hours_worked || 0), 0);
 
-  async function getBrowserLocation(): Promise<{ latitude?: number; longitude?: number; locationError?: string }> {
+  async function getBrowserLocation(): Promise<{
+    latitude?: number;
+    longitude?: number;
+    accuracyMeters?: number;
+    locationError?: string;
+  }> {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       return { locationError: "Geolocation not supported on this device" };
     }
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
-        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        (pos) =>
+          resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            // Previously thrown away. Without it a 2 km IP-derived guess was
+            // compared against the fence exactly like a 5 m satellite fix.
+            accuracyMeters:
+              typeof pos.coords.accuracy === "number" ? pos.coords.accuracy : undefined,
+          }),
         (err) => resolve({ locationError: err.message || "Location permission denied" }),
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
       );
@@ -111,21 +135,39 @@ function AttendancePage() {
 
   async function onClockIn() {
     setBusy(true);
+    // Captured before the geolocation wait, which is allowed eight seconds.
+    // The server used to stamp its own clock after that wait plus the network
+    // round-trip, so every punch was late, always in the employer's favour.
+    const clientTime = new Date().toISOString();
+    const clientTimeZone = browserTimeZone();
     try {
       const loc = await getBrowserLocation();
-      await fnClockIn({ data: loc });
-      toast.success("Clocked in");
+      const res = await fnClockIn({ data: { ...loc, clientTime, clientTimeZone } });
+      if (res.needsReview) {
+        toast.warning(`Clocked in at ${res.localTime} — flagged for review`, {
+          description: res.reviewReason ?? undefined,
+          duration: 9000,
+        });
+      } else {
+        toast.success(`Clocked in at ${res.localTime}${res.remote ? " (working from home)" : ""}`);
+      }
       await loadWeek();
     } catch (e: any) {
-      toast.error(e.message ?? "Failed", { duration: 8000 });
+      toast.error(e.message ?? "Failed", { duration: 12000 });
     } finally {
       setBusy(false);
     }
   }
   async function onClockOut() {
     setBusy(true);
-    try { await fnClockOut({ data: {} }); toast.success("Clocked out"); await loadWeek(); }
-    catch (e: any) { toast.error(e.message ?? "Failed"); }
+    const clientTime = new Date().toISOString();
+    const clientTimeZone = browserTimeZone();
+    try {
+      const loc = await getBrowserLocation();
+      const res = await fnClockOut({ data: { ...loc, clientTime, clientTimeZone } });
+      toast.success(`Clocked out at ${res.localTime} — ${res.hours}h`);
+      await loadWeek();
+    } catch (e: any) { toast.error(e.message ?? "Failed"); }
     finally { setBusy(false); }
   }
   async function saveRow(date: Date, clockInStr: string, clockOutStr: string, breakMin: number, notes: string) {

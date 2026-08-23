@@ -675,6 +675,72 @@ async function seed(): Promise<SeededAccount[]> {
         .eq("id", empIds.get(p.handle)!);
     }
 
+    // ---- attendance: a work zone, and work-from-home requests ----
+    //
+    // Both tenants get one active geofence at their head office, which is what
+    // makes clock-in enforcement observable at all: with no fences the check
+    // short-circuits and the whole feature looks like it does nothing. The
+    // radius is generous because a demo is run from a laptop, whose position
+    // comes from wifi or IP and is routinely hundreds of metres out.
+    //
+    // The WFH rows exist so /admin/wfh is not an empty queue on a fresh seed —
+    // one already approved (so the approved-remote clock-in path can be walked
+    // end to end today) and one still pending (so there is something to decide).
+    const HQ: Record<string, { lat: number; lng: number }> = {
+      AU: { lat: -33.8688, lng: 151.2093 }, // Sydney
+      NP: { lat: 27.7172, lng: 85.324 },    // Kathmandu
+    };
+    const hq = HQ[spec.country];
+    if (hq) {
+      ok(
+        "sign_geofences",
+        await admin.from("sign_geofences").insert({
+          tenant_id: tenant.id,
+          name: `${spec.branches[0].name} work zone`,
+          latitude: hq.lat,
+          longitude: hq.lng,
+          radius_meters: 500,
+          min_accuracy_meters: 250,
+          is_active: true,
+          notes: "Seeded demo zone. Radius and accuracy are deliberately loose for laptop-based demos.",
+        }).select("id"),
+      );
+    }
+
+    const day = (offset: number) =>
+      new Date(Date.now() + offset * 24 * 3600_000).toISOString().slice(0, 10);
+    const remoteWorker = spec.people.find((x) => x.role === "employee");
+    const secondWorker = spec.people.filter((x) => x.role === "employee")[1];
+    const wfhRows: Record<string, unknown>[] = [];
+    if (remoteWorker) {
+      wfhRows.push({
+        tenant_id: tenant.id,
+        employee_id: empIds.get(remoteWorker.handle)!,
+        start_date: day(0),
+        end_date: day(2),
+        reason: "Working from home while the office fit-out finishes.",
+        work_address: "Home",
+        status: "approved",
+        approved_by: founderId,
+        approved_at: new Date().toISOString(),
+        created_by: userIds.get(remoteWorker.handle),
+      });
+    }
+    if (secondWorker) {
+      wfhRows.push({
+        tenant_id: tenant.id,
+        employee_id: empIds.get(secondWorker.handle)!,
+        start_date: day(5),
+        end_date: day(5),
+        reason: "Contractor visit at home.",
+        status: "pending",
+        created_by: userIds.get(secondWorker.handle),
+      });
+    }
+    if (wfhRows.length) {
+      ok("wfh_requests", await admin.from("wfh_requests").insert(wfhRows).select("id"));
+    }
+
     // Submitted onboarding profiles.
     //
     // dashboard.tsx redirects any user who has an employee record and no

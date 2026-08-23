@@ -243,6 +243,84 @@ returned exactly one row — themselves. The tenant filter there is the only thi
 one tenant, so it must come from the caller's own employee row and the projection must stay free
 of compensation and identifiers.
 
+### Dates and time zones — never `toISOString().slice(0, 10)`
+
+A calendar date is a *local* concept. `new Date().toISOString().slice(0, 10)`
+gives today **in UTC**, which is wrong for every tenant off the prime meridian
+and wrong in a different direction on each side of it. That expression put
+attendance on the wrong day in production: in `Asia/Kathmandu` (UTC+05:45) a
+shift starting before 05:45 filed against yesterday, and in `America/New_York`
+anything after 19:00 filed against tomorrow. The reported symptom was neither —
+it was the week grid, which built each column from a *local* midnight `Date` and
+then ran it through the same conversion, so every column queried the day before
+its own label and today's entry showed up in tomorrow's row.
+
+Use **`src/lib/work-date.ts`**:
+
+- `workDateInZone(instant, tz)` — server side, the working day in the tenant's zone.
+- `localYmd(date)` — client side, the browser's own calendar date.
+- `resolveTimeZone(branch?.timezone, tenant.timezone)` — branch wins, then
+  tenant, then `UTC`. Both columns are free text (`tenants.timezone` defaults to
+  the literal `'UTC'`), so an unrecognised value degrades rather than throwing —
+  a typo in settings must not stop a workforce clocking in.
+- `resolvePunchInstant(clientIso, serverNow)` — see below.
+
+**Daylight saving is never hard-coded.** Offsets belong to instants, not places:
+`America/New_York` is -05:00 in January and -04:00 in July. Store an IANA zone
+name and resolve it per instant through `Intl` (or `AT TIME ZONE` in SQL) and
+the tz database supplies the rules, including the ones that change. Nepal has
+never observed DST but is the good test of sub-hour offsets: +345 minutes, not
++5 or +6 hours.
+
+`work_timezone` is stored **on each attendance row**, not read back from the
+tenant, so correcting a tenant's timezone setting cannot retroactively move
+every historical shift onto a different date.
+
+### Attendance: when a punch happened, and where
+
+- **Time comes from the client, within a tolerance.** The server used to stamp
+  `new Date()` inside the handler — after auth, the employee lookup, the
+  geofence query, and up to 8s waiting on geolocation. Every punch was late by
+  that much, always in the employer's favour. The client now captures the
+  instant the button is pressed and sends `clientTime`; `resolvePunchInstant`
+  believes it within ±5 minutes and otherwise substitutes server time, records
+  `clock_in_skew_seconds`, and flags the row. `clock_in_recorded_at` keeps the
+  server's own receipt, so the two are never confused.
+- **Geofencing reads GPS accuracy.** `coords.accuracy` is a 95% confidence
+  radius that ranges from ~5 m (satellite) to kilometres (IP), and it used to be
+  discarded — as did `sign_geofences.min_accuracy_meters`, which nothing had
+  ever read. `evaluateGeofence` in **`src/lib/geofence.ts`** returns
+  `inside` / `inside_low_confidence` / `uncertain` / `outside` and is
+  deliberately generous at the boundary: a false refusal stops someone working
+  and is visible instantly, a false acceptance is recorded and reviewable.
+- **Refusals leave a trace.** They previously left none at all. `clockIn` writes
+  `geofence_audit_log` and `geofence_reconciliation` through the *service-role*
+  client, so the subject cannot suppress the record — but inside `try/catch`,
+  because `client.server.ts` throws on construction without
+  `SUPABASE_SERVICE_ROLE_KEY` and the audit trail must never be the reason
+  nobody can clock in.
+- **Work-from-home is the sanctioned exception.** An approved `wfh_requests` row
+  (checked via `has_approved_wfh()`) lets the punch succeed outside every fence,
+  marked `work_location = 'remote'` and queued for priority review. The review
+  is what makes the exception safe, so it is not optional.
+- **`ClockWidget` renders once**, inside `ShellInner` — not in `AppShell`, which
+  nests. It hides itself for accounts with no employee record, and only asks for
+  location when the tenant actually has fences.
+
+### Public hook endpoints must not echo caught errors
+
+`/api/public/hooks/*` authenticates with a bearer secret rather than a session,
+so anything in a response body is internet-reachable. Returning `e.message`
+there ships Postgres messages naming tables, columns, constraints and RLS
+policies — CodeQL flags it as "Information exposure through a stack trace", and
+15 of the 20 handlers were doing it.
+
+Use `hookFailure()` / `hookErrorRef()` from **`src/lib/hook-response.server.ts`**:
+the full error goes to the server log, the caller gets a generic message and a
+correlation ref. Writing `e.message` into an internal table such as
+`billing_admin_alerts` is fine and unchanged. `tests/hook-error-exposure.test.ts`
+enforces it.
+
 ### UI shell
 
 `src/components/AppShell.tsx` provides the chrome. Four layout routes (`me.tsx`, `org.tsx`,
@@ -268,7 +346,22 @@ chrome provider, and every parent route renders an `<Outlet />`.
 
 ### Database — migration-only
 
-`supabase/migrations/*.sql` is append-only (~193 files). Not indexed by CodeGraph — use Grep.
+`supabase/migrations/*.sql` is append-only (~194 files). Not indexed by CodeGraph — use Grep.
+
+There is no Supabase CLI here. Apply a migration with
+`scripts/apply-migration.mjs`, which drives the Management API as `postgres`:
+
+```sh
+SUPABASE_ACCESS_TOKEN=sbp_... node scripts/apply-migration.mjs 20260823060000_attendance_time_geo_and_wfh.sql
+SUPABASE_ACCESS_TOKEN=sbp_... node scripts/apply-migration.mjs --check
+```
+
+That token is a **personal access token** (dashboard → account → tokens), not
+the anon or service-role key, and it is account-wide — pass it per run, never
+put it in `.env`. The endpoint is not transactional across statements, which is
+why every migration here uses `IF NOT EXISTS` / `DROP POLICY IF EXISTS` guards:
+re-running is the recovery. Regenerate `src/integrations/supabase/types.ts`
+afterwards.
 
 **Before `CREATE OR REPLACE` on an existing function, grep for every prior definition.** Several
 have been revised repeatedly, and rebuilding one from an old copy silently reverts later fixes.
@@ -329,6 +422,15 @@ other 18 remain POST-only and unscheduled (use Supabase `pg_cron` — recipe in 
 
 ## Current status
 
+> **One migration is written but NOT applied:**
+> `20260823060000_attendance_time_geo_and_wfh.sql` (attendance time/geo columns,
+> `wfh_requests`, `has_approved_wfh()`, new `geofence_reconciliation` mismatch
+> types). Apply it with `scripts/apply-migration.mjs`, then regenerate
+> `types.ts` and delete the `as PendingSchema` casts in
+> `attendance.functions.ts` and `wfh.functions.ts` — they exist only because the
+> generated types cannot know about unapplied schema, and they suppress real
+> type checking on those queries until removed.
+
 The project now runs against a **fresh Supabase dev project** (`xnrjfrxzahmfdrqfsnnq`), with all
 ~197 migrations replayed. The blockers the previous version of this section described — the
 unapplied suspension migration, the missing service-role key — are resolved.
@@ -376,8 +478,10 @@ chrome restored on 20 orphaned routes; the always-on loading bar; the `listNotif
    `/org/performance`.
 3. **Leave trusts a client-computed `days`** (`leave.functions.ts:77`) with no balance check and
    no weekend/holiday exclusion, and `leave_approval_routes` is authored but never consumed.
-4. **No work-from-home concept at all**, and `clockIn` has no geofence exception — out-of-fence
-   is a hard throw that leaves no trace anywhere.
+4. **Attendance time/geo/WFH — fixed**, see the two sections above. What is left:
+   `clockOut` records position but does not validate it; WFH decisions notify
+   in-app only; the 24h reconciliation cron does not know the new WFH mismatch
+   types; there is no tenant-level "remote work allowed" switch.
 
 `scripts/qa-sweep.mjs` walks every nav destination as each seeded role and writes
 `docs/qa-sweep-report.md` — chrome, console errors, status, repeated server-fn calls. Re-run it
