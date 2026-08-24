@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync, globSync } from "fs";
 import { join } from "path";
+import { getTenantId, getActingTenantId } from "@/lib/tenant-scope";
 
 /**
  * Tenant scoping must be explicit in the query, not delegated to RLS.
@@ -34,8 +35,8 @@ function code(src: string): string {
 describe("the shared tenant-scope primitive", () => {
   const SRC = read("src/lib/tenant-scope.ts");
 
-  it("exports the three helpers callers need", () => {
-    for (const fn of ["requireTenantId", "getTenantId", "getMyEmployeeId"]) {
+  it("exports the helpers callers need", () => {
+    for (const fn of ["requireTenantId", "getTenantId", "getActingTenantId", "getMyEmployeeId"]) {
       expect(code(SRC), `${fn} must be exported`).toMatch(
         new RegExp(`export async function ${fn}\\b`),
       );
@@ -54,6 +55,56 @@ describe("the shared tenant-scope primitive", () => {
   it("requireTenantId throws rather than returning null", () => {
     const body = code(SRC).slice(code(SRC).indexOf("export async function requireTenantId"));
     expect(body).toMatch(/throw new NoTenantScopeError/);
+  });
+});
+
+describe("getTenantId falls back to the acting tenant", () => {
+  // Platform accounts (super_admin / regional_admin) have profiles.tenant_id
+  // = NULL. getTenantId falls back to platform_acting_tenant (20260824090000)
+  // so they can act as a chosen tenant instead of seeing every surface empty.
+
+  function fakeSupabase(rows: { profileTenantId?: string | null; actingTenantId?: string | null }) {
+    return {
+      from(table: string) {
+        const value =
+          table === "profiles"
+            ? rows.profileTenantId
+            : table === "platform_acting_tenant"
+              ? rows.actingTenantId
+              : undefined;
+        const builder = {
+          select: () => builder,
+          eq: () => builder,
+          maybeSingle: async () => ({
+            data: value === undefined ? null : { tenant_id: value },
+          }),
+        };
+        return builder;
+      },
+    };
+  }
+
+  it("prefers the home tenant when profiles.tenant_id is set", async () => {
+    const supabase = fakeSupabase({
+      profileTenantId: "home-tenant",
+      actingTenantId: "acting-tenant",
+    });
+    expect(await getTenantId(supabase, "user-1")).toBe("home-tenant");
+  });
+
+  it("falls back to the acting tenant when the home tenant is null", async () => {
+    const supabase = fakeSupabase({ profileTenantId: null, actingTenantId: "acting-tenant" });
+    expect(await getTenantId(supabase, "user-1")).toBe("acting-tenant");
+  });
+
+  it("returns null when neither is set", async () => {
+    const supabase = fakeSupabase({ profileTenantId: null, actingTenantId: null });
+    expect(await getTenantId(supabase, "user-1")).toBeNull();
+  });
+
+  it("getActingTenantId reads platform_acting_tenant directly", async () => {
+    const supabase = fakeSupabase({ actingTenantId: "acting-tenant" });
+    expect(await getActingTenantId(supabase, "user-1")).toBe("acting-tenant");
   });
 });
 

@@ -77,6 +77,8 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { MfaEnforcementBanner } from "@/components/security/MfaEnforcementBanner";
+import { TenantSwitcher } from "@/components/TenantSwitcher";
+import { ActingTenantBanner } from "@/components/ActingTenantBanner";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/monday";
 import { Button } from "@/components/ui/button";
@@ -1262,6 +1264,7 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             <CrumbsAndTitle title={title} subtitle={subtitle} />
             <div className="ml-auto flex items-center gap-1.5">
               {actions}
+              <TenantSwitcher />
               <GlobalSearch />
               <HelpMenu />
               <NotificationsBell />
@@ -1291,6 +1294,7 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
         </header>
 
         <MfaEnforcementBanner />
+        <ActingTenantBanner />
         <main className="flex-1 min-w-0">{children}</main>
       </div>
 

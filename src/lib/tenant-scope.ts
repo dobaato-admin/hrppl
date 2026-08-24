@@ -26,7 +26,7 @@
  */
 
 /** Minimal shape we need — avoids importing the generated client types here. */
-type AnySupabase = {
+export type AnySupabase = {
   from: (table: string) => any;
 };
 
@@ -51,22 +51,48 @@ export function isNoTenantScope(e: unknown): e is NoTenantScopeError {
 }
 
 /**
- * The caller's tenant, or `null` if they have none.
+ * The tenant a platform admin (`super_admin` / `regional_admin`) has chosen to
+ * act as, or `null` if none is set. Set via `setActingTenant`
+ * (`platform-tenant.functions.ts`) into `platform_acting_tenant`
+ * (20260824090000). RLS on that table already restricts a row to its owner
+ * and to tenants they're allowed to act on — `has_role` for super_admin,
+ * `has_role` + `has_country_scope` for regional_admin — so no role check is
+ * needed here; querying it for an ordinary tenant employee just returns
+ * nothing.
  *
- * Platform accounts (`super_admin` / `regional_admin`) legitimately have
- * `profiles.tenant_id = NULL`, so absence is a normal state, not an error —
- * use {@link requireTenantId} when the caller must have one.
+ * Exported separately from {@link getTenantId} because `getMyOrgStatus` and
+ * `getMyGateStatus` already have the caller's `profiles.tenant_id` in hand
+ * from their own query and only need this as a fallback, not a second
+ * `profiles` round trip.
  */
-export async function getTenantId(
+export async function getActingTenantId(
   supabase: AnySupabase,
   userId: string,
 ): Promise<string | null> {
   const { data } = await supabase
+    .from("platform_acting_tenant")
+    .select("tenant_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return (data?.tenant_id as string | undefined) ?? null;
+}
+
+/**
+ * The caller's tenant, or `null` if they have none.
+ *
+ * Platform accounts (`super_admin` / `regional_admin`) legitimately have
+ * `profiles.tenant_id = NULL`. For those, falls back to
+ * {@link getActingTenantId}. Absence is still a normal state, not an error —
+ * use {@link requireTenantId} when the caller must have one.
+ */
+export async function getTenantId(supabase: AnySupabase, userId: string): Promise<string | null> {
+  const { data: profile } = await supabase
     .from("profiles")
     .select("tenant_id")
     .eq("id", userId)
     .maybeSingle();
-  return (data?.tenant_id as string | undefined) ?? null;
+  if (profile?.tenant_id) return profile.tenant_id as string;
+  return getActingTenantId(supabase, userId);
 }
 
 /**
