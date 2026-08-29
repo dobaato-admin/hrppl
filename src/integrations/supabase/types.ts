@@ -8668,6 +8668,32 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_acting_tenant: {
+        Row: {
+          set_at: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          set_at?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          set_at?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_acting_tenant_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -13097,6 +13123,10 @@ export type Database = {
         }
       }
       blog_publish_due_posts: { Args: never; Returns: number }
+      can_decide_wfh: {
+        Args: { _request_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_see_confidential: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean

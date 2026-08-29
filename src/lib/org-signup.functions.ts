@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth, requireAuthAllowSuspended } from "@/lib/auth-guard";
 import { validateBusinessRegistrationNumber } from "@/lib/payroll-validation";
+import { getActingTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -36,10 +37,16 @@ export const getMyOrgStatus = createServerFn({ method: "GET" })
 
     const { data: profile } = await supabase
       .from("profiles").select("tenant_id, full_name").eq("id", userId).maybeSingle();
-    const tenantId = (profile?.tenant_id as string | null) ?? null;
-
     const { data: roleRows } = await supabase.from("user_roles").select("role").eq("user_id", userId);
     const roles = (roleRows ?? []).map((r: any) => r.role as string);
+    const isPlatformAdmin = roles.includes("super_admin") || roles.includes("regional_admin");
+
+    // Platform admins have no home tenant; fall back to whichever tenant
+    // they've chosen to act as (src/lib/tenant-scope.ts).
+    const homeTenantId = (profile?.tenant_id as string | null) ?? null;
+    const actingTenantId =
+      !homeTenantId && isPlatformAdmin ? await getActingTenantId(supabase, userId) : null;
+    const tenantId = homeTenantId ?? actingTenantId;
 
     let setupProgress: any = null;
     let tenant: any = null;
@@ -105,6 +112,8 @@ export const getMyOrgStatus = createServerFn({ method: "GET" })
       roles,
       tenant,
       tenantId,
+      actingTenantId,
+      isPlatformAdmin,
       setupProgress,
       pendingInvitation,
       pendingTrialInvitation,
@@ -134,6 +143,8 @@ export const getMyGateStatus = createServerFn({ method: "GET" })
       return {
         userId,
         tenantId: null,
+        actingTenantId: null,
+        isPlatformAdmin: false,
         roles: [] as string[],
         setupCompleted: false,
         pendingTrialInvitation: null,
@@ -147,8 +158,15 @@ export const getMyGateStatus = createServerFn({ method: "GET" })
       supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", userId),
     ]);
-    const tenantId = (profile?.tenant_id as string | null) ?? null;
     const roles = (roleRows ?? []).map((r: any) => r.role as string);
+    const isPlatformAdmin = roles.includes("super_admin") || roles.includes("regional_admin");
+
+    // Platform admins have no home tenant; fall back to whichever tenant
+    // they've chosen to act as (src/lib/tenant-scope.ts).
+    const homeTenantId = (profile?.tenant_id as string | null) ?? null;
+    const actingTenantId =
+      !homeTenantId && isPlatformAdmin ? await getActingTenantId(supabase, userId) : null;
+    const tenantId = homeTenantId ?? actingTenantId;
 
     let setupCompleted = false;
     if (tenantId) {
@@ -176,7 +194,7 @@ export const getMyGateStatus = createServerFn({ method: "GET" })
     }
 
     return {
-      userId, tenantId, roles, setupCompleted, pendingTrialInvitation,
+      userId, tenantId, actingTenantId, isPlatformAdmin, roles, setupCompleted, pendingTrialInvitation,
       suspended: false, suspensionReason: null, suspendedScope: null,
     };
   });

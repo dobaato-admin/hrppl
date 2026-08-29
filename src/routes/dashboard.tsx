@@ -87,10 +87,13 @@ function Dashboard() {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
 
-  // Route new users to the appropriate next step
+  // Route new users to the appropriate next step. Platform admins
+  // (super_admin / regional_admin) legitimately have no home tenant — /welcome
+  // is the "create or join an organization" flow and is not for them; they
+  // pick a tenant to act as from the TenantSwitcher in AppShell instead.
   useEffect(() => {
     if (!orgStatus || !user) return;
-    if (!orgStatus.tenantId) {
+    if (!orgStatus.tenantId && !orgStatus.isPlatformAdmin) {
       navigate({ to: "/welcome" });
     } else if (orgStatus.employee && !orgStatus.onboardingProfile?.submitted_at) {
       navigate({ to: "/onboarding/profile" });
