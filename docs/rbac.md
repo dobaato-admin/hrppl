@@ -95,6 +95,7 @@ Legend: **F** = full CRUD · **R** = read only · **A** = approve/act on own sco
 | `/leave` (own) | F | F | F | F | F | F | S |
 | `/org/leave` (approve all) | F | F | A (own branch) | A | — | A (team) | — |
 | `/admin/leave-types` | F | F | F (own branch) | F | — | — | — |
+| `/admin/employee-holidays` (per-employee overrides) | F | F | — | — | — | F | — |
 | `/attendance` (own punches) | F | F | F | F | F | F | S |
 | `/org/timesheets` | F | F | A (own branch) | A | R | A (team) | S |
 | `/admin/biometric` & `/admin/geofences` | F | F | F (own branch) | F | — | — | — |

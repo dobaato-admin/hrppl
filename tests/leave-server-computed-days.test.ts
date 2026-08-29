@@ -12,7 +12,13 @@
  * left.
  */
 import { describe, it, expect } from "vitest";
-import { daysBetween, hasLeaveQuota, availableLeaveBalance } from "@/lib/leave.functions";
+import {
+  daysBetween,
+  hasLeaveQuota,
+  availableLeaveBalance,
+  isWeekend,
+  countWorkingDays,
+} from "@/lib/leave.functions";
 
 describe("daysBetween", () => {
   it("counts inclusive calendar days", () => {
@@ -55,6 +61,59 @@ describe("daysBetween", () => {
     const actual = daysBetween("2026-09-01", "2026-09-02", false, false);
     expect(actual).toBe(2);
     expect(actual).not.toBe(claimed);
+  });
+});
+
+describe("isWeekend", () => {
+  it("recognises Saturday and Sunday", () => {
+    expect(isWeekend("2026-08-29")).toBe(true); // Saturday
+    expect(isWeekend("2026-08-30")).toBe(true); // Sunday
+  });
+
+  it("is false for a weekday", () => {
+    expect(isWeekend("2026-08-28")).toBe(false); // Friday
+    expect(isWeekend("2026-08-31")).toBe(false); // Monday
+  });
+});
+
+describe("countWorkingDays", () => {
+  const noHolidays = new Set<string>();
+
+  it("matches daysBetween when the range has no weekend or holiday", () => {
+    // Mon 2026-08-24 to Fri 2026-08-28, five weekdays.
+    expect(countWorkingDays("2026-08-24", "2026-08-28", false, false, noHolidays)).toBe(5);
+    expect(daysBetween("2026-08-24", "2026-08-28", false, false)).toBe(5);
+  });
+
+  it("excludes weekends inside the range", () => {
+    // Mon 2026-08-24 to Sun 2026-08-30 — 7 calendar days, 2 of them weekend.
+    expect(countWorkingDays("2026-08-24", "2026-08-30", false, false, noHolidays)).toBe(5);
+  });
+
+  it("excludes a public holiday inside the range", () => {
+    const holidays = new Set(["2026-08-26"]); // Wednesday
+    expect(countWorkingDays("2026-08-24", "2026-08-28", false, false, holidays)).toBe(4);
+  });
+
+  it("returns 0 for a range that is entirely weekend", () => {
+    expect(countWorkingDays("2026-08-29", "2026-08-30", false, false, noHolidays)).toBe(0);
+  });
+
+  it("applies half-day discounts only when that end is a working day", () => {
+    expect(countWorkingDays("2026-08-24", "2026-08-28", true, true, noHolidays)).toBe(4);
+    // Half-day flag on a day that's excluded anyway is inert, not a further
+    // discount — Saturday isn't a working day to begin with.
+    const holidays = new Set<string>();
+    expect(countWorkingDays("2026-08-24", "2026-08-29", true, false, holidays)).toBe(4.5);
+  });
+
+  it("this is the value a leave request is actually charged, not daysBetween's raw count", () => {
+    // Mon 2026-08-24 to Mon 2026-08-31: 8 raw calendar days, but a weekend
+    // (29th, 30th) falls inside it — the whole point of this function.
+    const raw = daysBetween("2026-08-24", "2026-08-31", false, false);
+    const working = countWorkingDays("2026-08-24", "2026-08-31", false, false, noHolidays);
+    expect(raw).toBe(8);
+    expect(working).toBe(6);
   });
 });
 
