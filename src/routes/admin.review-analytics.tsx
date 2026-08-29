@@ -14,14 +14,26 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  reviewDashboardSummary, exportReviewInstances,
+  reviewDashboardSummary, exportReviewInstances, reviewReviewInstance,
 } from "@/lib/review-instances.functions";
 import { toCSV } from "@/lib/csv";
 import { useMyTenantId } from "@/hooks/use-tenant";
+import { ORG_ADMIN_OR_MANAGER } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/review-analytics")({
   head: () => ({ meta: [{ title: "Review analytics — WorldPay HRMS" }] }),
-  component: ReviewAnalyticsPage,
+  // AdminGate was imported but never used — this page had no route gate at
+  // all, unlike every other page under /admin. The underlying server fns
+  // (reviewDashboardSummary, exportReviewInstances, reviewReviewInstance) all
+  // reject non-admins on their own, so this was a broken-page gap rather than
+  // a data leak, but it's the same class of bug tests/admin-gate-role-sets.test.ts
+  // exists to catch. ORG_ADMIN_OR_MANAGER matches requireAdmin's role check
+  // in review-instances.functions.ts exactly.
+  component: () => (
+    <AdminGate allow={ORG_ADMIN_OR_MANAGER}>
+      <ReviewAnalyticsPage />
+    </AdminGate>
+  ),
 });
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -33,6 +45,7 @@ function ReviewAnalyticsPage() {
   const { tenantId } = useMyTenantId();
   const summaryFn = useServerFn(reviewDashboardSummary);
   const exportFn = useServerFn(exportReviewInstances);
+  const decideFn = useServerFn(reviewReviewInstance);
   const [from, setFrom] = useState(daysAgoIso(90));
   const [to, setTo] = useState(todayIso());
   const [templateId, setTemplateId] = useState<string>("all");
@@ -40,7 +53,9 @@ function ReviewAnalyticsPage() {
   const [summary, setSummary] = useState<any>(null);
   const [templates, setTemplates] = useState<{ id: string; name: string }[]>([]);
   const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
+  const [awaitingReview, setAwaitingReview] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
+  const [decidingId, setDecidingId] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -57,17 +72,6 @@ function ReviewAnalyticsPage() {
     })();
   }, [tenantId]);
 
-  async function load() {
-    setBusy(true);
-    try {
-      const r = await summaryFn({
-        data: { from, to, templateId: templateId === "all" ? undefined : templateId },
-      });
-      setSummary(r);
-    } catch (e: any) { toast.error(e.message); } finally { setBusy(false); }
-  }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
-
   async function fetchRows() {
     const r = await exportFn({
       data: {
@@ -77,6 +81,35 @@ function ReviewAnalyticsPage() {
       },
     });
     return r.rows as any[];
+  }
+
+  async function load() {
+    setBusy(true);
+    try {
+      const [r, rows] = await Promise.all([
+        summaryFn({ data: { from, to, templateId: templateId === "all" ? undefined : templateId } }),
+        fetchRows(),
+      ]);
+      setSummary(r);
+      // reviewReviewInstance (the manager-review step) had zero callers before
+      // this page grew a decision queue — approvers were notified and sent
+      // here, and there was nothing to act on.
+      setAwaitingReview(rows.filter((row) => row.status === "submitted"));
+    } catch (e: any) { toast.error(e.message); } finally { setBusy(false); }
+  }
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  async function decide(instanceId: string, decision: "approved" | "rejected") {
+    setDecidingId(instanceId);
+    try {
+      await decideFn({ data: { id: instanceId, decision } });
+      toast.success(decision === "approved" ? "Approved" : "Rejected");
+      await load();
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to record decision");
+    } finally {
+      setDecidingId(null);
+    }
   }
 
   async function downloadCSV() {
@@ -170,13 +203,75 @@ function ReviewAnalyticsPage() {
         </CardContent>
       </Card>
 
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="text-base">Awaiting your review ({awaitingReview.length})</CardTitle>
+          <CardDescription>
+            Submitted scorecards in the selected date range — approve or send back for revision.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {awaitingReview.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Nothing awaiting review in this range.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Template</TableHead>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Evidence</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {awaitingReview.map((r: any) => (
+                  <TableRow key={r.instance_id}>
+                    <TableCell className="font-medium">{r.employee_name}</TableCell>
+                    <TableCell>{r.template}</TableCell>
+                    <TableCell>{r.item}</TableCell>
+                    <TableCell className="text-xs">{r.period}</TableCell>
+                    <TableCell>{r.score || "—"}</TableCell>
+                    <TableCell className="text-xs">{r.evidence_count || 0}</TableCell>
+                    <TableCell className="text-xs">{r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : "—"}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      <Button
+                        size="sm"
+                        disabled={decidingId === r.instance_id}
+                        onClick={() => decide(r.instance_id, "approved")}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm" variant="outline"
+                        disabled={decidingId === r.instance_id}
+                        onClick={() => decide(r.instance_id, "rejected")}
+                      >
+                        Send back
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
           <StatCard label="Total instances" value={summary.total} />
           <StatCard label="Completion" value={`${completionPct}%`} sub={`${summary.byStatus.approved} approved / ${summary.byStatus.submitted} submitted`}>
             <Progress value={completionPct} className="mt-2 h-1.5" />
           </StatCard>
-          <StatCard label="Pending / Rejected" value={`${summary.byStatus.pending} / ${summary.byStatus.rejected}`} />
+          <StatCard
+            label="Pending / Rejected"
+            value={`${summary.byStatus.pending} / ${summary.byStatus.rejected}`}
+            sub={summary.overdueCount ? `${summary.overdueCount} overdue` : "None overdue"}
+          />
           <StatCard
             label="Evidence compliance"
             value={evidencePct == null ? "—" : `${evidencePct}%`}

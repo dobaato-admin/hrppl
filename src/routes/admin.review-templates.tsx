@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { toast } from "sonner";
 import { upsertReviewTemplate, deleteReviewTemplate } from "@/lib/performance.functions";
 import { logTemplateAuditEvent, listTemplateAuditLog, generateReviewInstances } from "@/lib/review-instances.functions";
+import { listEmployeesForAdmin } from "@/lib/timeline.functions";
+import { useMyTenantId } from "@/hooks/use-tenant";
 import {
   INDUSTRIES,
   REVIEW_PRESETS,
@@ -119,8 +121,88 @@ function ReviewTemplatesAdmin() {
   const fnAudit = useServerFn(logTemplateAuditEvent);
   const fnAuditList = useServerFn(listTemplateAuditLog);
   const fnGenInstances = useServerFn(generateReviewInstances);
+  const fnListEmployees = useServerFn(listEmployeesForAdmin);
+  const { tenantId } = useMyTenantId();
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditEntries, setAuditEntries] = useState<any[]>([]);
+
+  // ---- Assignment dialog: generateReviewInstances already accepted
+  // employeeIds, but the only caller never passed it, so every "Schedule"
+  // click targeted the whole tenant. This is the missing distribution link.
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignTemplate, setAssignTemplate] = useState<Template | null>(null);
+  const [assignScope, setAssignScope] = useState<"all" | "department" | "employees">("all");
+  const [assignDeptId, setAssignDeptId] = useState<string>("");
+  const [assignEmployeeIds, setAssignEmployeeIds] = useState<Set<string>>(new Set());
+  const [assignSearch, setAssignSearch] = useState("");
+  const [assignDueOffsetDays, setAssignDueOffsetDays] = useState(7);
+  const [assignHorizonDays, setAssignHorizonDays] = useState(365);
+  const [assignEmployees, setAssignEmployees] = useState<
+    { id: string; first_name: string; last_name: string; job_title: string | null; department_id: string | null }[]
+  >([]);
+  const [assignDepartments, setAssignDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [assignLoading, setAssignLoading] = useState(false);
+
+  async function openAssign(t: Template) {
+    setAssignTemplate(t);
+    setAssignScope("all");
+    setAssignDeptId("");
+    setAssignEmployeeIds(new Set());
+    setAssignSearch("");
+    setAssignDueOffsetDays(7);
+    setAssignHorizonDays(365);
+    setAssignOpen(true);
+    setAssignLoading(true);
+    try {
+      const [empRes, deptRes] = await Promise.all([
+        fnListEmployees({ data: { includeSelf: true, includeInactive: false } }),
+        tenantId
+          ? supabase.from("departments").select("id,name").eq("tenant_id", tenantId).order("name")
+          : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      ]);
+      setAssignEmployees((empRes.employees ?? []) as typeof assignEmployees);
+      setAssignDepartments((deptRes.data ?? []) as { id: string; name: string }[]);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to load employees");
+    } finally {
+      setAssignLoading(false);
+    }
+  }
+
+  const assignDeptEmployees = assignEmployees.filter((e) => e.department_id === assignDeptId);
+  const filteredAssignEmployees = assignEmployees.filter((e) =>
+    `${e.first_name} ${e.last_name} ${e.job_title ?? ""}`.toLowerCase().includes(assignSearch.toLowerCase()),
+  );
+
+  async function confirmAssign() {
+    if (!assignTemplate) return;
+    let employeeIds: string[] | undefined;
+    if (assignScope === "department") {
+      if (!assignDeptId) { toast.error("Pick a department"); return; }
+      employeeIds = assignDeptEmployees.map((e) => e.id);
+      if (!employeeIds.length) { toast.error("That department has no active employees"); return; }
+    } else if (assignScope === "employees") {
+      employeeIds = Array.from(assignEmployeeIds);
+      if (!employeeIds.length) { toast.error("Select at least one employee"); return; }
+    }
+    setBusy(true);
+    try {
+      const r = await fnGenInstances({
+        data: {
+          templateId: assignTemplate.id,
+          employeeIds,
+          horizonDays: assignHorizonDays,
+          dueOffsetDays: assignDueOffsetDays,
+        },
+      });
+      toast.success(`Created ${r.created} scorecard instance(s)`);
+      setAssignOpen(false);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to assign");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [loading, user, navigate]);
 
@@ -249,16 +331,6 @@ function ReviewTemplatesAdmin() {
     } catch (e: any) { toast.error(e.message); }
   }
 
-  async function scheduleInstances(t: Template) {
-    if (!confirm(`Generate scorecards for "${t.name}" for the next 365 days?`)) return;
-    try {
-      const r = await fnGenInstances({ data: { templateId: t.id, horizonDays: 365 } });
-      toast.success(`Created ${r.created} scorecard instance(s)`);
-    } catch (e: any) { toast.error(e.message); }
-  }
-
-
-
   async function remove(id: string) {
     if (!confirm("Delete this template?")) return;
     setBusy(true);
@@ -308,7 +380,10 @@ function ReviewTemplatesAdmin() {
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle className="text-base">Templates</CardTitle>
-              <CardDescription>Attach a template to a cycle in Performance → Cycles.</CardDescription>
+              <CardDescription>
+                Use "Assign" below to distribute a template directly to employees, or attach it to
+                a cycle in <Link to="/org/performance" className="underline underline-offset-2">Performance cycles</Link>.
+              </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Link to="/admin/kpi-kra"><Button variant="secondary" size="sm">KPI & KRA library</Button></Link>
@@ -606,7 +681,7 @@ function ReviewTemplatesAdmin() {
                     <TableCell className="text-right space-x-1">
                       <Button size="sm" variant="outline" onClick={() => edit(t)}>Edit</Button>
                       <Button size="sm" variant="outline" onClick={() => exportTemplate(t)}>Export</Button>
-                      <Button size="sm" variant="outline" onClick={() => scheduleInstances(t)}>Schedule</Button>
+                      <Button size="sm" variant="outline" onClick={() => openAssign(t)}>Assign</Button>
                       <Button size="sm" variant="outline" onClick={() => remove(t.id)}>Delete</Button>
                     </TableCell>
                   </TableRow>
@@ -696,6 +771,104 @@ function ReviewTemplatesAdmin() {
               </Table>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Assign "{assignTemplate?.name}"</DialogTitle>
+          </DialogHeader>
+          {assignLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Loading employees…</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Assign to</Label>
+                <Select value={assignScope} onValueChange={(v) => setAssignScope(v as typeof assignScope)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Whole tenant ({assignEmployees.length} active employees)</SelectItem>
+                    <SelectItem value="department">A department</SelectItem>
+                    <SelectItem value="employees">Specific employees</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {assignScope === "department" && (
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select value={assignDeptId} onValueChange={setAssignDeptId}>
+                    <SelectTrigger><SelectValue placeholder="Select a department" /></SelectTrigger>
+                    <SelectContent>
+                      {assignDepartments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name} ({assignEmployees.filter((e) => e.department_id === d.id).length})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {assignDepartments.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No departments configured for this tenant.</p>
+                  )}
+                </div>
+              )}
+
+              {assignScope === "employees" && (
+                <div className="space-y-2">
+                  <Label>Employees ({assignEmployeeIds.size} selected)</Label>
+                  <Input placeholder="Search by name or title…" value={assignSearch} onChange={(e) => setAssignSearch(e.target.value)} />
+                  <div className="max-h-56 space-y-1 overflow-auto rounded-md border border-border p-2">
+                    {filteredAssignEmployees.map((e) => (
+                      <label key={e.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/50">
+                        <Checkbox
+                          checked={assignEmployeeIds.has(e.id)}
+                          onCheckedChange={(checked) => {
+                            setAssignEmployeeIds((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(e.id); else next.delete(e.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span>{e.first_name} {e.last_name}</span>
+                        {e.job_title && <span className="text-xs text-muted-foreground">— {e.job_title}</span>}
+                      </label>
+                    ))}
+                    {filteredAssignEmployees.length === 0 && (
+                      <p className="py-2 text-center text-xs text-muted-foreground">No employees match.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Due within (days of each period)</Label>
+                  <Input
+                    type="number" min={0} max={60} value={assignDueOffsetDays}
+                    onChange={(e) => setAssignDueOffsetDays(Number(e.target.value) || 0)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Horizon (days ahead)</Label>
+                  <Input
+                    type="number" min={7} max={730} value={assignHorizonDays}
+                    onChange={(e) => setAssignHorizonDays(Number(e.target.value) || 365)}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Generates one scorecard per scheduled period, per selected employee, for every
+                recurring item in this template — existing scorecards for the same period are left
+                untouched.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignOpen(false)}>Cancel</Button>
+            <Button onClick={confirmAssign} disabled={assignLoading || busy}>Assign</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       </main>

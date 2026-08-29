@@ -62,6 +62,7 @@ const EXPECTED: Record<string, ReadonlySet<AppRole>> = {
   // + manager (people-management surfaces)
   "admin.duty-reviews.tsx": ORG_ADMIN_OR_MANAGER,
   "admin.employee-holidays.tsx": ORG_ADMIN_OR_MANAGER,
+  "admin.review-analytics.tsx": ORG_ADMIN_OR_MANAGER,
   "admin.review-cycles.tsx": ORG_ADMIN_OR_MANAGER,
   "admin.training.tsx": ORG_ADMIN_OR_MANAGER,
 
