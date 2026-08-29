@@ -56,6 +56,67 @@ async function getEmployeeForUser(ctxSupabase: any, userId: string) {
   return data as { id: string; tenant_id: string } | null;
 }
 
+/**
+ * Calendar days between two dates inclusive, minus half-day discounts.
+ * Deliberately the same formula the client uses (`leave.tsx:31-40`) so a
+ * request's `days` can be recomputed here rather than trusted from the
+ * caller — a crafted `days` up to the schema's 366-day cap, independent of
+ * the actual date range, was previously accepted as-is. Does not exclude
+ * weekends or public holidays; that is a separate, tracked gap.
+ */
+export function daysBetween(
+  start: string,
+  end: string,
+  halfStart: boolean,
+  halfEnd: boolean,
+): number {
+  const s = new Date(start + "T00:00:00Z");
+  const e = new Date(end + "T00:00:00Z");
+  if (e < s) return 0;
+  const diff = Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  let d = diff;
+  if (halfStart) d -= 0.5;
+  if (halfEnd && start !== end) d -= 0.5;
+  return Math.max(0.5, d);
+}
+
+/**
+ * Whether a leave type is balance-tracked at all. Types with neither a quota
+ * nor an accrual rate (e.g. Unpaid Leave, seeded with both at 0) are
+ * deliberately uncapped — the same "has a real quota" test
+ * `leave-setup.functions.ts` uses to decide whether a type counts as
+ * configured.
+ */
+export function hasLeaveQuota(leaveType: {
+  annual_quota_days: number | string;
+  accrual_per_month: number | string;
+}): boolean {
+  return Number(leaveType.annual_quota_days) > 0 || Number(leaveType.accrual_per_month) > 0;
+}
+
+/**
+ * Days available for a leave type/year: the existing balance row if one has
+ * been created, or the type's quota if accrual hasn't seeded one yet (mirrors
+ * the seeding in {@link upsertBalanceDelta}).
+ */
+export function availableLeaveBalance(
+  leaveType: { annual_quota_days: number | string },
+  balance: {
+    accrued_days: number | string;
+    used_days: number | string;
+    pending_days: number | string;
+    carried_over_days: number | string;
+  } | null,
+): number {
+  if (!balance) return Number(leaveType.annual_quota_days);
+  return (
+    Number(balance.accrued_days) +
+    Number(balance.carried_over_days) -
+    Number(balance.used_days) -
+    Number(balance.pending_days)
+  );
+}
+
 async function assertApproverForTenant(ctxSupabase: any, userId: string, tenantId: string) {
   const rs = await getRoles(ctxSupabase, userId);
   if (rs.includes("super_admin")) return;
@@ -74,7 +135,10 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
       leaveTypeId: z.string().uuid(),
       startDate: z.string(),
       endDate: z.string(),
-      days: z.number().positive().max(366),
+      // Display-only: the client shows this for the balance preview while the
+      // form is open, but it is never trusted. The authoritative value is
+      // `computedDays` below, from the dates the request actually carries.
+      days: z.number().positive().max(366).optional(),
       halfDayStart: z.boolean().optional(),
       halfDayEnd: z.boolean().optional(),
       reason: z.string().max(2000).optional(),
@@ -88,10 +152,26 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
     if (new Date(data.endDate) < new Date(data.startDate)) throw new Error("End date must be on or after start date");
 
     const admin = await loadAdmin();
-    const { data: lt } = await admin.from("leave_types").select("tenant_id,is_active,allow_half_day").eq("id", data.leaveTypeId).maybeSingle();
+    const { data: lt } = await admin.from("leave_types").select("tenant_id,is_active,allow_half_day,annual_quota_days,accrual_per_month").eq("id", data.leaveTypeId).maybeSingle();
     if (!lt || !lt.is_active) throw new Error("Leave type not available");
     if (lt.tenant_id !== emp.tenant_id) throw new Error("Leave type does not belong to your organization");
     if ((data.halfDayStart || data.halfDayEnd) && !lt.allow_half_day) throw new Error("Half-day not allowed for this leave type");
+
+    const computedDays = daysBetween(data.startDate, data.endDate, !!data.halfDayStart, !!data.halfDayEnd);
+    const year = new Date(data.startDate).getUTCFullYear();
+
+    if (hasLeaveQuota(lt)) {
+      const { data: balance } = await admin
+        .from("leave_balances")
+        .select("accrued_days,used_days,pending_days,carried_over_days")
+        .eq("employee_id", emp.id).eq("leave_type_id", data.leaveTypeId).eq("year", year).maybeSingle();
+      const available = availableLeaveBalance(lt, balance);
+      if (computedDays > available) {
+        throw new Error(
+          `Insufficient leave balance: ${available} day(s) available, ${computedDays} requested.`,
+        );
+      }
+    }
 
     const { data: req, error } = await admin.from("leave_requests").insert({
       tenant_id: emp.tenant_id,
@@ -99,7 +179,7 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
       leave_type_id: data.leaveTypeId,
       start_date: data.startDate,
       end_date: data.endDate,
-      days: data.days,
+      days: computedDays,
       half_day_start: !!data.halfDayStart,
       half_day_end: !!data.halfDayEnd,
       reason: data.reason ?? null,
@@ -111,12 +191,11 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
     }
 
     // Bump pending balance
-    const year = new Date(data.startDate).getUTCFullYear();
-    await upsertBalanceDelta(admin, emp.tenant_id, emp.id, data.leaveTypeId, year, { pending: data.days });
+    await upsertBalanceDelta(admin, emp.tenant_id, emp.id, data.leaveTypeId, year, { pending: computedDays });
 
     await admin.from("audit_log").insert({
       actor_id: userId, entity_type: "leave_request", entity_id: req.id,
-      action: "submit", metadata: { leave_type_id: data.leaveTypeId, days: data.days },
+      action: "submit", metadata: { leave_type_id: data.leaveTypeId, days: computedDays },
     });
 
     // Notifications
@@ -127,7 +206,7 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
         leaveType: ctx?.leaveTypeName,
         startDate: data.startDate,
         endDate: data.endDate,
-        days: data.days,
+        days: computedDays,
         reason: data.reason,
       };
       if (ctx?.employeeEmail) {
