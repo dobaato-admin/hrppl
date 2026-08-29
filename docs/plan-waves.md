@@ -9,8 +9,8 @@
 | W2.5 · CodeQL fix + attendance overhaul | **Done**, migration applied and verified live |
 | W3.0 · Tenant switcher | **Done** |
 | W3.2 · Leave & holidays | **Done** |
-| W3.1 · KPI/KRA distribution | Next |
-| W3.3 · WFH + geofence exception | **Largely delivered in W2.5** — reduced remainder below |
+| W3.1 · KPI/KRA distribution | **Done** |
+| W3.3 · WFH + geofence exception | Next — remainder below |
 | W4 · Information architecture | Queued (design doc first) |
 
 ## Working agreement
@@ -369,31 +369,52 @@ their country scope; the acting tenant cannot be set from request input; e2e —
 sign in as sam, select Acme, see Acme's 12 categories and *not* Globex's.
 
 
-### W3.1 · KPI/KRA: build the missing distribution link
-Per the approved model — HR assigns, employee self-assesses, manager reviews.
+### W3.1 · KPI/KRA: build the missing distribution link — **Done**
 
-The plumbing mostly exists and is unwired. `generateReviewInstances`
-(`src/lib/review-instances.functions.ts:68`) **already accepts `employeeIds`**, but its only
-caller (`admin.review-templates.tsx:244`) never passes it, so every Schedule click targets the
-whole tenant. Build:
+Per the approved model — HR assigns, employee self-assesses, manager reviews. Landed as
+`feat/kpi-kra-distribution`.
 
-- An **assignment UI** on the templates page: pick cycle, department/employees, due date — feeding
-  the parameter that already exists.
-- Wire up **`reviewReviewInstance`** (`review-instances.functions.ts:226`), currently dead code
-  with zero callers. That is the manager-review step; approvers are already notified and sent to
-  `/admin/review-analytics`, which has no action buttons.
-- **Notify on assign and on submit.** Both are cron-only today
-  (`api/public/hooks/review-instance-reminders.ts`), so an assignment is invisible for up to a day.
-- Enforce `required: true` on template items (declared in `review-presets.ts:31`, never checked)
-  and make due dates mean something.
-- Fix the dead pointer at `admin.review-templates.tsx:309` → `/org/performance`.
-- Close the **RLS gap**: the role branches on `review_instances` (`20260618042929:71-73`, `:81-83`)
-  have no `tenant_id` predicate — the same class of bug as W1.1.
-- An **org-wide rollup** answering "N indicators sent, M completed" — `reviewDashboardSummary`
-  covers only the scorecard system today.
+- **RLS gap closed first**, before anything else: `review_instances`' SELECT/UPDATE policies and
+  `review_instance_versions`' SELECT policy (`20260618042929`, `20260618043914`) admitted any
+  org_admin/manager/super_admin from **any tenant** — no tenant predicate at all, the same class of
+  bug as the offboarding leak in W1.1, except here it exposed scores, evidence links, and reviewer
+  comments rather than just employee names. Fixed in `20260824110000`, narrowing org_admin/manager
+  to their own tenant while keeping super_admin's existing unconditional access (the established
+  convention — RLS isn't the scope for platform accounts, the query layer is). Verified under real
+  JWTs: two temporary cross-tenant rows inserted, `alice.acme` (Acme org_admin) and `gina.globex`
+  (Globex org_admin) each confirmed to see only their own tenant's row, then cleaned up.
+- **`generateReviewInstances` tenant-scoped**: it uses the service-role admin client, so a
+  caller-supplied `templateId` or `employeeIds` from another tenant was trusted outright. Now
+  asserts the template belongs to the caller's tenant and every supplied employee id does too,
+  same pattern as `createOffboarding`.
+- **Assignment UI** on `admin.review-templates.tsx`: an "Assign" dialog (replacing the old
+  confirm()-only "Schedule" button) — whole tenant / a department / specific employees (searchable
+  checklist), due-offset-days and horizon-days, feeding `employeeIds` into
+  `generateReviewInstances`, which already accepted it.
+- **`reviewReviewInstance` wired up** — was dead code with zero callers. `admin.review-analytics.tsx`
+  gained an "Awaiting your review" queue (submitted scorecards in the selected range) with
+  Approve/Send-back actions. That page also had no route gate at all (`AdminGate` imported, never
+  used) — fixed with `ORG_ADMIN_OR_MANAGER`, matching `requireAdmin`'s own role check, and pinned in
+  `tests/admin-gate-role-sets.test.ts`.
+- **Notify on assign and on submit**, in-app (`in_app_notifications`), same pattern as
+  `wfh.functions.ts`/`leave.functions.ts` — both were cron-only before
+  (`api/public/hooks/review-instance-reminders.ts`), invisible for up to a day.
+- **`required: true` enforced** — declared on every template competency since presets existed,
+  shown as a badge in the preview, never checked. `performSubmit` now rejects a required item
+  submitted with no score (`isScoreMissing` — `0` and `false` are real answers, not missing ones).
+- **Due dates surfaced in the rollup**: `reviewDashboardSummary` gained `overdueCount` (pending
+  past due) — due dates already drove the reminder cron and the employee page's own overdue flag,
+  but the admin rollup couldn't distinguish a healthy pending item from a three-week-late one.
+- Fixed the dead pointer — "Attach a template to a cycle in Performance → Cycles" now links to
+  `/org/performance`, which is where `review_cycles` are actually managed.
+- **Org-wide rollup**: already existed (`reviewDashboardSummary`, surfaced on
+  `admin.review-analytics.tsx`) — confirmed it answers "N sent, M completed" and extended it with
+  the overdue count above, rather than rebuilding it.
 
-**Recommend consolidating to two systems, not three** (scorecards + duty KPI), retiring the
-`performance_reviews` fan-out. Flagging rather than assuming — it deletes a working code path.
+**Not done, flagged rather than assumed**: the three unconnected review systems
+(`performance_reviews`, `review_instances`, `duty_review_scores`) are still three. Consolidating to
+two (scorecards + duty KPI, retiring the `performance_reviews` fan-out) remains a recommendation
+that needs a product decision — it deletes a working code path — not something this pass took on.
 
 ### W3.2 · Leave & holidays — **Done**
 

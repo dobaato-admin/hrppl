@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 import type { PresetCompetency } from "./review-presets";
 import { expandSchedule } from "./review-schedule";
 
@@ -19,6 +20,46 @@ async function requireAdmin(supabase: any, userId: string) {
   if (!roles.some((r) => ["org_admin", "super_admin", "manager"].includes(r))) {
     throw new Error("Not authorized");
   }
+}
+
+/**
+ * In-app notification, same shape as `notify()` in wfh.functions.ts /
+ * leave.functions.ts. Assignment and submission were cron-only before this
+ * (`api/public/hooks/review-instance-reminders.ts`), so either event was
+ * invisible for up to a day.
+ */
+async function notify(args: {
+  tenantId: string;
+  userId: string | null;
+  kind: string;
+  title: string;
+  body: string;
+  link: string;
+}) {
+  if (!args.userId) return;
+  try {
+    const admin = await loadAdmin();
+    await admin.from("in_app_notifications").insert({
+      tenant_id: args.tenantId,
+      user_id: args.userId,
+      kind: args.kind,
+      title: args.title,
+      body: args.body,
+      link: args.link,
+    });
+  } catch (e) {
+    console.error("[review-instances] notification failed", e);
+  }
+}
+
+/** Every reviewer (org_admin/manager) in the tenant — mirrors getManagerRecipients in leave.functions.ts. */
+async function getReviewerUserIds(admin: any, tenantId: string): Promise<string[]> {
+  const { data: profiles } = await admin.from("profiles").select("id").eq("tenant_id", tenantId);
+  const ids = (profiles ?? []).map((p: any) => p.id);
+  if (!ids.length) return [];
+  const { data: roles } = await admin
+    .from("user_roles").select("user_id").in("user_id", ids).in("role", ["org_admin", "manager"]);
+  return Array.from(new Set((roles ?? []).map((r: any) => r.user_id as string)));
 }
 
 /* ---------- evidence validation (shared between submit & resubmit) ---------- */
@@ -55,6 +96,15 @@ function validateEvidence(comp: any, evidence: any[]): EvidenceValidationResult 
   return { ok, missingTypes, minCount, haveCount: evidence.length, invalidUrls: invalidUrls.map(({ index, name }) => ({ index, name })), message };
 }
 
+/**
+ * Whether a score counts as "not provided" for a required item. `0` and
+ * `false` are meaningful answers (a zero score, a "no" on a yes/no item) and
+ * must not be treated as missing — only null/undefined/empty-string are.
+ */
+export function isScoreMissing(score: unknown): boolean {
+  return score === null || score === undefined || score === "";
+}
+
 const evidenceSchema = z.array(z.object({
   type: z.enum(["document","url","social","screenshot"]),
   name: z.string().max(300),
@@ -75,17 +125,32 @@ export const generateReviewInstances = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     await requireAdmin(context.supabase, context.userId);
+    // The admin client below bypasses RLS entirely, so tenant ownership of
+    // both the template and any caller-supplied employeeIds must be asserted
+    // here — the same pattern as createOffboarding (src/lib/offboarding.functions.ts),
+    // and for the same reason: a template/employee id from another tenant
+    // must produce a clear error, not a cross-tenant write.
+    const tenantId = await requireTenantId(context.supabase, context.userId);
     const admin = await loadAdmin();
     const { data: tpl } = await admin.from("review_templates" as any)
-      .select("id,tenant_id,version,competencies").eq("id", data.templateId).maybeSingle();
+      .select("id,tenant_id,name,version,competencies").eq("id", data.templateId).maybeSingle();
     if (!tpl) throw new Error("Template not found");
     const t: any = tpl;
+    if (t.tenant_id !== tenantId) throw new Error("Template does not belong to your organization");
 
     let empIds = data.employeeIds;
     if (!empIds) {
       const { data: emps } = await admin.from("employees")
-        .select("id").eq("tenant_id", t.tenant_id).eq("status", "active");
+        .select("id").eq("tenant_id", tenantId).eq("status", "active");
       empIds = (emps ?? []).map((e: any) => e.id);
+    } else {
+      const { data: owned } = await admin.from("employees")
+        .select("id").in("id", empIds).eq("tenant_id", tenantId);
+      const ownedIds = new Set((owned ?? []).map((e: any) => e.id as string));
+      const foreign = empIds.filter((id) => !ownedIds.has(id));
+      if (foreign.length) {
+        throw new Error(`${foreign.length} selected employee(s) do not belong to your organization`);
+      }
     }
     if (!empIds.length) return { ok: true, created: 0 };
 
@@ -113,6 +178,26 @@ export const generateReviewInstances = createServerFn({ method: "POST" })
     const { error } = await admin.from("review_instances" as any)
       .upsert(rows, { onConflict: "template_id,employee_id,item_id,period_label", ignoreDuplicates: true });
     if (error) throw new Error(error.message);
+
+    // One notification per employee, not per row — an assignment can create
+    // many periods/items at once, and a flood of near-identical notifications
+    // is worse than a single summary.
+    try {
+      const assignedIds = Array.from(new Set(rows.map((r) => r.employee_id as string)));
+      const { data: emps } = await admin.from("employees")
+        .select("id,user_id").in("id", assignedIds);
+      const counts = new Map<string, number>();
+      for (const r of rows) counts.set(r.employee_id, (counts.get(r.employee_id) ?? 0) + 1);
+      await Promise.all(((emps ?? []) as { id: string; user_id: string | null }[]).map((e) => notify({
+        tenantId: t.tenant_id,
+        userId: e.user_id,
+        kind: "review_instance_assigned",
+        title: "New performance indicator(s) assigned",
+        body: `${counts.get(e.id) ?? 0} item(s) from "${t.name}" have been assigned to you.`,
+        link: "/me/reviews",
+      })));
+    } catch (e) { console.error("[review-instances] assignment notify failed", e); }
+
     return { ok: true, created: rows.length };
   });
 
@@ -171,6 +256,15 @@ async function performSubmit(
   const { data: tpl } = await supabase.from("review_templates" as any)
     .select("competencies").eq("id", i.template_id).maybeSingle();
   const comp = ((tpl as any)?.competencies ?? []).find((c: any) => c.id === i.item_id);
+
+  // `required` (review-presets.ts) has been declared on every template item
+  // since presets existed, shown as a "Required" badge in the template
+  // preview, but never actually checked — a required item could be submitted
+  // with no score at all.
+  if (comp?.required && isScoreMissing(data.score)) {
+    throw new Error("This item is required and needs a score before it can be submitted.");
+  }
+
   const validation = validateEvidence(comp, data.evidence);
   if (!validation.ok) {
     const err: any = new Error(validation.message || "Evidence requirements not met");
@@ -208,6 +302,28 @@ async function performSubmit(
     reminder_count: 0,
   }).eq("id", data.id);
   if (error) throw new Error(error.message);
+
+  // Notify reviewers now rather than leaving it to the next day's cron
+  // (api/public/hooks/review-instance-reminders.ts) — a same-day submission
+  // was previously invisible until then.
+  try {
+    const admin = await loadAdmin();
+    const [{ data: empRow }, { data: tplRow }] = await Promise.all([
+      admin.from("employees").select("first_name,last_name").eq("id", i.employee_id).maybeSingle(),
+      admin.from("review_templates" as any).select("name").eq("id", i.template_id).maybeSingle(),
+    ]);
+    const name = `${(empRow as any)?.first_name ?? ""} ${(empRow as any)?.last_name ?? ""}`.trim() || "An employee";
+    const reviewers = await getReviewerUserIds(admin, i.tenant_id);
+    await Promise.all(reviewers.map((uid) => notify({
+      tenantId: i.tenant_id,
+      userId: uid,
+      kind: "review_instance_submitted",
+      title: "Scorecard awaiting review",
+      body: `${name} submitted "${(tplRow as any)?.name ?? "a"}" for review.`,
+      link: "/admin/review-analytics",
+    })));
+  } catch (e) { console.error("[review-instances] submit notify failed", e); }
+
   return { ok: true, version: newVersion };
 }
 
@@ -352,6 +468,12 @@ export const reviewDashboardSummary = createServerFn({ method: "POST" })
     const byStatus = { pending: 0, submitted: 0, approved: 0, rejected: 0 } as Record<string, number>;
     list.forEach((r) => { byStatus[r.status] = (byStatus[r.status] ?? 0) + 1; });
     const completionRate = total ? (byStatus.approved + byStatus.submitted) / total : 0;
+    // "N sent, M completed" needed an overdue count of its own — a pending
+    // item due next month and one three weeks late looked identical here,
+    // even though due dates already drive the reminder cron and the
+    // employee-facing page's own overdue flag.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const overdueCount = list.filter((r) => r.status === "pending" && r.due_date && r.due_date < todayIso).length;
 
     // by template
     const byTemplate = new Map<string, { templateId: string; name: string; total: number; approved: number; submitted: number; pending: number; rejected: number; avgScore: number | null; scoreCount: number }>();
@@ -401,7 +523,7 @@ export const reviewDashboardSummary = createServerFn({ method: "POST" })
 
     return {
       range: { from: data.from, to: data.to },
-      total, byStatus, completionRate,
+      total, byStatus, completionRate, overdueCount,
       evidenceCompliance: evidenceRequiredTotal ? evidenceCompliantTotal / evidenceRequiredTotal : null,
       evidenceRequiredTotal, evidenceCompliantTotal,
       byTemplate: Array.from(byTemplate.values()),
