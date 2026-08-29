@@ -725,11 +725,23 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     feature: "org.holidayCalendars",
                   },
                   {
+                    // /admin/holidays (the flat list view) still exists and is
+                    // still linked from here as "List view" — this just points
+                    // the primary nav entry at the calendar view, which is a
+                    // strict superset (recurring holidays, AU sync) and was
+                    // previously unreachable from the sidebar at all.
                     title: "Public holidays",
-                    to: "/admin/holidays",
+                    to: "/admin/holiday-calendar",
                     icon: CalendarDays,
                     accent: "bg-status-pending",
                     feature: "org.publicHolidays",
+                  },
+                  {
+                    title: "Per-employee holidays",
+                    to: "/admin/employee-holidays",
+                    icon: CalendarDays,
+                    accent: "bg-accent",
+                    feature: "org.employeeHolidays",
                   },
                   {
                     title: "TOIL admin",
@@ -904,13 +916,6 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     to: "/admin/review-cycles",
                     icon: TrendingUp,
                     accent: "bg-status-pending",
-                    feature: "org.reviewTemplates",
-                  },
-                  {
-                    title: "Per-employee holidays",
-                    to: "/admin/employee-holidays",
-                    icon: ClipboardCheck,
-                    accent: "bg-accent",
                     feature: "org.reviewTemplates",
                   },
                   {

@@ -45,6 +45,7 @@ export type Feature =
   | "org.leaveTypes"
   | "org.holidayCalendars"
   | "org.publicHolidays"
+  | "org.employeeHolidays"
   | "org.overtimeRates"
   | "org.payrollSetup"
   | "org.payrollSettings"
@@ -128,6 +129,13 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "org.leaveTypes": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.holidayCalendars": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.publicHolidays": SET("super_admin", "regional_admin", "org_admin", "branch_admin", "hr", "manager", "employee"),
+  // Matches ORG_ADMIN_OR_MANAGER, the AdminGate allow-set on
+  // /admin/employee-holidays itself — this nav item was gated by
+  // org.reviewTemplates (super_admin/org_admin/branch_admin/hr), a leftover
+  // from being copy-pasted into the Performance section. That let branch_admin
+  // and hr see a link the route then rejected, and hid it from manager, who
+  // the route does allow.
+  "org.employeeHolidays": SET("super_admin", "org_admin", "manager"),
   "org.overtimeRates": SET("super_admin", "regional_admin", "org_admin", "branch_admin", "finance"),
 
   "org.payrollSetup": SET("super_admin", "org_admin", "branch_admin", "finance"),

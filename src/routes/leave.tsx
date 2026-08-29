@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { submitLeaveRequest, cancelLeaveRequest } from "@/lib/leave.functions";
+import { submitLeaveRequest, cancelLeaveRequest, countWorkingDays } from "@/lib/leave.functions";
 import { projectLeaveBalances } from "@/lib/leave-accruals.functions";
 import { AppShell } from "@/components/AppShell";
 import { KpiTile, StatusChip, statusTone, CardRail } from "@/components/monday";
@@ -28,17 +28,6 @@ interface LeaveType { id: string; code: string; name: string; color: string; ann
 interface Balance { id: string; leave_type_id: string; year: number; accrued_days: number; used_days: number; pending_days: number; carried_over_days: number }
 interface Request { id: string; leave_type_id: string; start_date: string; end_date: string; days: number; status: string; reason: string | null; rejection_reason: string | null; created_at: string; half_day_start: boolean; half_day_end: boolean }
 
-function daysBetween(start: string, end: string, halfStart: boolean, halfEnd: boolean) {
-  const s = new Date(start + "T00:00:00Z");
-  const e = new Date(end + "T00:00:00Z");
-  if (e < s) return 0;
-  const diff = Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  let d = diff;
-  if (halfStart) d -= 0.5;
-  if (halfEnd && start !== end) d -= 0.5;
-  return Math.max(0.5, d);
-}
-
 function MyLeave() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -52,6 +41,7 @@ function MyLeave() {
   const [projectDate, setProjectDate] = useState("");
   const [projection, setProjection] = useState<any[] | null>(null);
   const [projecting, setProjecting] = useState(false);
+  const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
 
   const submit = useServerFn(submitLeaveRequest);
   const cancel = useServerFn(cancelLeaveRequest);
@@ -64,22 +54,35 @@ function MyLeave() {
     const { data: e } = await supabase.from("employees").select("id,tenant_id").eq("user_id", user.id).maybeSingle();
     if (!e) return;
     setEmp(e as any);
-    const [tRes, bRes, rRes] = await Promise.all([
+    const [tRes, bRes, rRes, tenantRes] = await Promise.all([
       supabase.from("leave_types").select("*").eq("tenant_id", e.tenant_id).eq("is_active", true).order("name"),
       supabase.from("leave_balances").select("*").eq("employee_id", e.id).eq("year", new Date().getUTCFullYear()),
       supabase.from("leave_requests").select("*").eq("employee_id", e.id).order("created_at", { ascending: false }),
+      supabase.from("tenants").select("country_code").eq("id", e.tenant_id).maybeSingle(),
     ]);
     setTypes((tRes.data ?? []) as LeaveType[]);
     setBalances((bRes.data ?? []) as Balance[]);
     setRequests((rRes.data ?? []) as Request[]);
+
+    // Fetched once per session (not re-fetched as the form's dates change) so
+    // the balance preview below can recompute instantly — must match what
+    // submitLeaveRequest will actually charge, or the preview lies.
+    const countryCode = tenantRes.data?.country_code as string | undefined;
+    if (countryCode) {
+      const { data: holidays } = await supabase
+        .from("public_holidays").select("holiday_date").eq("country_code", countryCode);
+      setHolidayDates(new Set((holidays ?? []).map((h: { holiday_date: string }) => h.holiday_date)));
+    }
   }
   useEffect(() => { loadAll(); }, [user]);
 
-  const computedDays = form.startDate && form.endDate ? daysBetween(form.startDate, form.endDate, form.halfStart, form.halfEnd) : 0;
+  const computedDays = form.startDate && form.endDate
+    ? countWorkingDays(form.startDate, form.endDate, form.halfStart, form.halfEnd, holidayDates)
+    : 0;
 
   async function onSubmit() {
     if (!form.leaveTypeId || !form.startDate || !form.endDate) { toast.error("Fill all required fields"); return; }
-    if (computedDays <= 0) { toast.error("Invalid date range"); return; }
+    if (computedDays <= 0) { toast.error("Invalid date range, or every selected day is a weekend/holiday"); return; }
     setBusy(true);
     try {
       await submit({ data: { leaveTypeId: form.leaveTypeId, startDate: form.startDate, endDate: form.endDate, days: computedDays, halfDayStart: form.halfStart, halfDayEnd: form.halfEnd, reason: form.reason || undefined } });
@@ -165,7 +168,7 @@ function MyLeave() {
                   </div>
                 )}
                 <div><Label>Reason (optional)</Label><Textarea rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} /></div>
-                <div className="rounded-md border border-border bg-muted/30 p-2 text-sm">Total: <strong>{computedDays}</strong> day(s)</div>
+                <div className="rounded-md border border-border bg-muted/30 p-2 text-sm">Total: <strong>{computedDays}</strong> working day(s) <span className="text-xs text-muted-foreground">(weekends and public holidays excluded)</span></div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

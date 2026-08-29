@@ -57,12 +57,10 @@ async function getEmployeeForUser(ctxSupabase: any, userId: string) {
 }
 
 /**
- * Calendar days between two dates inclusive, minus half-day discounts.
- * Deliberately the same formula the client uses (`leave.tsx:31-40`) so a
- * request's `days` can be recomputed here rather than trusted from the
- * caller — a crafted `days` up to the schema's 366-day cap, independent of
- * the actual date range, was previously accepted as-is. Does not exclude
- * weekends or public holidays; that is a separate, tracked gap.
+ * Raw calendar days between two dates inclusive, minus half-day discounts.
+ * Kept as the building block for {@link countWorkingDays} and unit-tested on
+ * its own, but no longer what a leave request is actually charged against —
+ * see that function for the weekend/holiday exclusion.
  */
 export function daysBetween(
   start: string,
@@ -78,6 +76,47 @@ export function daysBetween(
   if (halfStart) d -= 0.5;
   if (halfEnd && start !== end) d -= 0.5;
   return Math.max(0.5, d);
+}
+
+/** UTC-Saturday or UTC-Sunday, for a `YYYY-MM-DD` date string. */
+export function isWeekend(dateYmd: string): boolean {
+  const day = new Date(dateYmd + "T00:00:00Z").getUTCDay();
+  return day === 0 || day === 6;
+}
+
+/**
+ * Working days between two dates inclusive: every calendar day minus
+ * weekends and the given public holidays, with half-day discounts applied to
+ * whichever end of the range they name (a half-day flag on a day that's
+ * already excluded is simply inert — you cannot half-request a day off from a
+ * holiday).
+ *
+ * This is what a leave request is actually charged against. The server fetches
+ * `holidays` for the tenant's country and the request's date range
+ * (`submitLeaveRequest`); the client mirrors this exactly so the balance
+ * preview it shows matches what will be submitted (`leave.tsx`).
+ */
+export function countWorkingDays(
+  start: string,
+  end: string,
+  halfStart: boolean,
+  halfEnd: boolean,
+  holidays: ReadonlySet<string>,
+): number {
+  const s = new Date(start + "T00:00:00Z");
+  const e = new Date(end + "T00:00:00Z");
+  if (e < s) return 0;
+
+  let total = 0;
+  for (const cursor = new Date(s); cursor.getTime() <= e.getTime(); cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const ymd = cursor.toISOString().slice(0, 10);
+    if (isWeekend(ymd) || holidays.has(ymd)) continue;
+    let dayValue = 1;
+    if (halfStart && ymd === start) dayValue -= 0.5;
+    if (halfEnd && ymd === end && start !== end) dayValue -= 0.5;
+    total += dayValue;
+  }
+  return total;
 }
 
 /**
@@ -157,7 +196,19 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
     if (lt.tenant_id !== emp.tenant_id) throw new Error("Leave type does not belong to your organization");
     if ((data.halfDayStart || data.halfDayEnd) && !lt.allow_half_day) throw new Error("Half-day not allowed for this leave type");
 
-    const computedDays = daysBetween(data.startDate, data.endDate, !!data.halfDayStart, !!data.halfDayEnd);
+    const { data: tenant } = await admin.from("tenants").select("country_code").eq("id", emp.tenant_id).maybeSingle();
+    const { data: holidayRows } = await admin
+      .from("public_holidays")
+      .select("holiday_date")
+      .eq("country_code", tenant?.country_code ?? "")
+      .gte("holiday_date", data.startDate)
+      .lte("holiday_date", data.endDate);
+    const holidays = new Set((holidayRows ?? []).map((h: any) => h.holiday_date as string));
+
+    const computedDays = countWorkingDays(data.startDate, data.endDate, !!data.halfDayStart, !!data.halfDayEnd, holidays);
+    if (computedDays <= 0) {
+      throw new Error("Selected dates contain no working days — every day falls on a weekend or public holiday.");
+    }
     const year = new Date(data.startDate).getUTCFullYear();
 
     if (hasLeaveQuota(lt)) {
