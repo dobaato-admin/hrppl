@@ -209,7 +209,11 @@ function TeamPage() {
 
   async function approveLeave(id: string) {
     setBusy(true);
-    try { await fnApproveLeave({ data: { requestId: id } }); toast.success("Approved"); await load(); }
+    try {
+      const r: any = await fnApproveLeave({ data: { requestId: id } });
+      toast.success(r?.advanced ? `Advanced to tier ${r.tier} — awaiting the next approver` : "Approved");
+      await load();
+    }
     catch (e: any) { toast.error(e.message); }
     finally { setBusy(false); }
   }

@@ -7,18 +7,22 @@ async function loadLeaveContext(admin: any, requestId: string) {
   const { data: req } = await admin.from("leave_requests").select("*").eq("id", requestId).maybeSingle();
   if (!req) return null;
   const [{ data: emp }, { data: lt }] = await Promise.all([
-    admin.from("employees").select("first_name,last_name,email").eq("id", req.employee_id).maybeSingle(),
+    admin.from("employees").select("first_name,last_name,email,user_id").eq("id", req.employee_id).maybeSingle(),
     admin.from("leave_types").select("name").eq("id", req.leave_type_id).maybeSingle(),
   ]);
   return {
     req,
     employeeEmail: emp?.email as string | undefined,
+    employeeUserId: (emp?.user_id as string | undefined) ?? null,
     employeeName: emp ? `${emp.first_name ?? ""} ${emp.last_name ?? ""}`.trim() : undefined,
     leaveTypeName: lt?.name as string | undefined,
   };
 }
 
-async function getManagerEmails(admin: any, tenantId: string): Promise<string[]> {
+async function getManagerRecipients(
+  admin: any,
+  tenantId: string,
+): Promise<{ id: string; email: string | null }[]> {
   const { data: profiles } = await admin
     .from("profiles").select("id,email").eq("tenant_id", tenantId);
   if (!profiles?.length) return [];
@@ -27,7 +31,39 @@ async function getManagerEmails(admin: any, tenantId: string): Promise<string[]>
     .from("user_roles").select("user_id,role").in("user_id", ids)
     .in("role", ["manager", "org_admin"]);
   const roleSet = new Set((roles ?? []).map((r: any) => r.user_id));
-  return profiles.filter((p: any) => roleSet.has(p.id) && p.email).map((p: any) => p.email as string);
+  return profiles
+    .filter((p: any) => roleSet.has(p.id))
+    .map((p: any) => ({ id: p.id as string, email: (p.email as string | null) ?? null }));
+}
+
+/**
+ * In-app companion to the email notifications below — email alone is
+ * silently invisible whenever `employees.email` is null, which nothing else
+ * here checks for. Same shape as `notify()` in wfh.functions.ts. A failure
+ * here must never roll back the leave decision it describes.
+ */
+async function notify(args: {
+  tenantId: string;
+  userId: string | null;
+  kind: string;
+  title: string;
+  body: string;
+  link: string;
+}) {
+  if (!args.userId) return;
+  try {
+    const admin = await loadAdmin();
+    await admin.from("in_app_notifications").insert({
+      tenant_id: args.tenantId,
+      user_id: args.userId,
+      kind: args.kind,
+      title: args.title,
+      body: args.body,
+      link: args.link,
+    });
+  } catch (e) {
+    console.error("[leave] in-app notification failed", e);
+  }
 }
 
 async function getApproverName(admin: any, userId: string): Promise<string | undefined> {
@@ -156,14 +192,114 @@ export function availableLeaveBalance(
   );
 }
 
-async function assertApproverForTenant(ctxSupabase: any, userId: string, tenantId: string) {
+/**
+ * Highest active tier configured for this tenant/leave type. 0 means the
+ * tenant has not set up `leave_approval_routes` at all (or none active for
+ * this leave type), in which case {@link assertApproverForRequest} falls
+ * back to the old behaviour untouched — this is the "only enforce for
+ * tenants that configured one" default, deliberately non-breaking for every
+ * tenant that never opened the leave setup wizard's routing tab.
+ */
+export async function getMaxApprovalTier(admin: any, tenantId: string, leaveTypeId: string): Promise<number> {
+  const { data } = await admin
+    .from("leave_approval_routes")
+    .select("tier,leave_type_id")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true);
+  const relevant = ((data ?? []) as { tier: number; leave_type_id: string | null }[]).filter(
+    (r) => r.leave_type_id === leaveTypeId || r.leave_type_id === null,
+  );
+  if (!relevant.length) return 0;
+  return Math.max(...relevant.map((r) => r.tier));
+}
+
+/**
+ * The active route for one tier — a row scoped to this exact leave type
+ * takes precedence over a tenant-wide one (`leave_type_id: null`) at the
+ * same tier.
+ */
+export async function getTierRoute(
+  admin: any,
+  tenantId: string,
+  leaveTypeId: string,
+  tier: number,
+): Promise<{ approver_role: string | null; approver_user_id: string | null } | null> {
+  const { data } = await admin
+    .from("leave_approval_routes")
+    .select("approver_role,approver_user_id,leave_type_id")
+    .eq("tenant_id", tenantId)
+    .eq("tier", tier)
+    .eq("is_active", true);
+  const rows = (data ?? []) as {
+    approver_role: string | null;
+    approver_user_id: string | null;
+    leave_type_id: string | null;
+  }[];
+  return rows.find((r) => r.leave_type_id === leaveTypeId) ?? rows.find((r) => r.leave_type_id === null) ?? null;
+}
+
+async function getTenantUsersWithRole(admin: any, tenantId: string, role: string): Promise<string[]> {
+  const { data: profiles } = await admin.from("profiles").select("id").eq("tenant_id", tenantId);
+  const ids = (profiles ?? []).map((p: any) => p.id);
+  if (!ids.length) return [];
+  const { data: roles } = await admin.from("user_roles").select("user_id").in("user_id", ids).eq("role", role);
+  return Array.from(new Set((roles ?? []).map((r: any) => r.user_id as string)));
+}
+
+/**
+ * Who may decide a leave request right now, and whether their decision
+ * finalises it or only advances it to the next tier of the tenant's
+ * configured chain.
+ *
+ * `leave_approval_routes` was authored — full CRUD, a setup-wizard UI — but
+ * never consumed here: any manager or org_admin in the tenant could approve
+ * anything regardless of a configured multi-tier chain, and a manager could
+ * approve their own request (the same self-decision hole fixed for WFH in
+ * `tg_wfh_lifecycle`; leave had no equivalent check at all).
+ */
+export async function assertApproverForRequest(
+  ctxSupabase: any,
+  userId: string,
+  req: { tenant_id: string; employee_id: string; leave_type_id: string; current_tier: number },
+): Promise<{ isFinalTier: boolean }> {
   const rs = await getRoles(ctxSupabase, userId);
-  if (rs.includes("super_admin")) return;
-  if (!rs.includes("manager") && !rs.includes("org_admin")) {
-    throw new Error("Forbidden: manager or org admin role required");
-  }
+  if (rs.includes("super_admin")) return { isFinalTier: true };
+
   const { data: profile } = await ctxSupabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile || profile.tenant_id !== tenantId) throw new Error("Forbidden: tenant mismatch");
+  if (!profile || profile.tenant_id !== req.tenant_id) throw new Error("Forbidden: tenant mismatch");
+
+  const myEmployee = await getEmployeeForUser(ctxSupabase, userId);
+  if (myEmployee && myEmployee.id === req.employee_id) {
+    throw new Error("Forbidden: you cannot decide your own leave request");
+  }
+
+  const maxTier = await getMaxApprovalTier(ctxSupabase, req.tenant_id, req.leave_type_id);
+  if (maxTier === 0) {
+    if (!rs.includes("manager") && !rs.includes("org_admin")) {
+      throw new Error("Forbidden: manager or org admin role required");
+    }
+    return { isFinalTier: true };
+  }
+
+  const route = await getTierRoute(ctxSupabase, req.tenant_id, req.leave_type_id, req.current_tier);
+  if (!route) {
+    // Tiers are configured but none exists at this exact tier (a gap in the
+    // chain) — fall back rather than stranding the request with no possible
+    // approver.
+    if (!rs.includes("manager") && !rs.includes("org_admin")) {
+      throw new Error("Forbidden: manager or org admin role required");
+    }
+    return { isFinalTier: true };
+  }
+
+  const matchesRoute =
+    (!!route.approver_user_id && route.approver_user_id === userId) ||
+    (!!route.approver_role && rs.includes(route.approver_role));
+  if (!matchesRoute) {
+    throw new Error(`Forbidden: this request is awaiting its tier ${req.current_tier} approver`);
+  }
+
+  return { isFinalTier: req.current_tier >= maxTier };
 }
 
 // ---------- Submit leave request ----------
@@ -269,16 +405,27 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
           preferenceKey: "notify_leave_submitted",
         });
       }
-      const managers = await getManagerEmails(admin, emp.tenant_id);
-      await Promise.all(managers.map((m) =>
-        sendInternalEmail({
-          templateName: "leave-submitted-manager",
-          recipientEmail: m,
-          idempotencyKey: `leave-submitted-manager-${req.id}-${m}`,
-          templateData: baseData,
-          preferenceKey: "notify_leave_submitted",
-        })
-      ));
+      const managers = await getManagerRecipients(admin, emp.tenant_id);
+      await Promise.all(managers.map((m) => {
+        const email = m.email
+          ? sendInternalEmail({
+              templateName: "leave-submitted-manager",
+              recipientEmail: m.email,
+              idempotencyKey: `leave-submitted-manager-${req.id}-${m.email}`,
+              templateData: baseData,
+              preferenceKey: "notify_leave_submitted",
+            })
+          : Promise.resolve();
+        const inApp = notify({
+          tenantId: emp.tenant_id,
+          userId: m.id,
+          kind: "leave_submitted",
+          title: "Leave request",
+          body: `${ctx?.employeeName ?? "An employee"} requested ${computedDays} day(s) of ${ctx?.leaveTypeName ?? "leave"} from ${data.startDate} to ${data.endDate}.`,
+          link: "/org/leave",
+        });
+        return Promise.all([email, inApp]);
+      }));
     } catch (e) { console.error("[leave.submit] notify failed", e); }
 
     return { request: req };
@@ -320,16 +467,27 @@ export const cancelLeaveRequest = createServerFn({ method: "POST" })
         endDate: req.end_date,
         days: Number(req.days),
       };
-      const managers = await getManagerEmails(admin, req.tenant_id);
-      await Promise.all(managers.map((m) =>
-        sendInternalEmail({
-          templateName: "leave-cancelled-manager",
-          recipientEmail: m,
-          idempotencyKey: `leave-cancelled-manager-${req.id}-${m}`,
-          templateData: baseData,
-          preferenceKey: "notify_leave_cancelled",
-        })
-      ));
+      const managers = await getManagerRecipients(admin, req.tenant_id);
+      await Promise.all(managers.map((m) => {
+        const email = m.email
+          ? sendInternalEmail({
+              templateName: "leave-cancelled-manager",
+              recipientEmail: m.email,
+              idempotencyKey: `leave-cancelled-manager-${req.id}-${m.email}`,
+              templateData: baseData,
+              preferenceKey: "notify_leave_cancelled",
+            })
+          : Promise.resolve();
+        const inApp = notify({
+          tenantId: req.tenant_id,
+          userId: m.id,
+          kind: "leave_cancelled",
+          title: "Leave request withdrawn",
+          body: `${ctx?.employeeName ?? "An employee"} withdrew their request for ${req.start_date} to ${req.end_date}.`,
+          link: "/org/leave",
+        });
+        return Promise.all([email, inApp]);
+      }));
     } catch (e) { console.error("[leave.cancel] notify failed", e); }
 
     return { ok: true };
@@ -347,7 +505,41 @@ export const approveLeaveRequest = createServerFn({ method: "POST" })
     const { data: req } = await admin.from("leave_requests").select("*").eq("id", data.requestId).maybeSingle();
     if (!req) throw new Error("Request not found");
     if (req.status !== "pending") throw new Error("Only pending requests can be approved");
-    await assertApproverForTenant(supabase, userId, req.tenant_id);
+    const { isFinalTier } = await assertApproverForRequest(supabase, userId, req);
+
+    if (!isFinalTier) {
+      // A configured chain has more tiers to go: advance without finalising —
+      // balance stays pending, status stays pending, and the next tier's
+      // approver(s) are notified.
+      const nextTier = req.current_tier + 1;
+      const { error } = await admin.from("leave_requests").update({ current_tier: nextTier }).eq("id", req.id);
+      if (error) { console.error("[leave.approve]", error.message, error.code); throw new Error("Failed to advance request."); }
+
+      await admin.from("audit_log").insert({
+        actor_id: userId, entity_type: "leave_request", entity_id: req.id,
+        action: "approve_tier", metadata: { tier: req.current_tier, next_tier: nextTier },
+      });
+
+      try {
+        const ctx = await loadLeaveContext(admin, req.id);
+        const nextRoute = await getTierRoute(admin, req.tenant_id, req.leave_type_id, nextTier);
+        const recipientIds = nextRoute?.approver_user_id
+          ? [nextRoute.approver_user_id]
+          : nextRoute?.approver_role
+            ? await getTenantUsersWithRole(admin, req.tenant_id, nextRoute.approver_role)
+            : [];
+        await Promise.all(recipientIds.map((uid) => notify({
+          tenantId: req.tenant_id,
+          userId: uid,
+          kind: "leave_submitted",
+          title: "Leave request awaiting your approval",
+          body: `${ctx?.employeeName ?? "An employee"}'s ${ctx?.leaveTypeName ?? "leave"} request needs your sign-off (tier ${nextTier}).`,
+          link: "/org/leave",
+        })));
+      } catch (e) { console.error("[leave.approve] tier notify failed", e); }
+
+      return { ok: true, advanced: true, tier: nextTier };
+    }
 
     const { error } = await admin.from("leave_requests").update({
       status: "approved", approved_by: userId, approved_at: new Date().toISOString(),
@@ -382,6 +574,14 @@ export const approveLeaveRequest = createServerFn({ method: "POST" })
           preferenceKey: "notify_leave_decision",
         });
       }
+      await notify({
+        tenantId: req.tenant_id,
+        userId: ctx?.employeeUserId ?? null,
+        kind: "leave_approved",
+        title: "Leave approved",
+        body: `${approverName ?? "Your approver"} approved your ${ctx?.leaveTypeName ?? "leave"} request for ${req.start_date} to ${req.end_date}.`,
+        link: "/leave",
+      });
     } catch (e) { console.error("[leave.approve] notify failed", e); }
 
     return { ok: true };
@@ -401,7 +601,9 @@ export const rejectLeaveRequest = createServerFn({ method: "POST" })
     const { data: req } = await admin.from("leave_requests").select("*").eq("id", data.requestId).maybeSingle();
     if (!req) throw new Error("Request not found");
     if (req.status !== "pending") throw new Error("Only pending requests can be rejected");
-    await assertApproverForTenant(supabase, userId, req.tenant_id);
+    // A reject at any tier ends the chain outright — there is no "advance
+    // past a rejection" the way an approval advances past a tier.
+    await assertApproverForRequest(supabase, userId, req);
 
     const { error } = await admin.from("leave_requests").update({
       status: "rejected", approved_by: userId, approved_at: new Date().toISOString(),
@@ -437,6 +639,14 @@ export const rejectLeaveRequest = createServerFn({ method: "POST" })
           preferenceKey: "notify_leave_decision",
         });
       }
+      await notify({
+        tenantId: req.tenant_id,
+        userId: ctx?.employeeUserId ?? null,
+        kind: "leave_rejected",
+        title: "Leave request declined",
+        body: `${approverName ?? "Your approver"} declined your ${ctx?.leaveTypeName ?? "leave"} request for ${req.start_date} to ${req.end_date}.${data.reason ? ` Reason: ${data.reason}` : ""}`,
+        link: "/leave",
+      });
     } catch (e) { console.error("[leave.reject] notify failed", e); }
 
     return { ok: true };

@@ -88,7 +88,11 @@ function OrgLeave() {
 
   async function onApprove(id: string) {
     setBusy(true);
-    try { await approve({ data: { requestId: id } }); toast.success("Approved"); await loadAll(); }
+    try {
+      const r: any = await approve({ data: { requestId: id } });
+      toast.success(r?.advanced ? `Advanced to tier ${r.tier} — awaiting the next approver` : "Approved");
+      await loadAll();
+    }
     catch (e: any) { toast.error(e.message ?? "Failed"); }
     finally { setBusy(false); }
   }
