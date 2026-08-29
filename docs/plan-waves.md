@@ -7,9 +7,9 @@
 | W1 · Correctness & data | **Done** |
 | W2 · Platform hygiene & QA harness | **Done** |
 | W2.5 · CodeQL fix + attendance overhaul | **Done**, migration applied and verified live |
-| W3.0 · Tenant switcher | Next |
-| W3.1 · KPI/KRA distribution | Queued |
-| W3.2 · Leave & holidays | Queued |
+| W3.0 · Tenant switcher | **Done** |
+| W3.2 · Leave & holidays | **Done** |
+| W3.1 · KPI/KRA distribution | Next |
 | W3.3 · WFH + geofence exception | **Largely delivered in W2.5** — reduced remainder below |
 | W4 · Information architecture | Queued (design doc first) |
 
@@ -328,7 +328,12 @@ is demoable rather than empty on a fresh seed.
 
 ## Wave 3 — Module completion
 
-### W3.0 · Tenant switcher for platform admins — *pulled forward, blocks demoing*
+### W3.0 · Tenant switcher for platform admins — **Done**
+
+Landed as `feat/tenant-switcher`: `platform_acting_tenant` (20260824090000), the
+`getTenantId`/`getActingTenantId` fallback in `tenant-scope.ts`, `platform-tenant.functions.ts`
+(`listActingTenantOptions`/`setActingTenant`), and `TenantSwitcher`/`ActingTenantBanner` in
+`AppShell`. The plan below is kept as the design record.
 
 `super_admin` and `regional_admin` have `profiles.tenant_id = NULL` by design, so
 after Wave 1 scoped every query by tenant, **every tenant-owned surface is
@@ -390,20 +395,43 @@ whole tenant. Build:
 **Recommend consolidating to two systems, not three** (scorecards + duty KPI), retiring the
 `performance_reviews` fan-out. Flagging rather than assuming — it deletes a working code path.
 
-### W3.2 · Leave & holidays
-Ordered by severity, and the first two are security-relevant:
+### W3.2 · Leave & holidays — **Done**
+
+All six items landed across three commits (`feat/leave-server-computed-days`,
+`feat/leave-holiday-cleanup`, and the approval-routes commit).
 
 1. **`days` is client-computed and server-trusted** (`leave.functions.ts:77`) — a crafted request
-   can claim any day count up to 366 regardless of the date range. Recompute server-side.
-2. **No balance check on submit** — negative-balance leave is accepted.
-3. **No weekend/holiday exclusion** (`leave.tsx:31-40` counts raw calendar days).
+   could claim any day count up to 366 regardless of the date range. **Fixed**: `submitLeaveRequest`
+   now recomputes `days` itself from the request's own dates (`countWorkingDays`); the client's
+   `days` field is accepted but ignored.
+2. **No balance check on submit** — negative-balance leave was accepted. **Fixed**: `submitLeaveRequest`
+   rejects a request that exceeds `availableLeaveBalance`, skipped for leave types with neither a
+   quota nor an accrual rate (e.g. Unpaid Leave — `hasLeaveQuota`).
+3. **No weekend/holiday exclusion** (`leave.tsx:31-40` counted raw calendar days). **Fixed**:
+   `countWorkingDays` excludes weekends and the tenant's country's `public_holidays`; the client
+   preview uses the same function so it matches what's actually charged.
 4. **No in-app notification on any leave event** — email only, silently invisible if
-   `employees.email` is null.
-5. **`leave_approval_routes` is authored but never consumed** — multi-level approval is configured
-   and not enforced; any tenant manager can approve anything.
-6. **Holidays**: `/admin/holiday-calendar` (461 lines, recurring + AU sync) is strictly better than
-   the nav'd `/admin/holidays` and is unreachable. Keep the orphan, retire the weaker one.
-   `/admin/employee-holidays` is mis-gated under `org.reviewTemplates` (`AppShell.tsx:895-901`).
+   `employees.email` is null. **Fixed**: submit/cancel/approve/reject all write to
+   `in_app_notifications` alongside the existing emails, mirroring the `notify()` pattern in
+   `wfh.functions.ts`.
+5. **`leave_approval_routes` is authored but never consumed** — multi-level approval was configured
+   and not enforced; any tenant manager could approve anything, including their own request (no
+   self-decision check existed at all — the WFH lifecycle had one, leave didn't). **Fixed**:
+   `assertApproverForRequest` enforces the tenant's configured tier chain when one exists (a new
+   `leave_requests.current_tier` column tracks progress — `20260824100000`), falls back to the old
+   "any manager/org_admin" behaviour untouched for tenants that never configured routing, and
+   blocks self-decision unconditionally either way.
+6. **Holidays**: `/admin/holiday-calendar` (461 lines, recurring + AU sync) was strictly better than
+   the nav'd `/admin/holidays` and was unreachable. **Fixed**: nav repointed at the calendar view
+   (which still links back to the flat list as "List view" — nothing deleted).
+   `/admin/employee-holidays` was mis-gated under `org.reviewTemplates` (`AppShell.tsx:895-901`,
+   a different role set than the route's own `ORG_ADMIN_OR_MANAGER`). **Fixed**: moved into Leave &
+   time under a new `org.employeeHolidays` feature key matching the route exactly.
+
+**Not done, flagged rather than assumed**: `leave_approval_routes.escalate_after_hours` is still
+unconsumed — enforcing the tier chain closed the security gap, but auto-escalation on a timeout
+needs a cron and a product decision (escalate to whom, does it notify, does it auto-approve) this
+pass didn't make.
 
 ### W3.3 · Work-from-home + geofence exception — *mostly delivered in W2.5*
 
