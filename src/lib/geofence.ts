@@ -200,3 +200,54 @@ export function outsideFenceMessage(
     `Move closer to an approved site, or request a work-from-home day if you are working remotely.`
   );
 }
+
+/** What clockOut should flag a geofence outcome as, or null for a clean one. */
+export interface ClockOutReview {
+  mismatchType: "wfh_outside_fence" | "clock_out_outside_fence" | "accuracy_low";
+  reason: string;
+  fenceId: string;
+}
+
+/**
+ * clockOut records a punch's distance/fence columns for every outcome but,
+ * unlike clockIn, never flagged any of them — needs_review stayed false and
+ * nothing was queued to geofence_reconciliation regardless of how far outside
+ * a fence the closing punch landed. clockOut still never *blocks* on this
+ * (someone who already started a shift should not be trapped on site to end
+ * it), but it should flag exactly what clockIn would have flagged for the
+ * same outcome.
+ *
+ * An approved WFH day reuses `wfh_outside_fence` — the same classification
+ * clockIn gives it — since it's the same sanctioned remote day continuing
+ * into its closing punch. An unapproved out-of-fence clock-out gets its own
+ * type: none of the existing values describe an unblocked, unapproved,
+ * out-of-fence *closing* punch.
+ */
+export function classifyClockOutGeofence(
+  outcome: GeofenceOutcome,
+  approvedWfh: boolean,
+): ClockOutReview | null {
+  if (outcome.kind === "outside") {
+    return approvedWfh
+      ? {
+          mismatchType: "wfh_outside_fence",
+          reason: `Approved work-from-home clock-out, ${outcome.distanceMeters}m from "${outcome.nearestFenceName}"`,
+          fenceId: outcome.nearestFenceId,
+        }
+      : {
+          mismatchType: "clock_out_outside_fence",
+          reason:
+            `Clocked out ${outcome.distanceMeters - outcome.radiusMeters}m outside all work zones — ` +
+            `not blocked, since ending an already-open shift should never be`,
+          fenceId: outcome.nearestFenceId,
+        };
+  }
+  if (outcome.kind === "inside_low_confidence" || outcome.kind === "uncertain") {
+    return {
+      mismatchType: "accuracy_low",
+      reason: `Clock-out position uncertain, ${outcome.distanceMeters}m from "${outcome.fenceName}"`,
+      fenceId: outcome.fenceId,
+    };
+  }
+  return null;
+}

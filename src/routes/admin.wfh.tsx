@@ -15,10 +15,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
 import { AdminGate } from "@/components/AdminGate";
 import { WFH_APPROVER_ROLES } from "@/lib/rbac";
+import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -31,7 +34,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/monday";
 import { toast } from "sonner";
 import { House, Check, X, MapPin } from "lucide-react";
-import { decideWfhRequest, listWfhForApproval } from "@/lib/wfh.functions";
+import {
+  decideWfhRequest,
+  getWfhSettings,
+  listWfhForApproval,
+  setWfhEnabled,
+} from "@/lib/wfh.functions";
 import { PlatformAccountNotice } from "@/components/PlatformAccountNotice";
 
 export const Route = createFileRoute("/admin/wfh")({
@@ -60,8 +68,12 @@ interface Row {
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
 function WfhApprovalsPage() {
+  const { roles } = useAuth();
+  const canManageSettings = roles.includes("org_admin") || roles.includes("super_admin");
   const fnList = useServerFn(listWfhForApproval);
   const fnDecide = useServerFn(decideWfhRequest);
+  const fnGetSettings = useServerFn(getWfhSettings);
+  const fnSetEnabled = useServerFn(setWfhEnabled);
 
   const [status, setStatus] = useState<StatusFilter>("pending");
   const [rows, setRows] = useState<Row[]>([]);
@@ -69,6 +81,8 @@ function WfhApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [wfhEnabled, setWfhEnabledState] = useState(true);
+  const [settingsBusy, setSettingsBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +100,33 @@ function WfhApprovalsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!canManageSettings) return;
+    (async () => {
+      try {
+        const res = await fnGetSettings({ data: undefined });
+        setWfhEnabledState(res.enabled);
+      } catch {
+        // A settings-load failure should not block the approval queue below.
+      }
+    })();
+  }, [canManageSettings, fnGetSettings]);
+
+  async function toggleWfhEnabled(next: boolean) {
+    setSettingsBusy(true);
+    try {
+      await fnSetEnabled({ data: { enabled: next } });
+      setWfhEnabledState(next);
+      toast.success(
+        next ? "Work-from-home requests re-enabled" : "Work-from-home requests disabled",
+      );
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Could not update the setting");
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
 
   async function decide(id: string, decision: "approved" | "rejected") {
     setBusyId(id);
@@ -108,6 +149,27 @@ function WfhApprovalsPage() {
       subtitle="Approve remote days so the employee can clock in from outside your work zones."
     >
       <section className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+        {canManageSettings && (
+          <Card>
+            <CardContent className="flex items-center justify-between gap-4 pt-6">
+              <div>
+                <Label htmlFor="wfh-enabled-toggle" className="text-sm font-medium">
+                  Allow work-from-home requests
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Off hides the request form on every employee&rsquo;s Work from home page. Existing
+                  requests are unaffected.
+                </p>
+              </div>
+              <Switch
+                id="wfh-enabled-toggle"
+                checked={wfhEnabled}
+                disabled={settingsBusy}
+                onCheckedChange={toggleWfhEnabled}
+              />
+            </CardContent>
+          </Card>
+        )}
         <Card>
           <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
             <div>

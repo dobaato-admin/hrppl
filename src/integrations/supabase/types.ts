@@ -11837,6 +11837,7 @@ export type Database = {
           timezone: string
           updated_at: string
           website: string | null
+          wfh_enabled: boolean
         }
         Insert: {
           address_line1?: string | null
@@ -11870,6 +11871,7 @@ export type Database = {
           timezone?: string
           updated_at?: string
           website?: string | null
+          wfh_enabled?: boolean
         }
         Update: {
           address_line1?: string | null
@@ -11903,6 +11905,7 @@ export type Database = {
           timezone?: string
           updated_at?: string
           website?: string | null
+          wfh_enabled?: boolean
         }
         Relationships: [
           {

@@ -61,6 +61,7 @@ function MyWfhPage() {
 
   const [rows, setRows] = useState<WfhRow[]>([]);
   const [hasEmployee, setHasEmployee] = useState(true);
+  const [wfhEnabled, setWfhEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -76,6 +77,7 @@ function MyWfhPage() {
       const res = await fnList({ data: undefined });
       setRows((res.requests ?? []) as WfhRow[]);
       setHasEmployee(res.hasEmployee);
+      setWfhEnabled(res.wfhEnabled !== false);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Could not load your requests");
     } finally {
@@ -139,76 +141,85 @@ function MyWfhPage() {
           />
         ) : (
           <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Request remote days</CardTitle>
-                <CardDescription>
-                  An approved request lets you clock in from outside your organisation&rsquo;s work
-                  zones. Remote punches are recorded as such and reviewed by your manager or HR.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
+            {!wfhEnabled ? (
+              <EmptyState
+                icon={House}
+                title="Work-from-home is not enabled"
+                description="Your organisation does not currently permit new remote work requests. Existing requests below are unaffected. Contact your organisation administrator if you believe this should change."
+              />
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Request remote days</CardTitle>
+                  <CardDescription>
+                    An approved request lets you clock in from outside your organisation&rsquo;s
+                    work zones. Remote punches are recorded as such and reviewed by your manager or
+                    HR.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="wfh-start">First day</Label>
+                      <Input
+                        id="wfh-start"
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => {
+                          setStartDate(e.target.value);
+                          if (endDate < e.target.value) setEndDate(e.target.value);
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="wfh-end">Last day</Label>
+                      <Input
+                        id="wfh-end"
+                        type="date"
+                        value={endDate}
+                        min={startDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="wfh-start">First day</Label>
+                    <Label htmlFor="wfh-address">Where you will be working (optional)</Label>
                     <Input
-                      id="wfh-start"
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => {
-                        setStartDate(e.target.value);
-                        if (endDate < e.target.value) setEndDate(e.target.value);
-                      }}
+                      id="wfh-address"
+                      placeholder="Home address, co-working space, client site…"
+                      value={workAddress}
+                      onChange={(e) => setWorkAddress(e.target.value)}
+                      maxLength={300}
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="wfh-end">Last day</Label>
-                    <Input
-                      id="wfh-end"
-                      type="date"
-                      value={endDate}
-                      min={startDate}
-                      onChange={(e) => setEndDate(e.target.value)}
+                    <Label htmlFor="wfh-reason">Reason (optional)</Label>
+                    <Textarea
+                      id="wfh-reason"
+                      placeholder="Anything your approver should know."
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      maxLength={1000}
+                      rows={3}
                     />
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="wfh-address">Where you will be working (optional)</Label>
-                  <Input
-                    id="wfh-address"
-                    placeholder="Home address, co-working space, client site…"
-                    value={workAddress}
-                    onChange={(e) => setWorkAddress(e.target.value)}
-                    maxLength={300}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="wfh-reason">Reason (optional)</Label>
-                  <Textarea
-                    id="wfh-reason"
-                    placeholder="Anything your approver should know."
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    maxLength={1000}
-                    rows={3}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                    <span>
-                      One pending or approved request per day, and dates cannot be in the past. Your
-                      manager, HR or an organisation administrator decides it —{" "}
-                      <span className="font-medium">never you</span>, even if you hold one of those
-                      roles yourself.
-                    </span>
-                  </p>
-                  <Button onClick={submit} disabled={busy}>
-                    <Plus className="mr-1.5 h-4 w-4" /> Send request
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        One pending or approved request per day, and dates cannot be in the past.
+                        Your manager, HR or an organisation administrator decides it —{" "}
+                        <span className="font-medium">never you</span>, even if you hold one of
+                        those roles yourself.
+                      </span>
+                    </p>
+                    <Button onClick={submit} disabled={busy}>
+                      <Plus className="mr-1.5 h-4 w-4" /> Send request
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

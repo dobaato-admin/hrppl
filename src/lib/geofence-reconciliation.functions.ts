@@ -115,7 +115,17 @@ export async function doReconcile(supabase: any, tenantId: string, lookbackHours
   }
 
   // 2) attendance punch with no nearby geofence capture / too far from fence
+  //
+  // A remote (approved-WFH) punch is exempt from both checks below. It was
+  // already classified correctly at punch time — wfh_outside_fence or
+  // accuracy_low, written straight to this same table by clockIn/clockOut —
+  // and it is exactly the class of punch least likely to have a correlated
+  // background capture near an office fence, since the whole point of the
+  // day is not being at one. Without this, every WFH punch this cron ever
+  // saw was re-flagged a second time as a plain no_geofence_for_punch
+  // anomaly, mislabelling a sanctioned remote day as an unexplained one.
   for (const p of punches ?? []) {
+    if (p.work_location === "remote") continue;
     if (p.clock_in_latitude == null || p.clock_in_longitude == null) continue;
     const pt = p.clock_in ? new Date(p.clock_in).getTime() : new Date(p.created_at).getTime();
     const nearby = (audits ?? []).find((a: any) =>

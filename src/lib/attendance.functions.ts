@@ -4,8 +4,10 @@ import { requireSupabaseAuth } from "@/lib/auth-guard";
 import {
   evaluateGeofence,
   outsideFenceMessage,
+  classifyClockOutGeofence,
   type GeofenceOutcome,
   type GeofenceRow,
+  type ClockOutReview,
 } from "@/lib/geofence";
 import {
   resolvePunchInstant,
@@ -189,6 +191,7 @@ async function queueForReview(args: {
   mismatchType:
     | "wfh_outside_fence"
     | "outside_fence_blocked"
+    | "clock_out_outside_fence"
     | "accuracy_low"
     | "clock_skew"
     | "no_geofence_for_punch";
@@ -609,25 +612,57 @@ export const clockOut = createServerFn({ method: "POST" })
 
     // Clock-out is recorded but not enforced — someone who has already started a
     // shift should not be trapped on site to end it, and blocking the punch
-    // would only produce entries that never close. Where they were is now on
-    // the row, so the asymmetry is at least visible to a reviewer.
+    // would only produce entries that never close. It was, however, recorded
+    // and not *flagged* — the distance/fence columns were populated but
+    // needs_review never followed, so an out-of-fence clock-out was written
+    // and then invisible, exactly the gap the audit trail closed for clock-in
+    // refusals. classifyClockOutGeofence gives it the same treatment clockIn
+    // gives the equivalent outcome.
+    let clockOutReview: {
+      mismatchType: ClockOutReview["mismatchType"];
+      details: Record<string, unknown>;
+    } | null = null;
+    let clockOutFenceId: string | null = null;
     if (typeof data?.latitude === "number" && typeof data?.longitude === "number") {
-      const { data: fences } = await supabase
-        .from("sign_geofences")
-        .select("id,name,latitude,longitude,radius_meters,min_accuracy_meters")
-        .eq("tenant_id", emp.tenant_id)
-        .eq("is_active", true);
+      const [{ data: fences }, wfhRes] = await Promise.all([
+        supabase
+          .from("sign_geofences")
+          .select("id,name,latitude,longitude,radius_meters,min_accuracy_meters")
+          .eq("tenant_id", emp.tenant_id)
+          .eq("is_active", true),
+        supabase
+          .rpc("has_approved_wfh", { _employee_id: emp.id, _work_date: entry.work_date })
+          .then(
+            (r) => r,
+            () => ({ data: null }),
+          ),
+      ]);
       const outcome = evaluateGeofence(fences as GeofenceRow[] | null, {
         latitude: data.latitude,
         longitude: data.longitude,
         accuracyMeters: data.accuracyMeters ?? null,
       });
-      if (outcome.kind === "outside") {
-        update.clock_out_distance_meters = outcome.distanceMeters;
-      } else if ("fenceId" in outcome) {
-        update.clock_out_geofence_id = outcome.fenceId;
-        update.clock_out_distance_meters = outcome.distanceMeters;
+      if ("fenceId" in outcome) update.clock_out_geofence_id = outcome.fenceId;
+      if ("distanceMeters" in outcome) update.clock_out_distance_meters = outcome.distanceMeters;
+
+      const review = classifyClockOutGeofence(outcome, wfhRes?.data === true);
+      if (review) {
+        needsReview = true;
+        reviewReasons.push(review.reason);
+        clockOutFenceId = review.fenceId;
+        clockOutReview = {
+          mismatchType: review.mismatchType,
+          details: {
+            work_date: entry.work_date,
+            phase: "clock_out",
+            outcome: outcome.kind,
+            reason: review.reason,
+          },
+        };
       }
+      // Recompute now that the geofence check may have added to needsReview/reviewReasons.
+      update.needs_review = needsReview;
+      update.review_reason = reviewReasons.length ? reviewReasons.join("; ") : null;
     }
 
     // Same retry-without-the-new-columns rule as clockIn: an unapplied
@@ -642,6 +677,18 @@ export const clockOut = createServerFn({ method: "POST" })
     }
     if (error) throw new Error(error.message);
 
+    if (clockOutReview) {
+      await queueForReview({
+        tenantId: emp.tenant_id,
+        employeeId: emp.id,
+        userId,
+        attendanceEntryId: entry.id,
+        geofenceId: clockOutFenceId,
+        eventTime: punch.instant,
+        mismatchType: clockOutReview.mismatchType,
+        details: clockOutReview.details,
+      });
+    }
     if (punch.rejectedClientTime) {
       await queueForReview({
         tenantId: emp.tenant_id,
