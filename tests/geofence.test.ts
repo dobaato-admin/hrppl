@@ -15,6 +15,7 @@ import {
   evaluateGeofence,
   distanceMeters,
   outsideFenceMessage,
+  classifyClockOutGeofence,
   DEFAULT_MIN_ACCURACY_METERS,
   type GeofenceRow,
 } from "@/lib/geofence";
@@ -182,6 +183,73 @@ describe("evaluateGeofence", () => {
 
   it("reports missing coordinates as no_location", () => {
     expect(evaluateGeofence([fence()], {}).kind).toBe("no_location");
+  });
+});
+
+describe("classifyClockOutGeofence", () => {
+  // clockOut recorded a punch's distance/fence columns for every outcome but,
+  // unlike clockIn, never flagged any of them — needs_review stayed false
+  // regardless of how far outside a fence the closing punch landed. This is
+  // the decision matrix that closes that gap without ever blocking the punch
+  // itself (someone who already started a shift should not be trapped on
+  // site to end it).
+
+  it("does not flag a clean inside punch", () => {
+    const out = evaluateGeofence([fence()], {
+      latitude: OFFICE.lat,
+      longitude: OFFICE.lng,
+      accuracyMeters: 20,
+    });
+    expect(classifyClockOutGeofence(out, false)).toBeNull();
+  });
+
+  it("does not flag when the tenant has no fences at all", () => {
+    expect(classifyClockOutGeofence(evaluateGeofence([], {}), false)).toBeNull();
+  });
+
+  it("flags an unapproved out-of-fence clock-out as its own type, not blocked", () => {
+    const out = evaluateGeofence([fence()], {
+      latitude: north(OFFICE.lat, 3000),
+      longitude: OFFICE.lng,
+      accuracyMeters: 20,
+    });
+    expect(out.kind).toBe("outside");
+    const review = classifyClockOutGeofence(out, false);
+    expect(review?.mismatchType).toBe("clock_out_outside_fence");
+    expect(review?.reason).toContain("outside all work zones");
+  });
+
+  it("flags an approved-WFH out-of-fence clock-out as wfh_outside_fence — the same classification clockIn gives it", () => {
+    const out = evaluateGeofence([fence()], {
+      latitude: north(OFFICE.lat, 3000),
+      longitude: OFFICE.lng,
+      accuracyMeters: 20,
+    });
+    const review = classifyClockOutGeofence(out, true);
+    expect(review?.mismatchType).toBe("wfh_outside_fence");
+    expect(review?.reason).toContain("work-from-home");
+  });
+
+  it("flags a low-confidence inside punch for review (same fixture as evaluateGeofence's own test above)", () => {
+    const out = evaluateGeofence([fence()], {
+      latitude: north(OFFICE.lat, 20),
+      longitude: OFFICE.lng,
+      accuracyMeters: 400,
+    });
+    expect(out.kind).toBe("inside_low_confidence");
+    const review = classifyClockOutGeofence(out, false);
+    expect(review?.mismatchType).toBe("accuracy_low");
+    expect(review?.fenceId).toBe("fence-1");
+  });
+
+  it("flags an uncertain-but-inside-the-margin punch for review too", () => {
+    const out = evaluateGeofence([fence()], {
+      latitude: north(OFFICE.lat, 200),
+      longitude: OFFICE.lng,
+      accuracyMeters: 80,
+    });
+    expect(out.kind).toBe("uncertain");
+    expect(classifyClockOutGeofence(out, false)?.mismatchType).toBe("accuracy_low");
   });
 });
 

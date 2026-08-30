@@ -10,8 +10,8 @@
 | W3.0 · Tenant switcher | **Done** |
 | W3.2 · Leave & holidays | **Done** |
 | W3.1 · KPI/KRA distribution | **Done** |
-| W3.3 · WFH + geofence exception | Next — remainder below |
-| W4 · Information architecture | Queued (design doc first) |
+| W3.3 · WFH + geofence exception | **Done** |
+| W4 · Information architecture | Next (design doc first) |
 
 ## Working agreement
 
@@ -454,25 +454,62 @@ unconsumed — enforcing the tier chain closed the security gap, but auto-escala
 needs a cron and a product decision (escalate to whom, does it notify, does it auto-approve) this
 pass didn't make.
 
-### W3.3 · Work-from-home + geofence exception — *mostly delivered in W2.5*
+### W3.3 · Work-from-home + geofence exception — **Done**
 
-Delivered: the `wfh_requests` table and RLS, the employee request route
+Delivered in W2.5: the `wfh_requests` table and RLS, the employee request route
 (`/me/wfh`) and the approver route (`/admin/wfh`), the `clockIn` short-circuit
 via `has_approved_wfh()`, the `work_location` column, the new `mismatch_type`
 members, writes to `geofence_reconciliation` at punch time, and a trace for
 refused punches.
 
-**What remains:**
+Before touching the remainder, the whole feature was re-verified live rather
+than trusted from these docs: `has_approved_wfh` still exists and returns
+correctly, the `geofence_reconciliation` mismatch-type constraint still
+carries the WFH members, RLS still holds under a real JWT (an employee sees
+only their own row), and the `clockIn` code path is unchanged. One real finding
+from that recheck: the demo WFH dates had gone stale relative to "today" (the
+seed writes `day(0)`/`day(5)` relative to whenever it last ran), so
+`has_approved_wfh` was silently returning false for everyone — not a code
+regression, but a live demo right now would have looked broken. Refreshed in
+place.
 
-- `clockOut` records position but still does not validate it. The asymmetry is
-  now visible on the row rather than invisible, which was the first step, but a
-  policy decision is still owed — trapping someone on site to end a shift is
-  worse than the gap, so this probably wants a flag rather than a block.
-- No email on a WFH decision; in-app only. The same gap leave has.
-- The 24h `geofence-reconciliation` cron does not know the new WFH mismatch
-  types, so those rows are only ever written at punch time.
-- A tenant-level "remote work allowed" setting, so tenants that never permit it
-  can hide the request route entirely.
+**The remainder, landed as `feat/wfh-remainder`:**
+
+- **`clockOut` now flags what it records.** It already wrote distance/fence
+  columns for every outcome but never set `needs_review` or queued anything to
+  `geofence_reconciliation` regardless of the result — an out-of-fence
+  clock-out was recorded and then invisible, exactly the gap the audit trail
+  had already closed for clock-in refusals. `classifyClockOutGeofence`
+  (`src/lib/geofence.ts`) gives it the same treatment `clockIn` gives the
+  equivalent outcome: still never blocked (someone who already started a shift
+  should not be trapped on site to end it — the flag-not-block call made
+  above), reusing `wfh_outside_fence` when an approved WFH day covers it and a
+  new `clock_out_outside_fence` mismatch type otherwise (`20260824120000`),
+  since none of the existing types describe an unapproved, unblocked, *closing*
+  punch outside every fence.
+- **WFH decisions now send email**, not just in-app. `wfh-approved`/
+  `wfh-rejected` templates, mirroring `leave-approved`/`leave-rejected`
+  exactly. Reuses the `notify_leave_decision` preference column rather than
+  adding a dedicated one — both are "a decision was made on your time-off-
+  adjacent request," and a second toggle nobody has asked for felt like more
+  schema than the ask warranted.
+- **The 24h reconciliation cron now knows about WFH.** `doReconcile`
+  correlates every punch against background geofence captures and flags
+  `no_geofence_for_punch` when none is found nearby — a remote (approved-WFH)
+  punch is exactly the class least likely to have one, so every WFH punch this
+  cron ever saw was re-flagged a second time on top of the correct
+  classification already written at punch time. Punches with
+  `work_location = 'remote'` are now skipped entirely in that check.
+- **A tenant-level "remote work allowed" switch** — `tenants.wfh_enabled`
+  (`20260824130000`, default `true`, so no existing tenant's behaviour
+  changes). Enforced server-side in `requestWfh`, not just hidden client-side;
+  `/me/wfh` shows an explanatory notice instead of the request form when off
+  (existing requests stay visible); `/admin/wfh` gets the toggle, org_admin/
+  super_admin only.
+
+Verified: 8 new unit tests (`classifyClockOutGeofence`, `doReconcile`'s WFH
+skip against a fake Supabase client, `isWfhEnabled`'s default-true behaviour);
+full baseline held; tsc --noEmit at 0; both migrations applied live.
 
 The original plan for this section, kept for reference:
 

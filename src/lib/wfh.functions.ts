@@ -16,11 +16,30 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { getMyEmployeeId, getTenantId, requireTenantId } from "@/lib/tenant-scope";
+import {
+  getMyEmployeeId,
+  getTenantId,
+  requireTenantId,
+  type AnySupabase,
+} from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
+}
+
+async function loadEmailSender() {
+  const { sendInternalEmail } = await import("@/lib/email/send-internal.server");
+  return sendInternalEmail;
+}
+
+async function getApproverName(admin: AnySupabase, userId: string): Promise<string | undefined> {
+  const { data } = await admin
+    .from("profiles")
+    .select("full_name,email")
+    .eq("id", userId)
+    .maybeSingle();
+  return data?.full_name || data?.email;
 }
 
 const APPROVER_ROLES = ["manager", "hr", "org_admin", "super_admin"];
@@ -43,6 +62,27 @@ async function assertApprover(supabase: any, userId: string) {
     throw new Error("You do not have permission to review work-from-home requests.");
   }
   return roles;
+}
+
+/** org_admin or super_admin, in the caller's own tenant. Same shape as org-signup.functions.ts's assertOrgAdmin. */
+async function assertOrgAdmin(supabase: AnySupabase, userId: string): Promise<string> {
+  const tenantId = await requireTenantId(supabase, userId);
+  const roles = await getRoles(supabase, userId);
+  if (!roles.includes("org_admin") && !roles.includes("super_admin")) {
+    throw new Error("Forbidden: organization admin required");
+  }
+  return tenantId;
+}
+
+export async function isWfhEnabled(supabase: AnySupabase, tenantId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("tenants")
+    .select("wfh_enabled")
+    .eq("id", tenantId)
+    .maybeSingle();
+  // Absent (pre-migration) reads as enabled — the column defaults to true and
+  // this must never be the reason nobody can request a WFH day.
+  return data?.wfh_enabled !== false;
 }
 
 async function notify(args: {
@@ -78,7 +118,7 @@ export const listMyWfhRequests = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const employeeId = await getMyEmployeeId(supabase, userId);
-    if (!employeeId) return { requests: [], hasEmployee: false as const };
+    if (!employeeId) return { requests: [], hasEmployee: false as const, wfhEnabled: true };
 
     const { data, error } = await supabase
       .from("wfh_requests")
@@ -98,10 +138,14 @@ export const listMyWfhRequests = createServerFn({ method: "POST" })
       .select("role")
       .in("role", ["manager", "hr", "org_admin"]);
 
+    const tenantId = await getTenantId(supabase, userId);
+    const wfhEnabled = tenantId ? await isWfhEnabled(supabase, tenantId) : true;
+
     return {
       requests: data ?? [],
       hasEmployee: true as const,
       approverRoles: [...new Set(((approvers ?? []) as { role: string }[]).map((r) => r.role))],
+      wfhEnabled,
     };
   });
 
@@ -129,6 +173,10 @@ export const requestWfh = createServerFn({ method: "POST" })
     const employeeId = await getMyEmployeeId(supabase, userId);
     if (!employeeId) throw new Error("No employee record is linked to your account.");
     const tenantId = await requireTenantId(supabase, userId);
+
+    if (!(await isWfhEnabled(supabase, tenantId))) {
+      throw new Error("Your organization does not currently permit work-from-home requests.");
+    }
 
     // Overlap, not just duplication. A range unique index cannot express this,
     // so it is enforced here — two overlapping approvals would make it
@@ -356,7 +404,7 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
       const admin = await loadAdmin();
       const { data: emp } = await admin
         .from("employees")
-        .select("user_id")
+        .select("user_id,email")
         .eq("id", existing.employee_id)
         .maybeSingle();
       await notify({
@@ -372,6 +420,28 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
         link: "/me/wfh",
       });
 
+      // In-app only until now — the same gap leave had before
+      // leave-approved/leave-rejected existed. Reuses notify_leave_decision:
+      // both are "a decision was made on your time-off-adjacent request",
+      // and a dedicated preference column felt like more schema than a
+      // second toggle nobody has asked for yet.
+      if (emp?.email) {
+        const sendInternalEmail = await loadEmailSender();
+        const approverName = await getApproverName(admin, userId);
+        await sendInternalEmail({
+          templateName: data.decision === "approved" ? "wfh-approved" : "wfh-rejected",
+          recipientEmail: emp.email,
+          idempotencyKey: `wfh-${data.decision}-${data.id}`,
+          templateData: {
+            approverName,
+            startDate: existing.start_date,
+            endDate: existing.end_date,
+            rejectionReason: data.decision === "rejected" ? data.note : undefined,
+          },
+          preferenceKey: "notify_leave_decision",
+        });
+      }
+
       await admin.from("audit_log").insert({
         actor_id: userId,
         entity_type: "wfh_request",
@@ -384,4 +454,46 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
     }
 
     return { ok: true };
+  });
+
+// ---------- Tenant setting: is remote work permitted at all ----------
+//
+// Before this, every tenant with an employee record showed the WFH request
+// route, whether or not the organisation actually intends to allow remote
+// work. Defaults to true (20260824130000) — this is an opt-out switch, not
+// an opt-in one, so no existing tenant's behaviour changes until an
+// org_admin turns it off.
+
+export const getWfhSettings = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const tenantId = await requireTenantId(context.supabase, context.userId);
+    return { enabled: await isWfhEnabled(context.supabase, tenantId) };
+  });
+
+export const setWfhEnabled = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ enabled: z.boolean() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const tenantId = await assertOrgAdmin(context.supabase, context.userId);
+    const admin = await loadAdmin();
+    const { error } = await admin
+      .from("tenants")
+      .update({ wfh_enabled: data.enabled })
+      .eq("id", tenantId);
+    if (error) throw new Error(error.message);
+
+    try {
+      await admin.from("audit_log").insert({
+        actor_id: context.userId,
+        entity_type: "tenant",
+        entity_id: tenantId,
+        action: data.enabled ? "wfh_enabled" : "wfh_disabled",
+        metadata: {},
+      });
+    } catch (e) {
+      console.error("[wfh] settings audit log write failed", e);
+    }
+
+    return { ok: true, enabled: data.enabled };
   });

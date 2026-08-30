@@ -5,6 +5,8 @@ import { template as leaveSubmittedEmployee } from './leave-submitted-employee'
 import { template as leaveApproved } from './leave-approved'
 import { template as leaveRejected } from './leave-rejected'
 import { template as leaveCancelledManager } from './leave-cancelled-manager'
+import { template as wfhApproved } from './wfh-approved'
+import { template as wfhRejected } from './wfh-rejected'
 import { template as payslipReady } from './payslip-ready'
 import { template as reviewReminder } from './review-reminder'
 import { template as onboardingOverdue } from './onboarding-overdue'
@@ -43,6 +45,8 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'leave-approved': leaveApproved,
   'leave-rejected': leaveRejected,
   'leave-cancelled-manager': leaveCancelledManager,
+  'wfh-approved': wfhApproved,
+  'wfh-rejected': wfhRejected,
   'payslip-ready': payslipReady,
   'review-reminder': reviewReminder,
   'onboarding-overdue': onboardingOverdue,
