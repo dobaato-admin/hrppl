@@ -35,6 +35,8 @@ import {
   FileText,
   Settings as SettingsIcon,
   Pin,
+  UserSearch,
+  Package,
 } from "lucide-react";
 import { listMyQuickAccess, setMyQuickAccess, QUICK_ACCESS_REGISTRY } from "@/lib/manager-quick-access.functions";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -44,6 +46,7 @@ import { toast } from "sonner";
 
 const ICON_MAP: Record<string, any> = {
   Building2, Users, Inbox, CalendarDays, Clock, DollarSign, Wallet, Sparkles, BookOpen, FileSignature, TrendingUp, FileText,
+  UserSearch, Package, ClipboardCheck,
 };
 
 export const Route = createFileRoute("/dashboard")({
@@ -168,7 +171,12 @@ function Dashboard() {
   const isSuper = roles.includes("super_admin");
   const isRegional = roles.includes("regional_admin");
   const isOrg = roles.includes("org_admin");
-  const isManager = roles.some((r) => ["manager", "org_admin", "hr", "branch_admin", "super_admin"].includes(r));
+  // Was missing "finance" — every other people-manager-adjacent role already
+  // saw the quick-access picker below; finance alone got nothing extra
+  // (see docs/w4-information-architecture-design.md §5).
+  const isManager = roles.some((r) =>
+    ["manager", "org_admin", "hr", "branch_admin", "finance", "super_admin"].includes(r),
+  );
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -327,7 +335,7 @@ function Dashboard() {
           </BoardCard>
         </section>
 
-        {isManager && <ManagerQuickAccess />}
+        {isManager && <ManagerQuickAccess roles={roles} />}
 
 
         {/* Admin shortcuts */}
@@ -394,7 +402,27 @@ function Dashboard() {
 
 const LOCKED_KEYS = ["org-console"];
 
-function ManagerQuickAccess() {
+// Seed keys for a user who has never customized their quick access, chosen
+// per role since "requests-inbox, employees, reports" made no sense for
+// finance and nothing existed at all for it before this wave. Still fully
+// editable afterwards via "Customize" — these are starting defaults, not a
+// role-locked set. See docs/w4-information-architecture-design.md §5.
+const DEFAULT_KEYS_BY_ROLE: Record<string, string[]> = {
+  manager: ["team-dashboard", "requests-inbox"],
+  hr: ["employees", "recruitment", "onboarding-tracker"],
+  finance: ["payroll", "expenses", "analytics"],
+  branch_admin: ["team-members", "requests-inbox", "asset-register"],
+};
+const FALLBACK_DEFAULT_KEYS = ["requests-inbox", "employees", "reports"];
+
+function defaultKeysForRoles(roles: string[]): string[] {
+  for (const role of ["manager", "hr", "finance", "branch_admin"]) {
+    if (roles.includes(role)) return DEFAULT_KEYS_BY_ROLE[role];
+  }
+  return FALLBACK_DEFAULT_KEYS;
+}
+
+function ManagerQuickAccess({ roles }: { roles: string[] }) {
   const listFn = useServerFn(listMyQuickAccess);
   const saveFn = useServerFn(setMyQuickAccess);
   const [pins, setPins] = useState<any[]>([]);
@@ -406,7 +434,7 @@ function ManagerQuickAccess() {
     const r = await listFn({});
     const stored = r.pins.length > 0
       ? r.pins.map((p: any) => p.key)
-      : ["requests-inbox", "employees", "reports"];
+      : defaultKeysForRoles(roles);
     // Always pin locked keys first, then the user's choices (deduped)
     const merged = [...LOCKED_KEYS, ...stored.filter((k: string) => !LOCKED_KEYS.includes(k))];
     setPins(
@@ -435,7 +463,7 @@ function ManagerQuickAccess() {
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-            Manager · Quick access
+            Quick access
           </h3>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -457,7 +485,7 @@ function ManagerQuickAccess() {
     <section>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          Manager · Quick access
+          Quick access
         </h3>
         <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
           <SettingsIcon className="mr-1 h-3.5 w-3.5" /> Customize
@@ -491,7 +519,7 @@ function ManagerQuickAccess() {
                     <Icon className="h-4 w-4" />
                   </span>
                   <CardTitle className="text-base">{p.label}</CardTitle>
-                  <CardDescription className="text-xs">{p.href}</CardDescription>
+                  <CardDescription className="text-xs">{p.group}</CardDescription>
                 </CardHeader>
               </Card>
             </RLink>
