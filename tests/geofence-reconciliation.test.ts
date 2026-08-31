@@ -40,7 +40,13 @@ function makeFakeSupabase(tables: Record<string, Row[]>) {
 }
 
 const TENANT = "tenant-1";
-const NOW = new Date("2026-08-30T10:00:00.000Z");
+// Relative to the actual clock, not a fixed calendar date: doReconcile's 24h
+// lookback is `created_at >= Date.now() - hours`, so a hardcoded past
+// instant eventually falls outside the window as real time passes it —
+// exactly the bug this file exists to catch, just in the test itself. One
+// hour ago is comfortably inside any 24h lookback regardless of when the
+// suite runs.
+const NOW = new Date(Date.now() - 60 * 60 * 1000);
 
 describe("doReconcile — WFH-tagged punches", () => {
   it("does not flag a remote punch with no nearby geofence capture", async () => {

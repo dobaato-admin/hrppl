@@ -21,6 +21,7 @@ import {
   getMyBilling,
 } from '@/lib/billing.functions';
 import { seedStripePrices } from '@/lib/billing-admin.functions';
+import { SUPER_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute('/admin/billing')({
   head: () => ({
@@ -29,7 +30,13 @@ export const Route = createFileRoute('/admin/billing')({
       { name: 'description', content: 'Configure direct-debit billing, manage mandates, and view monthly net-employee usage.' },
     ],
   }),
-  component: AdminBilling,
+  // AdminGate was imported but never wired up — this page had no route-level
+  // gate at all (found while giving it a nav entry per the W4 IA redesign).
+  component: () => (
+    <AdminGate allow={SUPER_ADMIN_ONLY}>
+      <AdminBilling />
+    </AdminGate>
+  ),
 });
 
 const REGIONS = [

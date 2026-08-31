@@ -26,6 +26,7 @@ import {
   listRetryPolicies, upsertRetryPolicy,
   exportBillingOpsAuditCsv, listBillingOpsAuditFiltered,
 } from '@/lib/billing-admin.functions';
+import { SUPER_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute('/admin/billing-ops')({
   head: () => ({
@@ -34,7 +35,14 @@ export const Route = createFileRoute('/admin/billing-ops')({
       { name: 'description', content: 'Super-admin dashboard: billing alerts, mandates, invoices, reconciliation, discrepancy reports, audit timeline, and invoice impact preview.' },
     ],
   }),
-  component: BillingOps,
+  // AdminGate was imported but never wired up — its own meta description
+  // already says "Super-admin dashboard," but nothing enforced that at the
+  // route level (found while giving it a nav entry per the W4 IA redesign).
+  component: () => (
+    <AdminGate allow={SUPER_ADMIN_ONLY}>
+      <BillingOps />
+    </AdminGate>
+  ),
 });
 
 function BillingOps() {

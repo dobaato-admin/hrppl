@@ -25,6 +25,8 @@ export type Feature =
   | "platform.blog"
   | "platform.blogIntegrations"
   | "platform.apiDocs"
+  | "platform.billingDirectDebit"
+  | "platform.billingOps"
   // Regional
   | "regional.console"
   // Organization (org_admin + branch_admin + hr + finance, depending)
@@ -52,7 +54,11 @@ export type Feature =
   | "org.payslipTemplates"
   | "org.payroll"
   | "org.expenses"
+  | "org.expenseSettings"
   | "org.documents"
+  | "org.documentTemplates"
+  | "org.onboardingPacks"
+  | "org.employmentVariations"
   | "org.training"
   | "org.trainingCatalog"
   | "org.feedbackTemplates"
@@ -105,6 +111,10 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "platform.blog": SET("super_admin"),
   "platform.blogIntegrations": SET("super_admin"),
   "platform.apiDocs": SET("super_admin", "regional_admin", "org_admin"),
+  // W4 IA: both platform-internal (not the org's own subscription page, which
+  // is settings.billing) — had no route-level gate at all before this wave.
+  "platform.billingDirectDebit": SET("super_admin"),
+  "platform.billingOps": SET("super_admin"),
 
   // Regional
   "regional.console": SET("super_admin", "regional_admin"),
@@ -144,7 +154,26 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "org.payroll": SET("super_admin", "org_admin", "branch_admin", "finance"),
 
   "org.expenses": SET("super_admin", "org_admin", "branch_admin", "finance", "manager"),
+  // Narrower than org.expenses on purpose: this defines what counts as a
+  // valid category, not who can approve a claim. Mirrors org.payslipTemplates
+  // — "define a tenant-wide config" — rather than reusing org.expenses, which
+  // also admits branch_admin/manager (approvers, not policy owners).
+  "org.expenseSettings": SET("super_admin", "org_admin", "finance"),
   "org.documents": SET("super_admin", "org_admin", "branch_admin", "hr", "finance", "manager"),
+  // Matches org.documents — same domain, same admins. Had no route-level
+  // gate at all before this wave.
+  "org.documentTemplates": SET(
+    "super_admin",
+    "org_admin",
+    "branch_admin",
+    "hr",
+    "finance",
+    "manager",
+  ),
+  // Matches admin.onboarding-packs.tsx's own AdminGate allow={ORG_ADMIN_ONLY}.
+  "org.onboardingPacks": SET("super_admin", "org_admin"),
+  // Matches hr.variations.tsx's own inline role check.
+  "org.employmentVariations": SET("super_admin", "org_admin", "hr"),
   "org.training": SET("super_admin", "org_admin", "branch_admin", "hr", "manager"),
   "org.trainingCatalog": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.feedbackTemplates": SET("super_admin", "org_admin", "branch_admin", "hr"),
@@ -260,6 +289,13 @@ export const PLATFORM_OR_ORG_ADMIN: ReadonlySet<AppRole> = SET(
 );
 
 export const SUPER_ADMIN_ONLY: ReadonlySet<AppRole> = SET("super_admin");
+
+/** Matches the org.expenseSettings feature — policy owners, not approvers. */
+export const ORG_ADMIN_OR_FINANCE: ReadonlySet<AppRole> = SET(
+  "super_admin",
+  "org_admin",
+  "finance",
+);
 
 /**
  * Roles that may run an offboarding case.

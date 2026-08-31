@@ -5,6 +5,7 @@ import {
   ADMIN_LAYOUT_ROLES,
   ORG_ADMIN_ONLY,
   ORG_ADMIN_OR_MANAGER,
+  ORG_ADMIN_OR_FINANCE,
   PLATFORM_OR_ORG_ADMIN,
   SUPER_ADMIN_ONLY,
   type AppRole,
@@ -32,6 +33,7 @@ const NAMED: Record<string, ReadonlySet<AppRole>> = {
   ADMIN_LAYOUT_ROLES,
   ORG_ADMIN_ONLY,
   ORG_ADMIN_OR_MANAGER,
+  ORG_ADMIN_OR_FINANCE,
   PLATFORM_OR_ORG_ADMIN,
   SUPER_ADMIN_ONLY,
 };
@@ -68,6 +70,13 @@ const EXPECTED: Record<string, ReadonlySet<AppRole>> = {
 
   // platform console
   "admin.index.tsx": SUPER_ADMIN_ONLY,
+
+  // W4 IA (docs/w4-information-architecture-design.md) — gated for the
+  // first time while giving each page a nav entry.
+  "admin.expenses.tsx": ORG_ADMIN_OR_FINANCE,
+  "admin.billing.tsx": SUPER_ADMIN_ONLY,
+  "admin.billing-ops.tsx": SUPER_ADMIN_ONLY,
+  "org.documents.templates.tsx": ADMIN_LAYOUT_ROLES,
 };
 
 /**

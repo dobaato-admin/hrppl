@@ -41,6 +41,7 @@ import {
   ArrowLeft,
   HelpCircle,
   House,
+  UserCog,
 } from "lucide-react";
 import { HelpMenu } from "@/components/HelpMenu";
 import { GlobalSearch } from "@/components/GlobalSearch";
@@ -599,6 +600,15 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             </SidebarGroup>
           )}
 
+          {/*
+            Regrouped per docs/w4-information-architecture-design.md (W4):
+            the old shape was Team/Leave & time/Payroll/Operations/Insights/
+            Compliance, with Operations alone holding 17 unrelated items in
+            one flat, unscrollable-feeling list. Nothing here changes who can
+            already reach a page that already had a nav entry — only which
+            subgroup lists it, plus a handful of newly-added rows for pages
+            that had no nav entry at all (each marked below).
+          */}
           <FlyoutNavGroup
             label="Organization"
             icon={Building2}
@@ -689,6 +699,19 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     accent: "bg-accent",
                     feature: "org.recruitment",
                   },
+                  {
+                    // NEW — a complete, working workflow with no nav entry
+                    // anywhere before this wave. Its promotion/pay_change
+                    // types are commented out on the page itself (superseded
+                    // by Promotions and Pay rates); the other 5 change types
+                    // have no other home in the app. See
+                    // docs/w4-information-architecture-design.md §2.
+                    title: "Employment variations",
+                    to: "/hr/variations",
+                    icon: UserCog,
+                    accent: "bg-status-working",
+                    feature: "org.employmentVariations",
+                  },
                 ],
               },
               {
@@ -718,7 +741,10 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     feature: "org.leaveTypes",
                   },
                   {
-                    title: "Holiday calendars",
+                    // RENAMED from "Holiday calendars" to match the page's
+                    // own title and stop reading as a near-duplicate of
+                    // "Public holidays" right below it. Same route.
+                    title: "Holiday categories",
                     to: "/admin/holiday-categories",
                     icon: CalendarDays,
                     accent: "bg-status-info",
@@ -806,11 +832,32 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     accent: "bg-status-info",
                     feature: "org.payslipTemplates",
                   },
+                  {
+                    // Moved in from the old flat Operations list — approvals
+                    // are compensation-adjacent, not really an "operation,"
+                    // and this now sits next to the config page it pairs with.
+                    title: "Expenses",
+                    to: "/org/expenses",
+                    icon: Wallet,
+                    accent: "bg-status-done",
+                    feature: "org.expenses",
+                  },
+                  {
+                    // NEW — category/policy config had no nav entry. Gated
+                    // narrower than Expenses on purpose (org.expenseSettings):
+                    // defines what counts as a valid category, not who can
+                    // approve a claim.
+                    title: "Expense categories",
+                    to: "/admin/expenses",
+                    icon: Wallet,
+                    accent: "bg-status-pending",
+                    feature: "org.expenseSettings",
+                  },
                 ],
               },
               {
-                title: "Operations",
-                icon: FileSignature,
+                title: "Onboarding",
+                icon: GraduationCap,
                 accent: "bg-status-info",
                 items: [
                   {
@@ -828,12 +875,21 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     feature: "org.console",
                   },
                   {
-                    title: "AU STP2 & Payday Super audit",
-                    to: "/admin/au-stp-audit",
-                    icon: ShieldAlert,
-                    accent: "bg-status-stuck",
-                    feature: "org.console",
+                    // NEW — defines what an onboarding pack contains; had no
+                    // nav entry. Inherits its own AdminGate allow={ORG_ADMIN_ONLY}.
+                    title: "Onboarding packs",
+                    to: "/admin/onboarding-packs",
+                    icon: Package,
+                    accent: "bg-accent",
+                    feature: "org.onboardingPacks",
                   },
+                ],
+              },
+              {
+                title: "Performance & growth",
+                icon: Sparkles,
+                accent: "bg-accent",
+                items: [
                   {
                     title: "Performance reviews",
                     to: "/org/performance",
@@ -842,52 +898,17 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     feature: "org.performance",
                   },
                   {
-                    title: "Missing info requests",
-                    to: "/admin/id-requests",
-                    icon: Inbox,
+                    title: "Review cycles",
+                    to: "/admin/review-cycles",
+                    icon: TrendingUp,
                     accent: "bg-status-pending",
-                    feature: "org.idRequests",
+                    feature: "org.reviewTemplates",
                   },
                   {
-                    title: "Documents",
-                    to: "/org/documents",
-                    icon: FileSignature,
+                    title: "Review analytics",
+                    to: "/admin/review-analytics",
+                    icon: TrendingUp,
                     accent: "bg-status-info",
-                    feature: "org.documents",
-                  },
-                  {
-                    title: "Expenses",
-                    to: "/org/expenses",
-                    icon: Wallet,
-                    accent: "bg-status-done",
-                    feature: "org.expenses",
-                  },
-                  {
-                    title: "Training",
-                    to: "/org/training",
-                    icon: BookOpen,
-                    accent: "bg-status-info",
-                    feature: "org.training",
-                  },
-                  {
-                    title: "Training catalog",
-                    to: "/admin/training",
-                    icon: GraduationCap,
-                    accent: "bg-accent",
-                    feature: "org.trainingCatalog",
-                  },
-                  {
-                    title: "Feedback templates",
-                    to: "/admin/feedback-templates",
-                    icon: Sparkles,
-                    accent: "bg-accent",
-                    feature: "org.feedbackTemplates",
-                  },
-                  {
-                    title: "Review templates",
-                    to: "/admin/review-templates",
-                    icon: ClipboardCheck,
-                    accent: "bg-status-working",
                     feature: "org.reviewTemplates",
                   },
                   {
@@ -912,25 +933,91 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                     feature: "org.reviewTemplates",
                   },
                   {
-                    title: "Review cycles",
-                    to: "/admin/review-cycles",
-                    icon: TrendingUp,
-                    accent: "bg-status-pending",
+                    title: "Review templates",
+                    to: "/admin/review-templates",
+                    icon: ClipboardCheck,
+                    accent: "bg-status-working",
                     feature: "org.reviewTemplates",
                   },
                   {
-                    title: "Review analytics",
-                    to: "/admin/review-analytics",
-                    icon: TrendingUp,
-                    accent: "bg-status-info",
-                    feature: "org.reviewTemplates",
+                    title: "Feedback templates",
+                    to: "/admin/feedback-templates",
+                    icon: Sparkles,
+                    accent: "bg-accent",
+                    feature: "org.feedbackTemplates",
                   },
                   {
+                    // Its own system (onboarding templates, training bundles,
+                    // document-request templates, a review-templates
+                    // shortcut) — not a hub for the other four template pages
+                    // in this subgroup. Five things named "template" reading
+                    // as five different things is the actual fix here; see
+                    // docs/w4-information-architecture-design.md §2.
                     title: "Templates Hub",
                     to: "/admin/templates",
                     icon: ClipboardCheck,
                     accent: "bg-accent",
                     feature: "org.reviewTemplates",
+                  },
+                ],
+              },
+              {
+                title: "Learning",
+                icon: BookOpen,
+                accent: "bg-status-info",
+                items: [
+                  {
+                    title: "Training",
+                    to: "/org/training",
+                    icon: BookOpen,
+                    accent: "bg-status-info",
+                    feature: "org.training",
+                  },
+                  {
+                    title: "Training catalog",
+                    to: "/admin/training",
+                    icon: GraduationCap,
+                    accent: "bg-accent",
+                    feature: "org.trainingCatalog",
+                  },
+                ],
+              },
+              {
+                title: "Records",
+                icon: FileSignature,
+                accent: "bg-status-info",
+                items: [
+                  {
+                    title: "Documents",
+                    to: "/org/documents",
+                    icon: FileSignature,
+                    accent: "bg-status-info",
+                    feature: "org.documents",
+                  },
+                  {
+                    // NEW — document-envelope templates had no nav entry.
+                    title: "Document templates",
+                    to: "/org/documents/templates",
+                    icon: FileSignature,
+                    accent: "bg-status-pending",
+                    feature: "org.documentTemplates",
+                  },
+                  {
+                    // Moved in from the old flat Operations list — a
+                    // regulatory audit reads as records/paperwork, not an
+                    // operation.
+                    title: "AU STP2 & Payday Super audit",
+                    to: "/admin/au-stp-audit",
+                    icon: ShieldAlert,
+                    accent: "bg-status-stuck",
+                    feature: "org.console",
+                  },
+                  {
+                    title: "Missing info requests",
+                    to: "/admin/id-requests",
+                    icon: Inbox,
+                    accent: "bg-status-pending",
+                    feature: "org.idRequests",
                   },
                 ],
               },
@@ -956,7 +1043,7 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                 ],
               },
               {
-                title: "Compliance",
+                title: "Compliance & safety",
                 icon: ShieldAlert,
                 accent: "bg-status-stuck",
                 items: [
@@ -1084,6 +1171,29 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
                       to: "/platform/invitations",
                       icon: UserCircle,
                       accent: "bg-status-pending",
+                    }}
+                  />
+                  {/*
+                    NEW — both pages existed with no nav entry AND no
+                    route-level gate at all (AdminGate was imported but never
+                    wired up); fixed alongside adding these links. Platform-
+                    internal, not the org's own subscription page (that's
+                    Settings → Billing).
+                  */}
+                  <NavLinkButton
+                    item={{
+                      title: "Billing — direct debit",
+                      to: "/admin/billing",
+                      icon: CreditCard,
+                      accent: "bg-status-done",
+                    }}
+                  />
+                  <NavLinkButton
+                    item={{
+                      title: "Billing — internal ops",
+                      to: "/admin/billing-ops",
+                      icon: CreditCard,
+                      accent: "bg-status-info",
                     }}
                   />
 

@@ -24,11 +24,17 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useMyTenantId } from "@/hooks/use-tenant";
+import { localYmd } from "@/lib/work-date";
 
+// "promotion" and "pay_change" are deliberately not offered here — each is
+// superseded by a more specialized, already-in-nav page: org.promotions.tsx
+// (which additionally auto-proposes a pay-rate change at the designation's
+// band midpoint on approval) and org.pay-rates.tsx / pay_rate_changes,
+// respectively. Left in the server-side VariationType enum in case any draft
+// rows already use them; only the picker here is narrowed. See
+// docs/w4-information-architecture-design.md §2/§6.
 const TYPES = [
-  "promotion",
   "transfer",
-  "pay_change",
   "hours_change",
   "role_change",
   "department_change",
@@ -90,8 +96,8 @@ function Page() {
 
   const [open, setOpen] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
-  const [type, setType] = useState<(typeof TYPES)[number]>("pay_change");
-  const [effectiveDate, setEffectiveDate] = useState(new Date().toISOString().slice(0, 10));
+  const [type, setType] = useState<(typeof TYPES)[number]>("transfer");
+  const [effectiveDate, setEffectiveDate] = useState(localYmd(new Date()));
   const [notes, setNotes] = useState("");
   const [proposedJson, setProposedJson] = useState('{"base_salary": 0}');
 

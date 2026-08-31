@@ -208,7 +208,7 @@ function OrgInvitationsPage() {
               label="Payroll"
               done={payrollComplete}
               detail={payrollComplete ? "Pay items, dates, currency configured" : (missingPayroll.length ? `Outstanding: ${missingPayroll.join(", ")}` : "Pending")}
-              wizardLabel="Open payroll wizard"
+              wizardLabel="Open payroll checklist"
               to="/admin/payroll-setup-wizard"
             />
             <ReadinessRow

@@ -11,7 +11,7 @@
 | W3.2 · Leave & holidays | **Done** |
 | W3.1 · KPI/KRA distribution | **Done** |
 | W3.3 · WFH + geofence exception | **Done** |
-| W4 · Information architecture | Next (design doc first) |
+| W4 · Information architecture | **Done** |
 
 ## Working agreement
 
@@ -534,7 +534,20 @@ geofence validation, which is asymmetric.
 
 ## Wave 4 — Information architecture (design doc first, then code)
 
-**Deliverable 1 — a published design document.** No code until it is approved.
+**Both deliverables done — see `docs/w4-information-architecture-design.md`.** All 5 open
+decisions resolved (§6): the payroll wizards turned out to be two different live flows, not
+duplicates, just renamed for clarity ("Payroll configuration wizard" / "Pre-invite payroll
+checklist"); `hr.variations.tsx` kept, narrowed to its 5 non-redundant change types. Deliverable 2
+(`feat/w4-information-architecture`) applied the regroup directly in `AppShell.tsx`: Organization's
+6 uneven sections (one 17 items long) become 9, none over 9; 5 new nav entries for pages that had
+none (2 of which — `admin.billing.tsx`/`admin.billing-ops.tsx` — turned out to have **no
+route-level gate at all**, `AdminGate` imported but never wired up, found only while adding their
+nav links); the dashboard's quick-access picker extended to `finance` (the only role that
+genuinely had nothing — `hr`/`branch_admin` already had it, contrary to the design doc's first
+guess). Not done, explicitly deferred: extracting nav data into a shared module consumed by
+`GlobalSearch` too (existing `tests/nav-integrity.test.ts` already covers uniqueness/resolution
+without it); the two dead-orphan redirects (`me.dashboard.tsx`, `admin.security-findings.tsx`); the
+`<title>`/nav-label naming pass beyond the renames already done.
 
 The raw material, all measured: **101 sidebar items** across 8 groups, of which *Organization*
 alone is 51 (half the nav) with an 18-item "Operations" accordion. 104 clickable destinations

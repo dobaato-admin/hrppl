@@ -15,10 +15,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Copy, Archive, CheckCircle2, Pencil, Eye, AlertTriangle, Sparkles } from "lucide-react";
+import { AdminGate } from "@/components/AdminGate";
+import { ADMIN_LAYOUT_ROLES } from "@/lib/rbac";
 
 export const Route = createFileRoute("/org/documents/templates")({
   head: () => ({ meta: [{ title: "Document templates — hrppl" }] }),
-  component: TemplatesPage,
+  // Had no route-level gate at all — found while giving it a nav entry per
+  // the W4 IA redesign. Explicit allow, not a bare <AdminGate>, per
+  // tests/admin-gate-role-sets.test.ts.
+  component: () => (
+    <AdminGate allow={ADMIN_LAYOUT_ROLES}>
+      <TemplatesPage />
+    </AdminGate>
+  ),
 });
 
 const MERGE_HINTS = [
