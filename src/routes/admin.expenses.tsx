@@ -13,7 +13,7 @@ import { listEmployeesForAdmin } from "@/lib/timeline.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { AdminGate } from "@/components/AdminGate";
-import { ADMIN_LAYOUT_ROLES } from "@/lib/rbac";
+import { ORG_ADMIN_OR_FINANCE } from "@/lib/rbac";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,7 +30,7 @@ import { Plus, Trash2, Pencil } from "lucide-react";
 export const Route = createFileRoute("/admin/expenses")({
   head: () => ({ meta: [{ title: "Expense settings — hrppl" }] }),
   component: () => (
-    <AdminGate allow={ADMIN_LAYOUT_ROLES}>
+    <AdminGate allow={ORG_ADMIN_OR_FINANCE}>
       <AdminExpensesPage />
     </AdminGate>
   ),
