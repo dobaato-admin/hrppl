@@ -70,7 +70,7 @@ function PayrollSetupPage() {
       subtitle="Pay period, hours, breaks, and component lines"
       actions={
         <div className="flex gap-2">
-          <Link to="/admin/payroll-wizard"><Button variant="default" size="sm">Open setup wizard</Button></Link>
+          <Link to="/admin/payroll-wizard"><Button variant="default" size="sm">Open configuration wizard</Button></Link>
           <Link to="/dashboard"><Button variant="outline" size="sm">Back to dashboard</Button></Link>
         </div>
       }

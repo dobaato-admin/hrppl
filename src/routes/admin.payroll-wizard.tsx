@@ -32,7 +32,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/payroll-wizard")({
-  head: () => ({ meta: [{ title: "Payroll setup wizard — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Payroll configuration wizard — HRPPL" }] }),
   component: () => (
     <AdminGate allow={ORG_ADMIN_ONLY}>
       <Wizard />
@@ -104,7 +104,7 @@ function Wizard() {
   });
 
   if (!user || !rolesLoaded) {
-    return <AppShell title="Payroll setup wizard"><main className="p-6 text-muted-foreground">Loading…</main></AppShell>;
+    return <AppShell title="Payroll configuration wizard"><main className="p-6 text-muted-foreground">Loading…</main></AppShell>;
   }
   const tenant = (org.data as any)?.tenant;
   const countrySettings = (org.data as any)?.countryPayrollSettings;
@@ -263,7 +263,7 @@ function Wizard() {
   }
 
   return (
-    <AppShell title="Payroll setup wizard">
+    <AppShell title="Payroll configuration wizard">
       <a href="#wizard-main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground">
         Skip to wizard content
       </a>
