@@ -534,7 +534,16 @@ geofence validation, which is asymmetric.
 
 ## Wave 4 — Information architecture (design doc first, then code)
 
-**Deliverable 1 — a published design document.** No code until it is approved.
+**Deliverable 1 — 3 of 5 open decisions resolved, 2 remain.** See
+`docs/w4-information-architecture-design.md` for the full regrouped nav tree, the file-level
+duplicate/orphan resolution table, the per-role dashboard proposal, and its §6 for what's settled
+vs. still open (a payroll-wizard naming choice; whether `hr.variations.tsx` should reconcile with
+`org.promotions.tsx`). Tracing what actually links to each "orphan" route overturned two of the
+original findings: all "4 orphaned setup wizards" turned out to be a working readiness-gate
+pattern already reached from `org.invitations.tsx`, and `hr.variations.tsx` — assumed to be a
+design/style preview — is a complete, unlinked "Employment variations" feature that duplicates
+`org.promotions.tsx`'s promotion flow in a separate table. No code until Deliverable 1 is fully
+approved.
 
 The raw material, all measured: **101 sidebar items** across 8 groups, of which *Organization*
 alone is 51 (half the nav) with an 18-item "Operations" accordion. 104 clickable destinations
