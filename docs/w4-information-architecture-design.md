@@ -265,35 +265,58 @@ prop passes the same string. This is mechanical once §4's tree is approved — 
 
 ---
 
-## 8. Rollout plan (Deliverable 2 — not started, listed here for scope only)
+## 8. Rollout plan — status
 
-1. Extract the nav arrays from `AppShell.tsx` into a shared, typed tree (`src/lib/nav-tree.ts`) —
-   groups, sections, items, each with `{ title, to, icon, accent, feature?, hideWhen? }`. `AppShell`
-   and `GlobalSearch` both render from it.
-2. Apply §4's regroup to that tree. No route files move; only which group/section lists which
-   `to` changes.
-3. Add the redirects from §2 (`me.dashboard.tsx` → `/dashboard`, `admin.security-findings.tsx` →
-   `/admin/security`) as TanStack Start redirect routes, not deletions — bookmarks and any external
-   links must keep resolving. **No redirect for either payroll wizard or the two other setup
-   wizards** — all four are live, correctly-scoped flows reached from `org.invitations.tsx`, not
-   duplicates; only the two payroll titles need renaming (§6.1), which is a label change, not a
-   route change.
-4. ~~Fold the four template pages into `Templates Hub`'s tabs~~ — dropped; §2/§4 correct this once
-   `admin.templates.tsx` turned out to be its own system, not a hub for the other four. No page
-   merge in this wave.
-5. Add nav entries for the confirmed real gaps: `admin.expenses.tsx` (gated `org.expenseSettings`,
-   resolved), `admin.onboarding-packs.tsx` (its existing `ORG_ADMIN_ONLY` gate),
-   `org.documents.templates.tsx` (existing gate, whatever it is — check before adding), and
-   `hr.variations.tsx` (its existing inline gate) — none blocked on §6's two remaining items.
-6. Rename "Holiday calendars" → "Holiday categories," and the two payroll wizard titles per §6.1
-   once you've picked the wording.
-7. `dashboard.tsx`: role-conditional admin shortcuts / quick-access defaults per §5, fix the two
-   hardcoded board rows.
-8. `tests/nav-uniqueness.test.ts` — every `to` in the shared tree is unique, and every `to` resolves
-   against `FileRoutesByFullPath` in `routeTree.gen.ts` (same pattern `tests/requests-links.test.ts`
-   already uses for the requests inbox — reuse it, don't reinvent it).
-9. Naming pass per §7, scoped to pages actually touched by 1–8 (not a repo-wide rename in this
-   wave).
+Branch `feat/w4-information-architecture`.
+
+1. **Done** — §4's Organization regroup applied directly in `AppShell.tsx` (9 subgroups, none over
+   9 items). **Not done**: extracting the nav arrays into a shared `src/lib/nav-tree.ts` consumed by
+   both `AppShell` and `GlobalSearch` (§3's recommendation) — deferred. `tests/nav-integrity.test.ts`
+   already existed (found while starting this step) and regex-scans `AppShell.tsx` directly for
+   uniqueness + route-resolution, so the safety net §8.8 wanted was already in place and needed no
+   new file — it passed unchanged against every new/moved entry below. `GlobalSearch` is still a
+   second, hand-maintained registry; it does not yet reflect this regroup.
+2. `me.dashboard.tsx` → `/dashboard` and `admin.security-findings.tsx` → `/admin/security`
+   redirects: **not done** — the two orphan pages still exist un-redirected. No redirect needed for
+   the payroll/overtime/leave wizards (confirmed not duplicates).
+3. Template pages: **not merged**, per the corrected §2/§4 — regrouped by domain instead.
+4. New nav entries — **done**, gates resolved during implementation, not assumed:
+   - `admin.expenses.tsx` → Payroll, gate narrowed from `ADMIN_LAYOUT_ROLES` to new
+     `org.expenseSettings` / `ORG_ADMIN_OR_FINANCE`.
+   - `admin.onboarding-packs.tsx` → Onboarding, kept its own `ORG_ADMIN_ONLY`.
+   - `org.documents.templates.tsx` → Records. Had **no route-level gate at all**; added
+     `AdminGate allow={ADMIN_LAYOUT_ROLES}` (found only while wiring the nav entry).
+   - `hr.variations.tsx` → Team, as "Employment variations." Its `promotion`/`pay_change` type
+     options are commented out on the page (server-side enum left alone) per §6.2.
+   - `admin.billing.tsx` and `admin.billing-ops.tsx` → Super admin. **Both had `AdminGate`
+     imported but never wired up** — genuinely no route-level gate despite
+     `admin.billing-ops.tsx`'s own meta description already saying "Super-admin dashboard." Fixed
+     with `SUPER_ADMIN_ONLY` alongside adding the nav entries; not something the design phase had
+     found.
+5. **Done** — "Holiday calendars" → "Holiday categories"; payroll wizard titles renamed to "Payroll
+   configuration wizard" and "Pre-invite payroll checklist" (§6.1), including the cross-link labels
+   on `org.invitations.tsx` and the "Open setup wizard" button on `admin.payroll-setup.tsx`.
+6. **Done** — `dashboard.tsx`'s quick-access picker (`ManagerQuickAccess`) now renders for
+   `finance` too (it already rendered for `manager`/`hr`/`branch_admin`/`org_admin`/`super_admin` —
+   the design doc's original claim that hr/branch_admin saw nothing was wrong; only `finance` truly
+   had no admin-facing section at all), with role-aware default seed keys per §5, still fully
+   user-customizable via the existing `manager_quick_access` mechanism (no schema change). Also
+   fixed, found while in this code: the quick-access card's description rendered the raw route
+   `href` — changed to the tile's `group` label. **Not fixed**: the two hardcoded board-row
+   statuses ("Personal documents," "Notification preferences") — needs a real data source, not a
+   one-line change; left as a follow-up rather than fabricating a heuristic.
+7. **Not done** — a dedicated `tests/nav-uniqueness.test.ts`; unnecessary, see item 1.
+   `tests/admin-gate-role-sets.test.ts` extended instead, pinning the 4 gates fixed/narrowed above.
+8. **Not done** — the naming-convention pass from §7 (nav label = `<title>` = `<h1>`) beyond the
+   renames already listed under item 5.
+9. **Also fixed in passing**: `tests/geofence-reconciliation.test.ts` (W3.3) hardcoded a calendar
+   date for "now," which failed once real time passed outside its assumed 24h window — same bug
+   class the test exists to catch, just in the test. Made relative to `Date.now()`.
+
+**Verified**: `tsc --noEmit` clean; full suite at the documented baseline (846 → 850 passed, the
++4 from new gate-contract tests; still 4 failed / 5 skipped, no new failures);
+`tests/nav-integrity.test.ts` and `tests/admin-gate-role-sets.test.ts` both green against every
+change above.
 
 ---
 
