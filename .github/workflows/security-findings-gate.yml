@@ -47,14 +47,8 @@ jobs:
           echo
           COUNT=-1
           if [ "$HTTP_CODE" = "200" ]; then
-            COUNT=$(python3 -c "
-import json, sys
-try:
-    d = json.load(open('/tmp/resp.json'))
-    print(d.get('open_high_critical', d.get('result', {}).get('open_high_critical', -1)))
-except Exception:
-    print(-1)
-")
+            COUNT=$(jq -r '.open_high_critical // .result.open_high_critical // -1' /tmp/resp.json 2>/dev/null || echo -1)
+            case "$COUNT" in ''|*[!0-9-]*) COUNT=-1 ;; esac
           fi
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
       - name: Fail if any open high/critical findings
