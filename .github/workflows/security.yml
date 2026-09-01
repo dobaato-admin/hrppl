@@ -71,7 +71,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy
-        uses: aquasecurity/trivy-action@0.28.0
+        # Was "@0.28.0" - no such tag (aquasecurity/trivy-action tags are all
+        # "vX.Y.Z"), so GitHub couldn't resolve the action at all and the job
+        # failed in the setup phase before running anything, distinct from
+        # the bun.lock/misconfig content issue fixed separately. Confirmed
+        # v0.28.0 exists via the GitHub tags API before pinning to it.
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           scan-type: fs
           scan-ref: .
