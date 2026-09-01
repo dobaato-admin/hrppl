@@ -27,15 +27,35 @@ jobs:
       - name: Query findings portal
         id: query
         env:
-          API_BASE: ${{ vars.SECURITY_FINDINGS_API_BASE || 'https://hrppl.lovable.app' }}
+          # Was defaulting to hrppl.lovable.app — a stale pre-Vercel-migration
+          # domain (see CLAUDE.md "Deployment — Vercel": the live app is
+          # hrppl.vercel.app). That domain 302-redirected with an empty body,
+          # which curl's -f does not treat as a failure (redirects aren't
+          # 4xx/5xx), so the fallback below never triggered and the empty
+          # body reached `python3 -c json.load(...)`, which threw — a hard
+          # script error under `set -e`, not the graceful "not blocking"
+          # path this job's own comment says it should take.
+          API_BASE: ${{ vars.SECURITY_FINDINGS_API_BASE || 'https://hrppl.vercel.app' }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           echo "Querying ${API_BASE}/_serverFn/countOpenHighSeverityFindings"
-          RESP=$(curl -fsS -X GET \
+          HTTP_CODE=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X GET \
             "${API_BASE}/_serverFn/countOpenHighSeverityFindings" \
-            -H "Accept: application/json" || echo '{"open_high_critical":-1}')
-          echo "Response: $RESP"
-          COUNT=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('open_high_critical', d.get('result',{}).get('open_high_critical', -1)))")
+            -H "Accept: application/json" || echo "000")
+          echo "HTTP status: $HTTP_CODE"
+          cat /tmp/resp.json 2>/dev/null || true
+          echo
+          COUNT=-1
+          if [ "$HTTP_CODE" = "200" ]; then
+            COUNT=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('/tmp/resp.json'))
+    print(d.get('open_high_critical', d.get('result', {}).get('open_high_critical', -1)))
+except Exception:
+    print(-1)
+")
+          fi
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
       - name: Fail if any open high/critical findings
         run: |
@@ -60,5 +80,21 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - name: Fail on high/critical CVEs in production dependencies
-        run: bun audit --prod --severity high
+      - name: Fail on high/critical CVEs
+        # `--prod` and `--severity` are not flags this bun `audit` recognizes
+        # (`bun audit --help`: --json, --audit-level=<val>, --ignore=<val>,
+        # --latest) — the previous command errored on argument parsing before
+        # ever running an audit, on every run, regardless of findings.
+        # `--audit-level=high` matches high AND above (critical), per bun's
+        # own "greater than or equal to <level>" semantics.
+        #
+        # GHSA-96hv-2xvq-fx4p (ws memory-exhaustion DoS, <8.21.0) is ignored:
+        # `bun audit fix` (2026-09-01) cleared 44 of 45 in-range findings;
+        # this one's dependents (@tanstack/devtools-bundler-core's vite
+        # plugin, and react-email's socket.io->socket.io-adapter chain) both
+        # pin `ws@~8.20.1` themselves, so bumping past it needs `--latest`
+        # (crosses their declared ranges) or an upstream release. Both paths
+        # are dev-tooling (Vite devtools panel, local email preview), not
+        # code shipped to end users. Revisit by dropping this --ignore once
+        # either dependent bumps its own ws range.
+        run: bun audit --audit-level=high --ignore=GHSA-96hv-2xvq-fx4p
