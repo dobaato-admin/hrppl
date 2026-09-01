@@ -25,7 +25,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Audit dependencies (fail on high/critical)
-        run: bun audit --prod --severity high
+        # Same fix as security-findings-gate.yml's deps-cve-gate job: --prod
+        # and --severity are not flags this bun's `audit` recognizes (only
+        # --json, --audit-level, --ignore, --latest), so the old command
+        # errored on argument parsing before ever auditing anything.
+        # GHSA-96hv-2xvq-fx4p is ignored for the same reason documented
+        # there: blocked by two dependents' own ws@~8.20.1 pin, dev-tooling
+        # paths only (Vite devtools panel, local email preview).
+        run: bun audit --audit-level=high --ignore=GHSA-96hv-2xvq-fx4p
 
   secret-scan:
     name: Secret scanning (gitleaks)
