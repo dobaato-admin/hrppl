@@ -5,7 +5,11 @@ import {
   MY_ITEMS,
   MY_SECTIONS,
   NAV_DESTINATIONS,
+  NAV_ITEM_BY_PATH,
+  ROLE_PRIMARY,
+  roleShortcuts,
 } from "../src/lib/nav-tree";
+import { can, type AppRole } from "../src/lib/rbac";
 
 /**
  * Finalization Plan §1 #3 — "Multiple navigation entries lead to the same
@@ -129,5 +133,64 @@ describe("the registry is complete", () => {
     }
     const over = [...bySection.entries()].filter(([, n]) => n > 9);
     expect(over).toEqual([]);
+  });
+});
+
+describe("role shortcuts are shortcuts, not a second nav", () => {
+  it("every shortcut points at a real destination in the canonical tree", () => {
+    // A shortcut that resolves to nothing renders as a missing row, which is
+    // worse than not offering it.
+    const broken: string[] = [];
+    for (const [role, paths] of Object.entries(ROLE_PRIMARY)) {
+      for (const to of paths ?? []) {
+        if (!NAV_ITEM_BY_PATH[to]) broken.push(`${role} -> ${to}`);
+      }
+    }
+    expect(broken).toEqual([]);
+  });
+
+  it("never offers a role a shortcut that role cannot open", () => {
+    /**
+     * The whole point of W5 was removing rows that render and then refuse.
+     * A shortcut surface is the easiest possible way to reintroduce them, so
+     * this asserts the resolved list for each role contains only destinations
+     * that role's own feature keys admit.
+     */
+    const offenders: string[] = [];
+    for (const role of Object.keys(ROLE_PRIMARY) as AppRole[]) {
+      for (const d of roleShortcuts([role], can)) {
+        if (d.feature && !can(d.feature, [role])) offenders.push(`${role} -> ${d.to}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("gives every non-employee role a usable set, and employees none", () => {
+    // An employee's My workspace already is their section; repeating it above
+    // would be noise, not a shortcut.
+    expect(roleShortcuts(["employee"], can)).toEqual([]);
+    for (const role of ["org_admin", "hr", "finance", "manager", "branch_admin"] as AppRole[]) {
+      const n = roleShortcuts([role], can).length;
+      expect(n, `${role} has ${n} shortcuts`).toBeGreaterThanOrEqual(2);
+      // Kept short on purpose: a shortcut list long enough to need scanning is
+      // just the nav again.
+      expect(n, `${role} has ${n} shortcuts`).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it("merges the union for additive roles, in precedence order", () => {
+    // Roles are additive, so someone holding hr and finance does both jobs.
+    const both = roleShortcuts(["hr", "finance"], can).map((d) => d.to);
+    expect(both).toContain("/org/recruitment");
+    expect(both).toContain("/org/payroll");
+    // hr comes first in precedence, so its rows lead.
+    expect(both.indexOf("/org/employees")).toBeLessThan(both.indexOf("/org/payroll"));
+  });
+
+  it("finance leads with the thing finance exists to do", () => {
+    // The reported bug was Organization -> Run payroll answering "Forbidden"
+    // for finance. Beyond fixing the gate, payroll should not be three levels
+    // down for the role whose job it is.
+    expect(roleShortcuts(["finance"], can)[0]?.to).toBe("/org/payroll");
   });
 });

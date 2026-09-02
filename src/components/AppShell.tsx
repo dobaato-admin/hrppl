@@ -55,6 +55,8 @@ import {
   MY_SECTIONS,
   PRACTICE_ITEMS,
   MANAGER_ITEMS,
+  NAV_ITEM_BY_PATH,
+  roleShortcuts,
   ORG_ITEMS,
   ORG_SECTIONS,
   REGIONAL_ITEMS,
@@ -115,6 +117,33 @@ function PlainNavGroup({
           {visible.map((item) => (
             <NavLinkButton key={item.to} item={item} />
           ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+/**
+ * "Your work" — the destinations this user's roles are actually for.
+ *
+ * Rendered from ROLE_PRIMARY, resolved against the canonical nav tree, and
+ * filtered by the same can() every other row uses. A shortcut to a page the
+ * caller cannot open is dropped rather than shown, so this surface cannot
+ * reintroduce a dead link.
+ */
+function RoleShortcuts({ roles }: { roles: import("@/lib/rbac").AppRole[] }) {
+  const items = roleShortcuts(roles, can);
+  if (items.length === 0) return null;
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>Your work</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((d) => {
+            const canonical = NAV_ITEM_BY_PATH[d.to];
+            if (!canonical) return null;
+            return <NavLinkButton key={`shortcut-${d.to}`} item={canonical} />;
+          })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
@@ -432,7 +461,12 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             items={PRACTICE_ITEMS}
           />
 
-          <PlainNavGroup label="Manager" items={MANAGER_ITEMS} roles={roles} />
+          {/* W5 · Was a hardcoded "Manager" group serving exactly one role.
+              Every role now gets the four or so destinations it actually works
+              in, at the top level instead of three deep inside a flyout —
+              "Run payroll" was Organization -> Payroll -> Run payroll for the
+              role whose whole job it is. */}
+          <RoleShortcuts roles={roles} />
 
           {/*
             Regrouped per docs/w4-information-architecture-design.md (W4):

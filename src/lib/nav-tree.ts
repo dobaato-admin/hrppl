@@ -1125,3 +1125,99 @@ export const NAV_DESTINATIONS: NavDestination[] = [
   ...flatten("Account", ACCOUNT_ITEMS),
   ...flatten("Help", HELP_ITEMS),
 ];
+
+// ---------------------------------------------------------------------------
+// Role-primary shortcuts
+// ---------------------------------------------------------------------------
+
+/**
+ * The handful of destinations each role actually works in, surfaced at the top
+ * of the sidebar instead of buried in the Organization flyout.
+ *
+ * The problem this solves, in one example: `finance` exists to run payroll, and
+ * "Run payroll" sat three levels down — Organization -> Payroll -> Run payroll —
+ * behind a flyout, alongside 50 rows that role never touches. The Manager group
+ * had solved this for exactly one role by hand; this generalises it.
+ *
+ * These are SHORTCUTS, not destinations. They are deliberately not part of
+ * NAV_DESTINATIONS, which stays the canonical one-entry-per-page registry that
+ * tests/nav-integrity.test.ts holds unique — a shortcut is a second way to
+ * reach a page, not a second page. Each entry is a path that must resolve to a
+ * real destination the role can already see; a shortcut can therefore never be
+ * a dead link, and never grants access on its own.
+ *
+ * Roles are additive here as everywhere: someone holding `hr` and `finance`
+ * gets the union, in role-precedence order.
+ */
+export const ROLE_PRIMARY: Partial<Record<AppRole, string[]>> = {
+  super_admin: ["/admin", "/platform/tenants", "/org/employees", "/org/payroll"],
+  regional_admin: ["/regional", "/admin/holiday-calendar"],
+  // The broadest tenant role — the four things an owner opens most.
+  org_admin: ["/org", "/org/employees", "/org/payroll", "/org/roles"],
+  // org_admin minus the org-defining powers, so no /org/roles here.
+  branch_admin: ["/org/employees", "/admin/requests", "/org/timesheets", "/admin/assets"],
+  // People operations: hiring, records, time off, joiners.
+  hr: ["/org/employees", "/org/recruitment", "/org/leave", "/org/onboarding/tracker"],
+  // Money. "Run payroll" first, because that is the job.
+  finance: ["/org/payroll", "/org/pay-rates", "/org/expenses", "/org/reports"],
+  // Was the hardcoded "Manager" group; now expressed like every other role.
+  manager: ["/team", "/admin/requests", "/org/timesheets", "/org/leave"],
+  // Deliberately absent: for an employee, My workspace already IS this section.
+  // Adding a shortcut group would just repeat the group directly beneath it.
+};
+
+/**
+ * Every NavItem by its path — shortcuts render the canonical item (its icon,
+ * accent and title) rather than a second definition that could drift from it.
+ */
+export const NAV_ITEM_BY_PATH: Record<string, NavItem> = Object.fromEntries(
+  [
+    ...MY_ITEMS,
+    ...MY_SECTIONS.flatMap((s) => s.items),
+    ...PRACTICE_ITEMS,
+    ...MANAGER_ITEMS,
+    ...ORG_ITEMS,
+    ...ORG_SECTIONS.flatMap((s) => s.items),
+    ...REGIONAL_ITEMS,
+    ...SUPER_ADMIN_ITEMS,
+    ...ACCOUNT_ITEMS,
+    ...HELP_ITEMS,
+  ].map((i) => [i.to, i]),
+);
+
+/** Role precedence, broadest first — the order shortcuts are merged in. */
+const ROLE_ORDER: AppRole[] = [
+  "super_admin",
+  "regional_admin",
+  "org_admin",
+  "branch_admin",
+  "hr",
+  "finance",
+  "manager",
+  "employee",
+];
+
+/**
+ * The shortcut rows to show this user, resolved against the canonical tree.
+ *
+ * Anything the caller cannot see is dropped rather than rendered as a refusal,
+ * so this surface cannot reintroduce the dead links W5 spent its time removing.
+ */
+export function roleShortcuts(
+  roles: readonly AppRole[],
+  canUse: (feature: Feature, roles: readonly AppRole[]) => boolean,
+): NavDestination[] {
+  const wanted: string[] = [];
+  for (const role of ROLE_ORDER) {
+    if (!roles.includes(role)) continue;
+    for (const to of ROLE_PRIMARY[role] ?? []) if (!wanted.includes(to)) wanted.push(to);
+  }
+  const out: NavDestination[] = [];
+  for (const to of wanted) {
+    const d = NAV_DESTINATIONS.find((x) => x.to === to);
+    if (!d) continue;
+    if (d.feature && !canUse(d.feature, roles)) continue;
+    out.push(d);
+  }
+  return out;
+}
