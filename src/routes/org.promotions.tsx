@@ -40,10 +40,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { listPromotions, proposePromotion, decidePromotion } from "@/lib/hr-extras.functions";
 import { useMyTenantId } from "@/hooks/use-tenant";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/promotions")({
   head: () => ({ meta: [{ title: "Promotions — hrppl" }] }),
-  component: PromotionsPage,
+  component: () => (
+    <AdminGate feature="org.promotions">
+      <PromotionsPage />
+    </AdminGate>
+  ),
 });
 
 function PromotionsPage() {

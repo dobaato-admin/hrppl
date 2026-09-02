@@ -14,10 +14,15 @@ import {
 } from "@/components/ui/dialog";
 import { listClients, upsertClient } from "@/lib/practice.functions";
 import { toast } from "sonner";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/practice/clients")({
   head: () => ({ meta: [{ title: "Clients — WorldPay HRMS" }] }),
-  component: ClientsPage,
+  component: () => (
+    <AdminGate feature="practice.console">
+      <ClientsPage />
+    </AdminGate>
+  ),
 });
 
 function ClientsPage() {

@@ -59,3 +59,6 @@ coverage/
 
 # Vercel build output (Build Output API v3) and local project link
 .vercel/
+
+# Playwright MCP session output (snapshots, console logs)
+.playwright-mcp/

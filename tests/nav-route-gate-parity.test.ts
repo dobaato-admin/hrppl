@@ -114,6 +114,21 @@ function routeFileFor(url: string): string | null {
 }
 
 /**
+ * The layout file a route nests under, if there is one.
+ *
+ * `/org/documents` is served by org.documents.index.tsx, which sits inside
+ * org.documents.tsx. When the layout carries the gate, the index is gated —
+ * so resolving the index alone would report a gap that does not exist.
+ */
+function layoutFileFor(url: string): string | null {
+  const files = readdirSync(routesDir).filter((f) => f.endsWith(".tsx"));
+  const own = routeFileFor(url);
+  if (!own || !own.endsWith(".index.tsx")) return null;
+  const layout = own.replace(/\.index\.tsx$/, ".tsx");
+  return files.includes(layout) ? layout : null;
+}
+
+/**
  * The EFFECTIVE client-side gate for a route, in whatever form it takes.
  *
  * W5 · This originally understood only <AdminGate>. That was the hole that let
@@ -197,10 +212,17 @@ function findDrift(): Drift[] {
     const file = routeFileFor(d.to);
     if (!file || !existsSync(join(routesDir, file))) continue;
 
-    const gate = routeGate(file);
-    // Genuinely ungated pages lean entirely on server-fn and RLS enforcement.
-    // That is a different finding, not a parity failure.
-    if (gate.kind === "none") continue;
+    let gate = routeGate(file);
+    if (gate.kind === "none") {
+      const layout = layoutFileFor(d.to);
+      if (layout) gate = routeGate(layout);
+    }
+    if (gate.kind === "none") {
+      // Not a silent skip. An ungated page is the exact shape that hid
+      // /org/payroll: nothing to disagree with, so nothing to report. Landing
+      // here without an entry in UNGATED is a failure, asserted below.
+      continue;
+    }
     const routeRoles = gate.roles;
 
     const navRoles = ALL_ROLES.filter((r) => can(d.feature!, [r]));
@@ -354,5 +376,77 @@ describe("the resolver actually sees every gate form", () => {
         ? `These decide access with their own role list instead of a feature key:\n  ${handRolled.join("\n  ")}`
         : "",
     ).toEqual([]);
+  });
+});
+
+/**
+ * W5 · The third escape hatch.
+ *
+ * `findDrift` can only compare two things. A page with NO client-side gate has
+ * nothing to compare, so it scored clean — the same way /org/payroll did, one
+ * level down. Twenty-four nav destinations were in that state, including
+ * /admin/discipline (disciplinary cases), /org/danger and every /platform page.
+ *
+ * They now gate on the feature key their own sidebar row uses. This suite makes
+ * the remaining exception a written decision rather than a gap: a route may
+ * render ungated only if it appears in UNGATED with a reason.
+ */
+const UNGATED: Record<string, string> = {
+  // Reachable BEFORE the user has a tenant or any role at all — it is the page
+  // that creates them. Gating it on org.setup (super_admin, org_admin) would
+  // lock out precisely the person who needs it. The nav row is still gated, so
+  // it is not offered to anyone who should not see it; the route stays open so
+  // the signup hand-off works.
+  "/org/setup": "pre-tenant: the wizard that grants the role its own key requires",
+};
+
+describe("no nav destination renders without a gate", () => {
+  function ungatedDestinations(): string[] {
+    const out: string[] = [];
+    for (const d of NAV_DESTINATIONS) {
+      if (!d.feature) continue;
+      const file = routeFileFor(d.to);
+      if (!file || !existsSync(join(routesDir, file))) continue;
+      if (routeGate(file).kind !== "none") continue;
+      const layout = layoutFileFor(d.to);
+      if (layout && routeGate(layout).kind !== "none") continue;
+      out.push(d.to);
+    }
+    return out;
+  }
+
+  it("every gap is a written decision", () => {
+    const unexplained = ungatedDestinations().filter((to) => !UNGATED[to]);
+    expect(
+      unexplained,
+      `These nav rows lead to pages with no client-side gate at all, so they ` +
+        `render for any signed-in user who has the URL. Enforcement falls ` +
+        `entirely to RLS and server-fn checks, which is exactly the "page ` +
+        `loads, database refuses" shape. Add <AdminGate feature="…"> using the ` +
+        `same key the sidebar row uses, or add an entry to UNGATED saying why ` +
+        `this route must stay open.`,
+    ).toEqual([]);
+  });
+
+  it("keeps the exception list from growing quietly", () => {
+    // One entry today. A second one should be an argument someone has to make.
+    expect(Object.keys(UNGATED).length).toBeLessThanOrEqual(2);
+    for (const [url, reason] of Object.entries(UNGATED)) {
+      expect(reason.length, `${url} needs a real reason`).toBeGreaterThan(20);
+    }
+  });
+
+  it("the routes that were ungated now gate on their nav key", () => {
+    // Spot-pins the sharpest of the twenty-four, so a revert is loud.
+    for (const [url, feature] of [
+      ["/admin/discipline", "org.discipline"],
+      ["/org/danger", "org.danger"],
+      ["/platform/tenants", "platform.admin"],
+      ["/org/employees", "org.employees"],
+    ] as const) {
+      const file = routeFileFor(url)!;
+      const src = readFileSync(join(routesDir, file), "utf8");
+      expect(src, `${url} must gate on ${feature}`).toContain(`<AdminGate feature="${feature}">`);
+    }
   });
 });

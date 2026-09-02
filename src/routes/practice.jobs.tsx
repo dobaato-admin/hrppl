@@ -13,13 +13,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { listJobs, listProjects, upsertJob } from "@/lib/practice.functions";
 import { toast } from "sonner";
+import { AdminGate } from "@/components/AdminGate";
 
 const searchSchema = z.object({ project: z.string().uuid().optional() });
 
 export const Route = createFileRoute("/practice/jobs")({
   validateSearch: (s) => searchSchema.parse(s),
   head: () => ({ meta: [{ title: "Jobs — WorldPay HRMS" }] }),
-  component: JobsPage,
+  component: () => (
+    <AdminGate feature="practice.console">
+      <JobsPage />
+    </AdminGate>
+  ),
 });
 
 const STATUS_TONE: Record<string, string> = {

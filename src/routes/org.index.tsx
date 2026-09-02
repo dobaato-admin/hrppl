@@ -7,10 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/AppShell";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/")({
   head: () => ({ meta: [{ title: "Organization — WorldPay HRMS" }] }),
-  component: OrgPage,
+  component: () => (
+    <AdminGate feature="org.console">
+      <OrgPage />
+    </AdminGate>
+  ),
 });
 
 interface Tenant {

@@ -17,10 +17,15 @@ import { approveLeaveRequest, rejectLeaveRequest } from "@/lib/leave.functions";
 import { approveTimesheet, rejectTimesheet } from "@/lib/attendance.functions";
 import { decideExpenseClaim } from "@/lib/expenses.functions";
 import { Users, CalendarCheck2, FileClock, UmbrellaOff, Search, GraduationCap, ClipboardList, MessageSquareWarning, Receipt } from "lucide-react";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/team")({
   head: () => ({ meta: [{ title: "Dashboard — hrppl" }] }),
-  component: TeamPage,
+  component: () => (
+    <AdminGate feature="manager.team">
+      <TeamPage />
+    </AdminGate>
+  ),
 });
 
 interface Emp {

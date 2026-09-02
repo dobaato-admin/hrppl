@@ -28,10 +28,15 @@ import {
   purgePayrollHistory,
   transferOwnership,
 } from "@/lib/danger-zone.functions";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/danger")({
   head: () => ({ meta: [{ title: "Danger zone — WorldPay HRMS" }] }),
-  component: DangerZonePage,
+  component: () => (
+    <AdminGate feature="org.danger">
+      <DangerZonePage />
+    </AdminGate>
+  ),
 });
 
 function DangerZonePage() {

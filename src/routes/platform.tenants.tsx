@@ -34,10 +34,15 @@ import {
 } from "@/components/ui/table";
 import { listAllTenants, upsertTenantGovernance } from "@/lib/super-admin.functions";
 import { toast } from "sonner";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/platform/tenants")({
   head: () => ({ meta: [{ title: "Tenants — Platform" }] }),
-  component: PlatformTenantsPage,
+  component: () => (
+    <AdminGate feature="platform.admin">
+      <PlatformTenantsPage />
+    </AdminGate>
+  ),
 });
 
 const TONE: Record<string, string> = {

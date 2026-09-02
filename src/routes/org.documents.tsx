@@ -2,10 +2,15 @@ import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-r
 import { AppShell } from "@/components/AppShell";
 import { cn } from "@/lib/utils";
 import { FileText, Send, AlertTriangle } from "lucide-react";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/documents")({
   head: () => ({ meta: [{ title: "Documents — hrppl" }] }),
-  component: DocsLayout,
+  component: () => (
+    <AdminGate feature="org.documents">
+      <DocsLayout />
+    </AdminGate>
+  ),
 });
 
 const TABS = [

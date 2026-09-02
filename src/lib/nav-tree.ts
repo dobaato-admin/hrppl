@@ -882,7 +882,10 @@ export const ORG_SECTIONS: NavSection[] = [
 /** Manager group. Two destinations, each with its own feature key. */
 export const MANAGER_ITEMS: NavItem[] = [
   {
-    title: "Dashboard",
+    // "Team dashboard", not "Dashboard": this row is also surfaced in the
+    // per-role "Your work" group, where it sits next to the personal
+    // /dashboard with no "Manager" heading above it to disambiguate.
+    title: "Team dashboard",
     to: "/team",
     icon: Users,
     accent: "bg-status-working",

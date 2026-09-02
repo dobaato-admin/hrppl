@@ -55,10 +55,15 @@ import {
   type SuspensionTarget,
 } from "@/components/security/AccountSuspensionDialog";
 import { can } from "@/lib/rbac";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/employees")({
   head: () => ({ meta: [{ title: "Employees — WorldPay HRMS" }] }),
-  component: EmployeesPage,
+  component: () => (
+    <AdminGate feature="org.employees">
+      <EmployeesPage />
+    </AdminGate>
+  ),
 });
 
 type EmploymentType = "full_time" | "part_time" | "contract" | "intern";
