@@ -63,6 +63,7 @@ import {
 import { TRAINING_PRESETS } from "@/lib/training-presets";
 import { questionsToCsv, csvToQuestions, downloadCsv, QUIZ_CSV_HEADER } from "@/lib/quiz-csv";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/training")({
   head: () => ({ meta: [{ title: "Training catalog — hrppl" }] }),
@@ -82,8 +83,12 @@ function TrainingCatalogPage() {
   const delFn = useServerFn(deleteCourse);
   const seedFn = useServerFn(seedTrainingPreset);
   const remindFn = useServerFn(sendOverdueTrainingReminders);
-  const canAccess =
-    roles.includes("org_admin") || roles.includes("super_admin") || roles.includes("manager");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.trainingCatalog", roles);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<any>({

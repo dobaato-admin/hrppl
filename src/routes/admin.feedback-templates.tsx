@@ -45,6 +45,7 @@ import {
 import { FEEDBACK_PRESETS, getPreset } from "@/lib/feedback360-presets";
 import { formatDistanceToNow } from "date-fns";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 
 import { AppShell } from "@/components/AppShell";
 
@@ -129,7 +130,12 @@ function FeedbackTemplatesAdmin() {
   const fnRestore = useServerFn(restoreFeedbackTemplate);
   const fnListArchived = useServerFn(listArchivedFeedbackTemplates);
 
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.feedbackTemplates", roles);
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);

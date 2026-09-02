@@ -25,6 +25,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 
 import { AppShell } from "@/components/AppShell";
 
@@ -60,7 +61,10 @@ function OvertimeRatesAdmin() {
   const isSuper = roles.includes("super_admin");
   const isRegional = roles.includes("regional_admin");
   const isOrg = roles.includes("org_admin");
-  const canManage = isSuper || isRegional || isOrg;
+  // W5 · Derived from the same feature key the route gate quotes. The
+  // hand-rolled list omitted `finance` — the role D-4 added — so widening the
+  // route gate alone left finance admitted by AdminGate and bounced here.
+  const canManage = can("org.overtimeRates", roles);
 
   const [countries, setCountries] = useState<Country[]>([]);
   const [country, setCountry] = useState<string>("");

@@ -175,7 +175,9 @@ function report(drifts: Drift[]): string {
         `    nav   ${d.navFeature}\n` +
         `    route ${d.gate}\n` +
         (d.deadFor.length ? `    DEAD LINK for: ${d.deadFor.join(", ")}\n` : "") +
-        (d.hiddenFrom.length ? `    reachable by URL but hidden from: ${d.hiddenFrom.join(", ")}\n` : ""),
+        (d.hiddenFrom.length
+          ? `    reachable by URL but hidden from: ${d.hiddenFrom.join(", ")}\n`
+          : ""),
     )
     .join("");
 }
@@ -215,5 +217,52 @@ describe("the exemption list stays small and justified", () => {
         `${url} is exempt but gates by feature — remove the exemption`,
       ).toBe(false);
     }
+  });
+});
+
+describe("a feature-gated page does not gate itself a second time", () => {
+  it("no page hand-rolls a role list beside its <AdminGate feature>", () => {
+    /**
+     * W5 · The fourth drift axis, found by opening the app rather than by any
+     * test here.
+     *
+     * Thirteen pages gated at the route with <AdminGate feature="…"> AND again
+     * inside the component body with their own `roles.includes(...)` list plus
+     * a redirect to /dashboard. Widening the feature therefore did nothing:
+     * AdminGate admitted the user and the page bounced them a moment later,
+     * which looks exactly like the dead link the widening was meant to fix.
+     *
+     * /admin/review-cycles was the one that surfaced it — signed in as `hr`,
+     * the route resolved, rendered, and then redirected. Every static check in
+     * this repo passed the whole time, because all of them stop at the route
+     * gate.
+     *
+     * A page may still compute `canAccess` — several use it to enable queries
+     * and hide edit controls — but it must derive it from `can(<the same
+     * feature>, roles)` rather than restate the role list.
+     */
+    const offenders: string[] = [];
+    for (const file of readdirSync(routesDir).filter((f) => f.endsWith(".tsx"))) {
+      const src = readFileSync(join(routesDir, file), "utf8");
+      const gate = src.match(/<AdminGate\s+feature="([^"]+)"/);
+      if (!gate) continue;
+      const body = src.slice(gate.index! + gate[0].length);
+      // Only the GATING variable matters. Several pages legitimately derive
+      // role booleans for behaviour — which tenant scope to load, whether to
+      // show an edit control — and those are not a second gate.
+      const gatingVar = /const can[A-Z]\w*\s*=\s*([^;]*);/.exec(body);
+      if (!gatingVar) continue;
+      const derivedFromRoleList = /roles\.includes\(/.test(gatingVar[1]);
+      const bouncesOrBlocks =
+        /navigate\(\{\s*to:\s*"\/dashboard"/.test(body) || /Forbidden/.test(body);
+      if (derivedFromRoleList && bouncesOrBlocks) offenders.push(file);
+    }
+    expect(
+      offenders,
+      offenders.length
+        ? `These gate twice and disagree with themselves:\n  ${offenders.join("\n  ")}\n` +
+            `Derive the page's own check from can(<its AdminGate feature>, roles).`
+        : "",
+    ).toEqual([]);
   });
 });

@@ -20,6 +20,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { listTeamData, setManagerRole, assignReports } from "@/lib/team-assignments.functions";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/team-assignments")({
   head: () => ({ meta: [{ title: "Team assignments — hrppl" }] }),
@@ -37,7 +38,12 @@ export const Route = createFileRoute("/admin/team-assignments")({
 function TeamAssignmentsPage() {
   const { user, roles, loading, rolesLoaded } = useAuth();
   const navigate = useNavigate();
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.teamAssignments", roles);
   const load = useServerFn(listTeamData);
   const setRole = useServerFn(setManagerRole);
   const assign = useServerFn(assignReports);

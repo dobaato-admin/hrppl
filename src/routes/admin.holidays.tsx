@@ -58,6 +58,11 @@ function HolidaysAdmin() {
   const isSuper = roles.includes("super_admin");
   const isRegional = roles.includes("regional_admin");
   const isOrg = roles.includes("org_admin");
+  // W5 · Same read/edit split as /admin/holiday-calendar, of which this is the
+  // flat "List view" sibling. org.publicHolidays admits everyone because every
+  // employee has a reason to look at the holiday list; canManage stays the
+  // narrower EDIT capability. Previously this redirected anyone who could not
+  // edit, which made the list unreadable to the people it is for.
   const canManage = isSuper || isRegional || isOrg;
 
   const [countries, setCountries] = useState<Country[]>([]);
@@ -73,15 +78,13 @@ function HolidaysAdmin() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    // Only an unauthenticated visitor is turned away; a signed-in employee sees
+    // the list read-only.
     if (!loading && !user) navigate({ to: "/auth" });
-    else if (!loading && user && !canManage) {
-      toast.error("Admin access required");
-      navigate({ to: "/dashboard" });
-    }
-  }, [loading, user, canManage, navigate]);
+  }, [loading, user, navigate]);
 
   useEffect(() => {
-    if (!canManage || !user) return;
+    if (!user) return;
     (async () => {
       if (isSuper) {
         const { data } = await supabase.from("countries").select("code,name").order("name");

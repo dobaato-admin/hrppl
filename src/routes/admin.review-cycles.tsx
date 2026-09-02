@@ -29,6 +29,7 @@ import {
   getCycleSubmissionStatus,
 } from "@/lib/kpi-cycles.functions";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/review-cycles")({
   head: () => ({ meta: [{ title: "KPI review cycles — HRPPL" }] }),
@@ -49,8 +50,12 @@ function Page() {
   const { user, roles, loading, rolesLoaded } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const canAccess =
-    roles.includes("org_admin") || roles.includes("super_admin") || roles.includes("manager");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.reviewCycles", roles);
   const listFn = useServerFn(listCycles);
   const upsertFn = useServerFn(upsertCycle);
   const statusFn = useServerFn(setCycleStatus);

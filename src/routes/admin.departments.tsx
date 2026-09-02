@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { listDepartments, upsertDepartment, deleteDepartment } from "@/lib/departments.functions";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/departments")({
   head: () => ({ meta: [{ title: "Departments — hrppl" }] }),
@@ -59,7 +60,12 @@ function DepartmentsPage() {
   const listFn = useServerFn(listDepartments);
   const saveFn = useServerFn(upsertDepartment);
   const delFn = useServerFn(deleteDepartment);
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.departments", roles);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState<{ id?: string; name: string; parent_id: string | null }>({

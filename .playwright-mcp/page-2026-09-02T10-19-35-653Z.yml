@@ -1,0 +1,28 @@
+- generic [ref=f3e1]:
+  - main [ref=f3e2]:
+    - generic [ref=f3e3]:
+      - generic [ref=f3e4]:
+        - heading "Sign in to hrppl" [level=1] [ref=f3e5]
+        - generic [ref=f3e6]: hrppl
+        - generic [ref=f3e7]: Sign in to your existing account, or create one to get started.
+      - generic [ref=f3e9]:
+        - tablist [ref=f3e10]:
+          - tab "Sign In" [selected] [ref=f3e11] [cursor=pointer]
+          - tab "Sign Up" [ref=f3e12] [cursor=pointer]
+        - tabpanel "Sign In" [ref=f3e13]:
+          - generic [ref=f3e14]:
+            - paragraph [ref=f3e15]: For existing users only. New here? Switch to the Sign Up tab.
+            - button "Continue with Google" [ref=f3e16] [cursor=pointer]
+            - generic [ref=f3e17]: or sign in with email
+            - generic [ref=f3e22]:
+              - generic [ref=f3e23]:
+                - text: Email
+                - textbox "Email" [active] [ref=f3e24]
+              - generic [ref=f3e25]:
+                - generic [ref=f3e26]:
+                  - generic [ref=f3e27]: Password
+                  - link "Forgot password?" [ref=f3e28] [cursor=pointer]:
+                    - /url: /forgot-password
+                - textbox "Password" [ref=f3e29]: DemoPassw0rd!23
+              - button "Sign In" [ref=f3e30] [cursor=pointer]
+  - region "Notifications alt+T"

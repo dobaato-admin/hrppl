@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -70,8 +71,12 @@ function slugify(s: string) {
 function Page() {
   const { roles, loading } = useAuth();
   const navigate = useNavigate();
-  const canAccess =
-    roles.includes("hr") || roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.recruitment", roles);
   useEffect(() => {
     if (!loading && !canAccess) navigate({ to: "/dashboard" });
   }, [loading, canAccess, navigate]);

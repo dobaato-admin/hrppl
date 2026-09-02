@@ -45,6 +45,7 @@ import {
 } from "@/lib/onboarding.functions";
 import { downloadChecklistPdf } from "@/lib/checklist-pdf";
 import { AdminGate } from "@/components/AdminGate";
+import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/onboarding-packs")({
   head: () => ({ meta: [{ title: "Onboarding & offboarding packs — hrppl" }] }),
@@ -89,7 +90,12 @@ function OnboardingPacksPage() {
   const { user, roles, loading, rolesLoaded } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.onboardingPacks", roles);
 
   const listFn = useServerFn(listChecklistPacks);
   const save = useServerFn(upsertChecklist);
