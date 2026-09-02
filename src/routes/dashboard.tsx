@@ -8,10 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/AppShell";
-import { KpiTile, PageHeader, SkeletonRows } from "@/components/monday";
+import { KpiTile, PageHeader, SectionCard, SkeletonRows, StatusChip } from "@/components/monday";
 import { RequestsSummary } from "@/components/dashboard/RequestsSummary";
 import { BoardCard, BoardRow, AdminTile } from "@/components/dashboard-tiles";
 import { getMyOrgStatus } from "@/lib/org-signup.functions";
+import { getDashboardSnapshot } from "@/lib/dashboard.functions";
 import {
   CalendarDays,
   ClipboardCheck,
@@ -38,22 +39,49 @@ import {
   UserSearch,
   Package,
 } from "lucide-react";
-import { listMyQuickAccess, setMyQuickAccess, QUICK_ACCESS_REGISTRY } from "@/lib/manager-quick-access.functions";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  listMyQuickAccess,
+  setMyQuickAccess,
+  QUICK_ACCESS_REGISTRY,
+} from "@/lib/manager-quick-access.functions";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Link as RLink } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 const ICON_MAP: Record<string, any> = {
-  Building2, Users, Inbox, CalendarDays, Clock, DollarSign, Wallet, Sparkles, BookOpen, FileSignature, TrendingUp, FileText,
-  UserSearch, Package, ClipboardCheck,
+  Building2,
+  Users,
+  Inbox,
+  CalendarDays,
+  Clock,
+  DollarSign,
+  Wallet,
+  Sparkles,
+  BookOpen,
+  FileSignature,
+  TrendingUp,
+  FileText,
+  UserSearch,
+  Package,
+  ClipboardCheck,
 };
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
       { title: "hrppl Dashboard — your workspace" },
-      { name: "description", content: "Your hrppl workspace dashboard: leave, timesheets, reviews, payslips and admin tiles at a glance." },
+      {
+        name: "description",
+        content:
+          "Your hrppl workspace dashboard: leave, timesheets, reviews, payslips and admin tiles at a glance.",
+      },
       { name: "robots", content: "noindex,nofollow" },
       { property: "og:title", content: "hrppl Dashboard" },
       { property: "og:description", content: "Your hrppl workspace at a glance." },
@@ -108,48 +136,33 @@ function Dashboard() {
     orgStatus.roles.includes("org_admin") &&
     !orgStatus.setupProgress?.completed_at;
 
-  // Dashboard tile counts.
+  // Dashboard data.
   //
-  // Was a raw useEffect issuing six uncached Supabase round-trips on every
-  // mount — and since AppShell is per-route, returning to /dashboard re-ran all
-  // six. useQuery gives it the shared cache (the QueryClient lives at
-  // __root.tsx, so it survives navigation) and dedupes concurrent mounts.
-  const { data: countsData } = useQuery({
-    queryKey: ["dashboard-counts", user?.id],
+  // W5 P2-6 · This was five separate client-side Supabase counts issued from
+  // the browser. getDashboardSnapshot returns those same five numbers from one
+  // server call — and, in the same payload, pre-computed `manager`, `hr` and
+  // `finance` blocks that nothing consumed. That is the per-role dashboard the
+  // W4 §5 design asked for: it had been built server-side and never surfaced,
+  // because /me/dashboard was the only caller and /me/dashboard was an orphan.
+  //
+  // A block comes back null when the caller's roles do not warrant it, so the
+  // page needs no role checks of its own: it renders what it is given. Adding
+  // a role section later needs no change here.
+  const snapshotFn = useServerFn(getDashboardSnapshot);
+  const { data: snapshot } = useQuery({
+    queryKey: ["dashboard-snapshot", user?.id],
     enabled: !!user,
     staleTime: 60_000,
-    queryFn: async (): Promise<Counts> => {
-      const empty: Counts = {
-        pendingLeave: 0, openTimesheet: 0, pendingReviews: 0,
-        onboardingOpen: 0, recentPayslips: 0,
-      };
-      const { data: emp } = await supabase
-        .from("employees")
-        .select("id")
-        .eq("user_id", user!.id)
-        .maybeSingle();
-      if (!emp) return empty;
-      const empId = (emp as { id: string }).id;
-
-      const [leaveR, tsR, revR, onbR, payR] = await Promise.all([
-        supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("employee_id", empId).eq("status", "pending"),
-        supabase.from("timesheets").select("id", { count: "exact", head: true }).eq("employee_id", empId).in("status", ["draft", "rejected"]),
-        supabase.from("performance_reviews").select("id", { count: "exact", head: true }).eq("employee_id", empId).in("status", ["draft", "finalized"]),
-        supabase.from("onboarding_assignments").select("id", { count: "exact", head: true }).eq("employee_id", empId).eq("status", "in_progress"),
-        supabase.from("payroll_payslips").select("id", { count: "exact", head: true }).eq("employee_id", empId),
-      ]);
-      return {
-        pendingLeave: leaveR.count ?? 0,
-        openTimesheet: tsR.count ?? 0,
-        pendingReviews: revR.count ?? 0,
-        onboardingOpen: onbR.count ?? 0,
-        recentPayslips: payR.count ?? 0,
-      };
-    },
+    queryFn: () => snapshotFn(),
   });
-  const counts = countsData ?? {
-    pendingLeave: 0, openTimesheet: 0, pendingReviews: 0,
-    onboardingOpen: 0, recentPayslips: 0,
+
+  const me = snapshot?.me ?? null;
+  const counts: Counts = {
+    pendingLeave: me?.pendingLeaveCount ?? 0,
+    openTimesheet: me?.draftTimesheetCount ?? 0,
+    pendingReviews: me?.trainingDueCount ?? 0,
+    onboardingOpen: me?.onboardingOpenCount ?? 0,
+    recentPayslips: me?.latestPayslip ? 1 : 0,
   };
 
   if (loading || !user) {
@@ -191,7 +204,14 @@ function Dashboard() {
       <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
         <PageHeader
           eyebrow={greeting}
-          title={<>Hello, <span className="bg-gradient-brand bg-clip-text text-transparent">{user.email?.split("@")[0]}</span></>}
+          title={
+            <>
+              Hello,{" "}
+              <span className="bg-gradient-brand bg-clip-text text-transparent">
+                {user.email?.split("@")[0]}
+              </span>
+            </>
+          }
           subtitle="Here's what's on your board today — leave, time, reviews, and pay at a glance."
           actions={
             <>
@@ -226,13 +246,12 @@ function Dashboard() {
                   </div>
                 </div>
               </div>
-              <Button asChild size="sm"><Link to="/org/setup">Continue setup</Link></Button>
+              <Button asChild size="sm">
+                <Link to="/org/setup">Continue setup</Link>
+              </Button>
             </CardContent>
           </Card>
         )}
-
-
-
 
         {/* KPI board */}
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -317,26 +336,163 @@ function Dashboard() {
               tone={counts.onboardingOpen > 0 ? "working" : "done"}
               to="/onboarding"
             />
-            <BoardRow label="Personal documents" status="Open" tone="info" to="/onboarding" />
+            {/* Was hardcoded to status="Open" regardless of state — W4 left it
+                because there was no data source. The snapshot's `me` block is
+                that source. */}
+            <BoardRow
+              label="Personal details"
+              status={
+                me == null
+                  ? "—"
+                  : me.missingProfileFields.length > 0
+                    ? `${me.missingProfileFields.length} missing`
+                    : "Complete"
+              }
+              tone={me && me.missingProfileFields.length > 0 ? "working" : "done"}
+              to="/onboarding/profile"
+            />
           </BoardCard>
 
-          <BoardCard
-            title="Pay"
-            color="bg-primary"
-            description="Latest payroll & payslips"
-          >
+          <BoardCard title="Pay" color="bg-primary" description="Latest payroll & payslips">
             <BoardRow
               label="Available payslips"
               status={counts.recentPayslips > 0 ? "Done" : "Pending"}
               tone={counts.recentPayslips > 0 ? "done" : "pending"}
               to="/my-payslips"
             />
-            <BoardRow label="Notification preferences" status="Info" tone="info" to="/settings/notifications" />
+            {/* Replaced a permanently-static "Notification preferences · Info"
+                row. The snapshot carries no notification state, and a chip that
+                always reads the same tells the reader nothing — so this row now
+                shows something real that was otherwise only visible from
+                /me/signatures. */}
+            <BoardRow
+              label="Signatures awaiting you"
+              status={
+                me == null
+                  ? "—"
+                  : me.signaturesPendingCount > 0
+                    ? `${me.signaturesPendingCount} to sign`
+                    : "Nothing pending"
+              }
+              tone={me && me.signaturesPendingCount > 0 ? "stuck" : "done"}
+              to="/me/signatures"
+            />
           </BoardCard>
         </section>
 
-        {isManager && <ManagerQuickAccess roles={roles} />}
+        {/* Role sections.
+            W5 P2-6 · Rendered purely on whether the snapshot returned the
+            block, never on a role check in this file. getDashboardSnapshot
+            already decides who warrants which bucket, so the page cannot drift
+            from that decision the way the nav drifted from the route gates. */}
+        {(snapshot?.manager || snapshot?.hr || snapshot?.finance) && (
+          <section className="grid gap-4 lg:grid-cols-2">
+            {snapshot?.manager && (
+              <SectionCard
+                tone="working"
+                title="My team"
+                description={`${snapshot.manager.reportsCount} direct report${snapshot.manager.reportsCount === 1 ? "" : "s"}`}
+                actions={
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/team">Open</Link>
+                  </Button>
+                }
+              >
+                <RoleRow
+                  label="Leave awaiting your decision"
+                  n={snapshot.manager.pendingLeave.length}
+                  to="/org/leave"
+                />
+                <RoleRow
+                  label="Expense claims to approve"
+                  n={snapshot.manager.pendingExpense.length}
+                  to="/org/expenses"
+                />
+                <RoleRow
+                  label="Timesheets to approve"
+                  n={snapshot.manager.pendingTimesheets.length}
+                  to="/org/timesheets"
+                />
+                <RoleRow
+                  label="Overdue reviews"
+                  n={snapshot.manager.overdueReviews.length}
+                  to="/org/performance"
+                />
+              </SectionCard>
+            )}
 
+            {snapshot?.finance && (
+              <SectionCard
+                tone="done"
+                title="Finance"
+                description="Pay runs, claims and rates that need attention"
+                actions={
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/org/payroll">Run payroll</Link>
+                  </Button>
+                }
+              >
+                <RoleRow
+                  label="Draft pay runs"
+                  n={snapshot.finance.draftRuns.length}
+                  to="/org/payroll"
+                />
+                <RoleRow
+                  label="Expense claims pending"
+                  n={snapshot.finance.pendingExpenseClaims}
+                  to="/org/expenses"
+                />
+                <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                  <span className="text-muted-foreground">FX rates</span>
+                  <StatusChip tone={snapshot.finance.fxStale ? "stuck" : "done"}>
+                    {snapshot.finance.fxAgeDays == null
+                      ? "None recorded"
+                      : `${snapshot.finance.fxAgeDays} day${snapshot.finance.fxAgeDays === 1 ? "" : "s"} old`}
+                  </StatusChip>
+                </div>
+              </SectionCard>
+            )}
+
+            {snapshot?.hr && (
+              <SectionCard
+                tone="info"
+                title="People operations"
+                description="Records that are incomplete or expiring"
+                actions={
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/org/employees">Employees</Link>
+                  </Button>
+                }
+              >
+                <RoleRow
+                  label="Missing pay setup"
+                  n={snapshot.hr.missingPay?.length ?? 0}
+                  to="/org/pay-rates"
+                />
+                <RoleRow
+                  label="Incomplete profiles"
+                  n={snapshot.hr.missingProfile?.length ?? 0}
+                  to="/admin/id-requests"
+                />
+                {/* Certifications, not documents — these come from
+                    training_enrollments' issued certificates, so the way in is
+                    the training page that owns their renewal. */}
+                <RoleRow
+                  label="Certifications expiring"
+                  n={snapshot.hr.expiringCertifications?.length ?? 0}
+                  to="/org/training"
+                />
+                <RoleRow
+                  label="Onboarding in progress"
+                  n={snapshot.hr.pendingOnboardingCount ?? 0}
+                  to="/org/onboarding/tracker"
+                />
+              </SectionCard>
+            )}
+          </section>
+        )}
+
+        {isManager && <ManagerQuickAccess roles={roles} />}
 
         {/* Admin shortcuts */}
         {(isOrg || isRegional || isSuper) && (
@@ -432,9 +588,7 @@ function ManagerQuickAccess({ roles }: { roles: string[] }) {
 
   async function refresh() {
     const r = await listFn({});
-    const stored = r.pins.length > 0
-      ? r.pins.map((p: any) => p.key)
-      : defaultKeysForRoles(roles);
+    const stored = r.pins.length > 0 ? r.pins.map((p: any) => p.key) : defaultKeysForRoles(roles);
     // Always pin locked keys first, then the user's choices (deduped)
     const merged = [...LOCKED_KEYS, ...stored.filter((k: string) => !LOCKED_KEYS.includes(k))];
     setPins(
@@ -445,7 +599,9 @@ function ManagerQuickAccess({ roles }: { roles: string[] }) {
     setSelected(merged);
     setLoaded(true);
   }
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+  }, []);
 
   async function save() {
     try {
@@ -455,7 +611,9 @@ function ManagerQuickAccess({ roles }: { roles: string[] }) {
       toast.success("Quick access updated");
       setOpen(false);
       refresh();
-    } catch (e: any) { toast.error(e?.message ?? "Failed"); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed");
+    }
   }
 
   if (!loaded) {
@@ -529,14 +687,18 @@ function ManagerQuickAccess({ roles }: { roles: string[] }) {
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Customize quick access</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Customize quick access</DialogTitle>
+          </DialogHeader>
           <p className="text-xs text-muted-foreground">
             Pinned items (like Org console) are always shown and can't be removed.
           </p>
           <div className="space-y-4">
             {Array.from(new Set(QUICK_ACCESS_REGISTRY.map((r) => r.group))).map((group) => (
               <div key={group}>
-                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group}</h4>
+                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group}
+                </h4>
                 <div className="space-y-1">
                   {QUICK_ACCESS_REGISTRY.filter((r) => r.group === group).map((r) => {
                     const locked = LOCKED_KEYS.includes(r.key);
@@ -571,7 +733,9 @@ function ManagerQuickAccess({ roles }: { roles: string[] }) {
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={save}>Save</Button>
           </DialogFooter>
         </DialogContent>
@@ -580,3 +744,20 @@ function ManagerQuickAccess({ roles }: { roles: string[] }) {
   );
 }
 
+/**
+ * One line of a role section: a label, a count, and a way in.
+ *
+ * Zero is shown as "Clear" rather than "0" — on a dashboard the useful signal
+ * is whether anything needs doing, and a row of zeroes reads as noise.
+ */
+function RoleRow({ label, n, to }: { label: string; n: number; to: string }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center justify-between gap-3 rounded-md py-1.5 text-sm transition hover:bg-muted/60"
+    >
+      <span className="text-muted-foreground">{label}</span>
+      <StatusChip tone={n > 0 ? "working" : "done"}>{n > 0 ? n : "Clear"}</StatusChip>
+    </Link>
+  );
+}

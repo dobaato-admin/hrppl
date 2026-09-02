@@ -11,10 +11,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { requestOrgStatusRefresh } from "@/components/AuthRouteGate";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
-import { createOrganization, getMyOrgStatus, markSetupStep, seedOrgDefaults, resetMyOrgSetup, updateOrganizationProfile } from "@/lib/org-signup.functions";
+import {
+  createOrganization,
+  getMyOrgStatus,
+  markSetupStep,
+  seedOrgDefaults,
+  resetMyOrgSetup,
+  updateOrganizationProfile,
+} from "@/lib/org-signup.functions";
 import { getMyTrialInvitation, redeemMyTrialInvitation } from "@/lib/super-invitations.functions";
 import { inviteStaff } from "@/lib/staff-invitations.functions";
 import { toast } from "sonner";
@@ -35,7 +48,11 @@ const STEPS: { key: StepKey; title: string; subtitle: string }[] = [
   { key: "invites", title: "Invite your team", subtitle: "Optional — do it later" },
 ];
 
-interface Country { code: string; name: string; currency_code: string }
+interface Country {
+  code: string;
+  name: string;
+  currency_code: string;
+}
 
 function OrgSetupPage() {
   const { user, loading: authLoading } = useAuth();
@@ -67,7 +84,14 @@ function OrgSetupPage() {
     status: "idle" | "sending" | "sent" | "failed";
     error?: string;
   };
-  const newInviteRow = (): InviteRow => ({ email: "", first_name: "", last_name: "", job_title: "", role: "employee", status: "idle" });
+  const newInviteRow = (): InviteRow => ({
+    email: "",
+    first_name: "",
+    last_name: "",
+    job_title: "",
+    role: "employee",
+    status: "idle",
+  });
   const [invites, setInvites] = useState<InviteRow[]>([newInviteRow()]);
 
   useEffect(() => {
@@ -75,7 +99,10 @@ function OrgSetupPage() {
   }, [user, authLoading, navigate]);
 
   useEffect(() => {
-    supabase.from("countries").select("code,name,currency_code").order("name")
+    supabase
+      .from("countries")
+      .select("code,name,currency_code")
+      .order("name")
       .then(({ data }) => setCountries((data ?? []) as Country[]));
   }, []);
 
@@ -115,7 +142,6 @@ function OrgSetupPage() {
     setStepInitialized(true);
   }, [status, stepInitialized]);
 
-
   // --- Step state ---
   const [details, setDetails] = useState({
     name: "",
@@ -128,7 +154,15 @@ function OrgSetupPage() {
     registration_number: "",
     tax_id_number: "",
   });
-  const [branding, setBranding] = useState({ address_line1: "", address_line2: "", city: "", region: "", postal_code: "", website: "", tagline: "" });
+  const [branding, setBranding] = useState({
+    address_line1: "",
+    address_line2: "",
+    city: "",
+    region: "",
+    postal_code: "",
+    website: "",
+    tagline: "",
+  });
   const [departments, setDepartments] = useState<string[]>(["Operations", "Engineering", "People"]);
   const [defaults, setDefaults] = useState({ withLeaveTypes: true });
 
@@ -201,7 +235,6 @@ function OrgSetupPage() {
 
   const hasTenant = !!status?.tenantId;
 
-
   async function saveDetails() {
     const name = details.name.trim();
     const country = details.country_code.trim().toUpperCase();
@@ -209,10 +242,13 @@ function OrgSetupPage() {
     const phone = details.contact_phone.trim();
     const reg = details.registration_number.trim();
     const hasTrialInvitation = !!trialInvitation;
-    if (!name || name.length < 2) return toast.error("Organization name must be at least 2 characters.");
+    if (!name || name.length < 2)
+      return toast.error("Organization name must be at least 2 characters.");
     if (country.length !== 2) return toast.error("Please choose a country.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast.error("Please enter a valid contact email.");
-    if (!hasTrialInvitation && phone.replace(/\D+/g, "").length < 6) return toast.error("Contact phone is required.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return toast.error("Please enter a valid contact email.");
+    if (!hasTrialInvitation && phone.replace(/\D+/g, "").length < 6)
+      return toast.error("Contact phone is required.");
 
     let normalizedRegistrationNumber = reg;
     if (reg) {
@@ -221,7 +257,9 @@ function OrgSetupPage() {
       if (!regCheck.ok) return toast.error(regCheck.error);
       normalizedRegistrationNumber = regCheck.value;
     } else if (!hasTrialInvitation) {
-      return toast.error(country === "AU" ? "ABN is required." : "Business registration number is required.");
+      return toast.error(
+        country === "AU" ? "ABN is required." : "Business registration number is required.",
+      );
     }
 
     setBusy(true);
@@ -282,12 +320,16 @@ function OrgSetupPage() {
       console.error("[org-setup] createOrganization failed", e);
       setStepError(msg);
       toast.error(msg, { duration: 8000 });
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
-
   async function startOver() {
-    if (!confirm("Reset the organization setup? This deletes the current org if it has no employees.")) return;
+    if (
+      !confirm("Reset the organization setup? This deletes the current org if it has no employees.")
+    )
+      return;
     setBusy(true);
     try {
       const res = await resetFn({});
@@ -305,11 +347,21 @@ function OrgSetupPage() {
         registration_number: "",
         tax_id_number: "",
       });
-      setBranding({ address_line1: "", address_line2: "", city: "", region: "", postal_code: "", website: "", tagline: "" });
+      setBranding({
+        address_line1: "",
+        address_line2: "",
+        city: "",
+        region: "",
+        postal_code: "",
+        website: "",
+        tagline: "",
+      });
       toast.success(res.reset ? "Setup reset — you can start over." : "Nothing to reset.");
     } catch (e: any) {
       toast.error(e?.message ?? "Could not reset setup");
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveBranding() {
@@ -340,7 +392,9 @@ function OrgSetupPage() {
       const msg = e?.message ?? "Could not save address";
       setStepError(msg);
       toast.error(msg);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveDepartments() {
@@ -356,7 +410,10 @@ function OrgSetupPage() {
       // Refresh dept list so the invite step has them
       if (status?.tenantId) {
         const { data } = await supabase
-          .from("departments").select("id,name").eq("tenant_id", status.tenantId).order("name");
+          .from("departments")
+          .select("id,name")
+          .eq("tenant_id", status.tenantId)
+          .order("name");
         setDeptOptions((data ?? []) as { id: string; name: string }[]);
       }
       setStepIdx(3);
@@ -365,7 +422,9 @@ function OrgSetupPage() {
       const msg = e?.message ?? "Could not save departments";
       setStepError(msg);
       toast.error(msg);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveDefaults() {
@@ -381,9 +440,10 @@ function OrgSetupPage() {
       const msg = e?.message ?? "Could not save defaults";
       setStepError(msg);
       toast.error(msg);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
-
 
   function updateInvite(idx: number, patch: Partial<InviteRow>) {
     setInvites((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -429,12 +489,14 @@ function OrgSetupPage() {
           if (ok) okCount++;
         }
         if (pending.length > 0) {
-          if (okCount === pending.length) toast.success(`${okCount} invitation${okCount === 1 ? "" : "s"} sent`);
+          if (okCount === pending.length)
+            toast.success(`${okCount} invitation${okCount === 1 ? "" : "s"} sent`);
           else if (okCount === 0) {
             toast.error("Could not send invitations — review the errors and retry.");
             setBusy(false);
             return;
-          } else toast.warning(`Sent ${okCount} of ${pending.length}. Retry the failed ones or skip.`);
+          } else
+            toast.warning(`Sent ${okCount} of ${pending.length}. Retry the failed ones or skip.`);
         }
       }
       await markFn({ data: { step: "invites" } });
@@ -446,7 +508,6 @@ function OrgSetupPage() {
       setBusy(false);
     }
   }
-
 
   if (authLoading || isLoading) {
     return (
@@ -473,7 +534,9 @@ function OrgSetupPage() {
           </Button>
           <div className="space-y-2">
             <Progress value={pct} />
-            <div className="text-xs text-muted-foreground">{completedSteps}/{STEPS.length} steps complete</div>
+            <div className="text-xs text-muted-foreground">
+              {completedSteps}/{STEPS.length} steps complete
+            </div>
           </div>
           <ol className="space-y-1">
             {STEPS.map((s, i) => {
@@ -482,16 +545,26 @@ function OrgSetupPage() {
               return (
                 <li key={s.key}>
                   <button
-                    onClick={() => { setStepError(null); setStepIdx(i); }}
+                    onClick={() => {
+                      setStepError(null);
+                      setStepIdx(i);
+                    }}
                     className={cn(
                       "flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition-colors",
-                      current ? "bg-background shadow-sm ring-1 ring-border" : "hover:bg-background/60",
+                      current
+                        ? "bg-background shadow-sm ring-1 ring-border"
+                        : "hover:bg-background/60",
                     )}
                   >
                     {done ? (
                       <CheckCircle2 className="mt-0.5 h-5 w-5 text-status-done" />
                     ) : (
-                      <Circle className={cn("mt-0.5 h-5 w-5", current ? "text-primary" : "text-muted-foreground")} />
+                      <Circle
+                        className={cn(
+                          "mt-0.5 h-5 w-5",
+                          current ? "text-primary" : "text-muted-foreground",
+                        )}
+                      />
                     )}
                     <div>
                       <div className="text-sm font-medium">{s.title}</div>
@@ -504,14 +577,21 @@ function OrgSetupPage() {
           </ol>
           {hasTenant && (
             <div className="pt-4 border-t">
-              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={startOver} disabled={busy}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={startOver}
+                disabled={busy}
+              >
                 Start over (delete this org)
               </Button>
-              <p className="mt-1 text-xs text-muted-foreground">Only works if no employees have been added yet.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Only works if no employees have been added yet.
+              </p>
             </div>
           )}
         </aside>
-
 
         {/* Step content */}
         <section className="space-y-4">
@@ -540,25 +620,114 @@ function OrgSetupPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Organization details</CardTitle>
-                <CardDescription>The legal, contact, and tax details used for payroll, invites, and HR records.</CardDescription>
+                <CardDescription>
+                  The legal, contact, and tax details used for payroll, invites, and HR records.
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2"><Label>Organization name</Label><Input value={details.name} onChange={(e) => setDetails({ ...details, name: e.target.value })} disabled={hasTenant} /></div>
-                <div className="space-y-2"><Label>Legal business name</Label><Input value={details.legal_name} onChange={(e) => setDetails({ ...details, legal_name: e.target.value })} placeholder="Optional if same as organization name" /></div>
-                <div className="space-y-2"><Label>Primary contact name</Label><Input value={details.primary_contact_name} onChange={(e) => setDetails({ ...details, primary_contact_name: e.target.value })} placeholder="Owner or HR lead" /></div>
-                <div className="space-y-2"><Label>Country <span className="text-destructive">*</span></Label>
-                  <Select value={details.country_code} onValueChange={(v) => setDetails({ ...details, country_code: v })} disabled={hasTenant}>
-                    <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
-                    <SelectContent>{countries.map((c) => <SelectItem key={c.code} value={c.code}>{c.name} ({c.currency_code})</SelectItem>)}</SelectContent>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Organization name</Label>
+                  <Input
+                    value={details.name}
+                    onChange={(e) => setDetails({ ...details, name: e.target.value })}
+                    disabled={hasTenant}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Legal business name</Label>
+                  <Input
+                    value={details.legal_name}
+                    onChange={(e) => setDetails({ ...details, legal_name: e.target.value })}
+                    placeholder="Optional if same as organization name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Primary contact name</Label>
+                  <Input
+                    value={details.primary_contact_name}
+                    onChange={(e) =>
+                      setDetails({ ...details, primary_contact_name: e.target.value })
+                    }
+                    placeholder="Owner or HR lead"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Country <span className="text-destructive">*</span>
+                  </Label>
+                  <Select
+                    value={details.country_code}
+                    onValueChange={(v) => setDetails({ ...details, country_code: v })}
+                    disabled={hasTenant}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countries.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.name} ({c.currency_code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2"><Label>Contact phone {trialInvitation ? null : <span className="text-destructive">*</span>}</Label><Input value={details.contact_phone} onChange={(e) => setDetails({ ...details, contact_phone: e.target.value })} placeholder="+61 4xx xxx xxx" /></div>
-                <div className="space-y-2"><Label>Your title</Label><Input value={details.owner_job_title} onChange={(e) => setDetails({ ...details, owner_job_title: e.target.value })} placeholder="Managing Director, HR Lead…" /></div>
-                <div className="space-y-2 md:col-span-2"><Label>Contact email <span className="text-destructive">*</span></Label><Input type="email" value={details.contact_email} onChange={(e) => setDetails({ ...details, contact_email: e.target.value })} /></div>
-                <div className="space-y-2"><Label>{details.country_code.toUpperCase() === "AU" ? "ABN" : "Business registration number"} {trialInvitation ? null : <span className="text-destructive">*</span>}</Label><Input value={details.registration_number} onChange={(e) => setDetails({ ...details, registration_number: e.target.value })} placeholder={details.country_code.toUpperCase() === "AU" ? "11 digits" : ""} inputMode={details.country_code.toUpperCase() === "AU" ? "numeric" : "text"} /></div>
-                <div className="space-y-2"><Label>Tax ID / TFN / EIN</Label><Input value={details.tax_id_number} onChange={(e) => setDetails({ ...details, tax_id_number: e.target.value })} /></div>
+                <div className="space-y-2">
+                  <Label>
+                    Contact phone{" "}
+                    {trialInvitation ? null : <span className="text-destructive">*</span>}
+                  </Label>
+                  <Input
+                    value={details.contact_phone}
+                    onChange={(e) => setDetails({ ...details, contact_phone: e.target.value })}
+                    placeholder="+61 4xx xxx xxx"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Your title</Label>
+                  <Input
+                    value={details.owner_job_title}
+                    onChange={(e) => setDetails({ ...details, owner_job_title: e.target.value })}
+                    placeholder="Managing Director, HR Lead…"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>
+                    Contact email <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    type="email"
+                    value={details.contact_email}
+                    onChange={(e) => setDetails({ ...details, contact_email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    {details.country_code.toUpperCase() === "AU"
+                      ? "ABN"
+                      : "Business registration number"}{" "}
+                    {trialInvitation ? null : <span className="text-destructive">*</span>}
+                  </Label>
+                  <Input
+                    value={details.registration_number}
+                    onChange={(e) =>
+                      setDetails({ ...details, registration_number: e.target.value })
+                    }
+                    placeholder={details.country_code.toUpperCase() === "AU" ? "11 digits" : ""}
+                    inputMode={details.country_code.toUpperCase() === "AU" ? "numeric" : "text"}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tax ID / TFN / EIN</Label>
+                  <Input
+                    value={details.tax_id_number}
+                    onChange={(e) => setDetails({ ...details, tax_id_number: e.target.value })}
+                  />
+                </div>
                 <div className="md:col-span-2 flex justify-end">
-                  <Button onClick={saveDetails} disabled={busy}>{busy ? "Saving…" : "Save & continue"} <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                  <Button onClick={saveDetails} disabled={busy}>
+                    {busy ? "Saving…" : "Save & continue"} <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -568,19 +737,68 @@ function OrgSetupPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Address & branding</CardTitle>
-                <CardDescription>Business address and public-facing details shown on HR documents.</CardDescription>
+                <CardDescription>
+                  Business address and public-facing details shown on HR documents.
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2"><Label>Street address</Label><Input value={branding.address_line1} onChange={(e) => setBranding({ ...branding, address_line1: e.target.value })} /></div>
-                <div className="space-y-2 md:col-span-2"><Label>Address line 2</Label><Input value={branding.address_line2} onChange={(e) => setBranding({ ...branding, address_line2: e.target.value })} /></div>
-                <div className="space-y-2"><Label>City</Label><Input value={branding.city} onChange={(e) => setBranding({ ...branding, city: e.target.value })} /></div>
-                <div className="space-y-2"><Label>State / region</Label><Input value={branding.region} onChange={(e) => setBranding({ ...branding, region: e.target.value })} /></div>
-                <div className="space-y-2"><Label>Postal code</Label><Input value={branding.postal_code} onChange={(e) => setBranding({ ...branding, postal_code: e.target.value })} /></div>
-                <div className="space-y-2"><Label>Website</Label><Input value={branding.website} onChange={(e) => setBranding({ ...branding, website: e.target.value })} placeholder="https://" /></div>
-                <div className="space-y-2 md:col-span-2"><Label>Short tagline</Label><Input value={branding.tagline} onChange={(e) => setBranding({ ...branding, tagline: e.target.value })} /></div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Street address</Label>
+                  <Input
+                    value={branding.address_line1}
+                    onChange={(e) => setBranding({ ...branding, address_line1: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Address line 2</Label>
+                  <Input
+                    value={branding.address_line2}
+                    onChange={(e) => setBranding({ ...branding, address_line2: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>City</Label>
+                  <Input
+                    value={branding.city}
+                    onChange={(e) => setBranding({ ...branding, city: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>State / region</Label>
+                  <Input
+                    value={branding.region}
+                    onChange={(e) => setBranding({ ...branding, region: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Postal code</Label>
+                  <Input
+                    value={branding.postal_code}
+                    onChange={(e) => setBranding({ ...branding, postal_code: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Website</Label>
+                  <Input
+                    value={branding.website}
+                    onChange={(e) => setBranding({ ...branding, website: e.target.value })}
+                    placeholder="https://"
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Short tagline</Label>
+                  <Input
+                    value={branding.tagline}
+                    onChange={(e) => setBranding({ ...branding, tagline: e.target.value })}
+                  />
+                </div>
                 <div className="md:col-span-2 flex justify-between">
-                  <Button variant="ghost" onClick={() => setStepIdx(0)}>Back</Button>
-                  <Button onClick={saveBranding} disabled={busy}>{busy ? "Saving…" : "Save & continue"} <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                  <Button variant="ghost" onClick={() => setStepIdx(0)}>
+                    Back
+                  </Button>
+                  <Button onClick={saveBranding} disabled={busy}>
+                    {busy ? "Saving…" : "Save & continue"} <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -600,8 +818,13 @@ function OrgSetupPage() {
                   placeholder="One per line"
                 />
                 <div className="flex justify-between">
-                  <Button variant="ghost" onClick={() => setStepIdx(1)}>Back</Button>
-                  <Button onClick={saveDepartments} disabled={busy}>{busy ? "Creating…" : "Create & continue"} <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                  <Button variant="ghost" onClick={() => setStepIdx(1)}>
+                    Back
+                  </Button>
+                  <Button onClick={saveDepartments} disabled={busy}>
+                    {busy ? "Creating…" : "Create & continue"}{" "}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -611,16 +834,27 @@ function OrgSetupPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Leave & payroll defaults</CardTitle>
-                <CardDescription>We'll seed Annual, Sick, and Unpaid leave for you. Payroll runs use your country's settings.</CardDescription>
+                <CardDescription>
+                  We'll seed Annual, Sick, and Unpaid leave for you. Payroll runs use your country's
+                  settings.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={defaults.withLeaveTypes} onChange={(e) => setDefaults({ withLeaveTypes: e.target.checked })} />
+                  <input
+                    type="checkbox"
+                    checked={defaults.withLeaveTypes}
+                    onChange={(e) => setDefaults({ withLeaveTypes: e.target.checked })}
+                  />
                   Create the three default leave types
                 </label>
                 <div className="flex justify-between">
-                  <Button variant="ghost" onClick={() => setStepIdx(2)}>Back</Button>
-                  <Button onClick={saveDefaults} disabled={busy}>{busy ? "Saving…" : "Save & continue"} <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                  <Button variant="ghost" onClick={() => setStepIdx(2)}>
+                    Back
+                  </Button>
+                  <Button onClick={saveDefaults} disabled={busy}>
+                    {busy ? "Saving…" : "Save & continue"} <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -631,8 +865,9 @@ function OrgSetupPage() {
               <CardHeader>
                 <CardTitle>Invite your team</CardTitle>
                 <CardDescription>
-                  Add employees, managers, or co-admins. Managers can be linked to a department so they
-                  can later view and manage their team. You can also do this later from the Employees page.
+                  Add employees, managers, or co-admins. Managers can be linked to a department so
+                  they can later view and manage their team. You can also do this later from the
+                  Employees page.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -708,7 +943,9 @@ function OrgSetupPage() {
                           disabled={row.status === "sent" || busy}
                           onValueChange={(v) => updateInvite(idx, { role: v as InviteRow["role"] })}
                         >
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="employee">Employee</SelectItem>
                             <SelectItem value="manager">Manager (can lead a team)</SelectItem>
@@ -717,19 +954,32 @@ function OrgSetupPage() {
                         </Select>
                       </div>
                       <div className="space-y-1 md:col-span-2">
-                        <Label>Team / department {row.role === "manager" ? "(team they will manage)" : "(optional)"}</Label>
+                        <Label>
+                          Team / department{" "}
+                          {row.role === "manager" ? "(team they will manage)" : "(optional)"}
+                        </Label>
                         <Select
                           value={row.department_id ?? "__none"}
                           disabled={row.status === "sent" || busy || deptOptions.length === 0}
-                          onValueChange={(v) => updateInvite(idx, { department_id: v === "__none" ? undefined : v })}
+                          onValueChange={(v) =>
+                            updateInvite(idx, { department_id: v === "__none" ? undefined : v })
+                          }
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder={deptOptions.length === 0 ? "No departments yet — go back to step 3" : "Select a team"} />
+                            <SelectValue
+                              placeholder={
+                                deptOptions.length === 0
+                                  ? "No departments yet — go back to step 3"
+                                  : "Select a team"
+                              }
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none">No team</SelectItem>
                             {deptOptions.map((d) => (
-                              <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                              <SelectItem key={d.id} value={d.id}>
+                                {d.name}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -738,7 +988,12 @@ function OrgSetupPage() {
                     {row.status === "failed" && row.error && (
                       <div className="flex items-center justify-between rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
                         <span>{row.error}</span>
-                        <Button size="sm" variant="outline" onClick={() => sendOneInvite(idx)} disabled={busy}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => sendOneInvite(idx)}
+                          disabled={busy}
+                        >
                           Retry
                         </Button>
                       </div>
@@ -746,14 +1001,27 @@ function OrgSetupPage() {
                   </div>
                 ))}
 
-                <Button variant="outline" size="sm" onClick={() => setInvites((rows) => [...rows, newInviteRow()])} disabled={busy}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setInvites((rows) => [...rows, newInviteRow()])}
+                  disabled={busy}
+                >
                   + Add another invite
                 </Button>
 
                 <div className="flex flex-wrap justify-between gap-2 pt-2 border-t">
-                  <Button variant="ghost" onClick={() => setStepIdx(3)} disabled={busy}>Back</Button>
+                  <Button variant="ghost" onClick={() => setStepIdx(3)} disabled={busy}>
+                    Back
+                  </Button>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => sendAllAndFinish(true)} disabled={busy}>Skip & finish</Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => sendAllAndFinish(true)}
+                      disabled={busy}
+                    >
+                      Skip & finish
+                    </Button>
                     <Button
                       onClick={() => sendAllAndFinish(false)}
                       disabled={busy || !invites.some((r) => r.email.trim() && r.status !== "sent")}
@@ -765,7 +1033,6 @@ function OrgSetupPage() {
               </CardContent>
             </Card>
           )}
-
         </section>
       </div>
     </main>

@@ -1,0 +1,180 @@
+- generic [active] [ref=f12e1]:
+  - generic [ref=f12e32]:
+    - generic [ref=f12e35]:
+      - generic [ref=f12e37]:
+        - img "hrppl" [ref=f12e39]
+        - generic [ref=f12e40]:
+          - generic [ref=f12e41]: hrppl
+          - generic [ref=f12e42]: Empower your people
+      - generic [ref=f12e43]:
+        - generic [ref=f12e44]:
+          - generic [ref=f12e45]: My workspace
+          - list [ref=f12e47]:
+            - listitem [ref=f12e48]:
+              - button "My workspace" [ref=f12e49] [cursor=pointer]
+        - generic [ref=f12e57]:
+          - generic [ref=f12e58]: Practice
+          - list [ref=f12e60]:
+            - listitem [ref=f12e61]:
+              - button "Practice" [ref=f12e62] [cursor=pointer]
+        - generic [ref=f12e70]:
+          - generic [ref=f12e71]: Organization
+          - list [ref=f12e73]:
+            - listitem [ref=f12e74]:
+              - button "Organization" [ref=f12e75] [cursor=pointer]
+        - generic [ref=f12e84]:
+          - generic [ref=f12e85]: Account
+          - list [ref=f12e87]:
+            - listitem [ref=f12e88]:
+              - link "Profile" [ref=f12e89] [cursor=pointer]:
+                - /url: /settings/profile
+            - listitem [ref=f12e96]:
+              - link "Notifications" [ref=f12e97] [cursor=pointer]:
+                - /url: /settings/notifications
+            - listitem [ref=f12e103]:
+              - link "Account & sign-in" [ref=f12e104] [cursor=pointer]:
+                - /url: /settings/account
+        - generic [ref=f12e111]:
+          - generic [ref=f12e112]: Help
+          - list [ref=f12e114]:
+            - listitem [ref=f12e115]:
+              - link "Knowledge hub" [ref=f12e116] [cursor=pointer]:
+                - /url: /help
+      - list [ref=f12e123]:
+        - listitem [ref=f12e124]:
+          - link "Account" [ref=f12e125] [cursor=pointer]:
+            - /url: /settings/account
+        - listitem [ref=f12e131]:
+          - button "Sign out" [ref=f12e132] [cursor=pointer]
+    - generic [ref=f12e138]:
+      - banner [ref=f12e139]:
+        - generic [ref=f12e141]:
+          - button "Toggle Sidebar" [ref=f12e142] [cursor=pointer]
+          - generic [ref=f12e145]:
+            - heading "Home" [level=1] [ref=f12e146]
+            - paragraph [ref=f12e147]: Your workspace at a glance
+          - generic [ref=f12e148]:
+            - button "Search" [ref=f12e149] [cursor=pointer]
+            - button "Help" [ref=f12e150] [cursor=pointer]
+            - button "Notifications" [ref=f12e151] [cursor=pointer]
+            - generic [ref=f12e152]:
+              - generic [ref=f12e153]: employee
+              - generic [ref=f12e154]: finance
+              - generic [ref=f12e155]: fred.acme@demo.hrppl.test
+            - link "Settings" [ref=f12e156] [cursor=pointer]:
+              - /url: /settings/notifications
+      - main [ref=f12e157]:
+        - generic [ref=f12e158]:
+          - generic [ref=f12e162]:
+            - generic [ref=f12e163]:
+              - paragraph [ref=f12e164]: Good afternoon
+              - heading "Hello, fred.acme" [level=1] [ref=f12e165]
+              - paragraph [ref=f12e166]: Here's what's on your board today — leave, time, reviews, and pay at a glance.
+            - generic [ref=f12e167]:
+              - link "Request leave" [ref=f12e168] [cursor=pointer]:
+                - /url: /leave
+              - link "Clock in" [ref=f12e169] [cursor=pointer]:
+                - /url: /attendance
+              - link "Add a goal" [ref=f12e170] [cursor=pointer]:
+                - /url: /performance
+          - generic [ref=f12e171]:
+            - link "Leave pending 0" [ref=f12e172] [cursor=pointer]:
+              - /url: /leave
+              - generic [ref=f12e175]:
+                - generic [ref=f12e176]: Leave pending
+                - generic [ref=f12e181]: "0"
+            - link "Timesheets to submit 0" [ref=f12e186] [cursor=pointer]:
+              - /url: /attendance
+              - generic [ref=f12e189]:
+                - generic [ref=f12e190]: Timesheets to submit
+                - generic [ref=f12e197]: "0"
+            - link "Reviews open 0" [ref=f12e202] [cursor=pointer]:
+              - /url: /performance
+              - generic [ref=f12e205]:
+                - generic [ref=f12e206]: Reviews open
+                - generic [ref=f12e212]: "0"
+            - link "Onboarding tasks 0" [ref=f12e217] [cursor=pointer]:
+              - /url: /onboarding
+              - generic [ref=f12e220]:
+                - generic [ref=f12e221]: Onboarding tasks
+                - generic [ref=f12e227]: "0"
+            - link "Payslips available 0" [ref=f12e232] [cursor=pointer]:
+              - /url: /my-payslips
+              - generic [ref=f12e235]:
+                - generic [ref=f12e236]: Payslips available
+                - generic [ref=f12e242]: "0"
+          - generic [ref=f12e247]:
+            - generic [ref=f12e248]:
+              - generic [ref=f12e250]:
+                - generic [ref=f12e251]: My week
+                - generic [ref=f12e252]: Time off, clock-ins, reviews due
+              - generic [ref=f12e253]:
+                - link "Pending leave requests Done" [ref=f12e254] [cursor=pointer]:
+                  - /url: /leave
+                  - generic [ref=f12e255]: Pending leave requests
+                  - generic [ref=f12e258]: Done
+                - link "Open timesheet Done" [ref=f12e259] [cursor=pointer]:
+                  - /url: /attendance
+                  - generic [ref=f12e260]: Open timesheet
+                  - generic [ref=f12e263]: Done
+                - link "Reviews to action Done" [ref=f12e264] [cursor=pointer]:
+                  - /url: /performance
+                  - generic [ref=f12e265]: Reviews to action
+                  - generic [ref=f12e268]: Done
+            - generic [ref=f12e269]:
+              - generic [ref=f12e271]:
+                - generic [ref=f12e272]: Onboarding
+                - generic [ref=f12e273]: Checklists assigned to you
+              - generic [ref=f12e274]:
+                - link "In-progress tasks Done" [ref=f12e275] [cursor=pointer]:
+                  - /url: /onboarding
+                  - generic [ref=f12e276]: In-progress tasks
+                  - generic [ref=f12e279]: Done
+                - link "Personal details —" [ref=f12e280] [cursor=pointer]:
+                  - /url: /onboarding/profile
+                  - generic [ref=f12e281]: Personal details
+                  - generic [ref=f12e284]: —
+            - generic [ref=f12e285]:
+              - generic [ref=f12e287]:
+                - generic [ref=f12e288]: Pay
+                - generic [ref=f12e289]: Latest payroll & payslips
+              - generic [ref=f12e290]:
+                - link "Available payslips Pending" [ref=f12e291] [cursor=pointer]:
+                  - /url: /my-payslips
+                  - generic [ref=f12e292]: Available payslips
+                  - generic [ref=f12e295]: Pending
+                - link "Signatures awaiting you —" [ref=f12e296] [cursor=pointer]:
+                  - /url: /me/signatures
+                  - generic [ref=f12e297]: Signatures awaiting you
+                  - generic [ref=f12e300]: —
+          - generic [ref=f12e301]:
+            - generic [ref=f12e302]:
+              - heading "Quick access" [level=3] [ref=f12e303]
+              - button "Customize" [ref=f12e304] [cursor=pointer]
+            - generic [ref=f12e305]:
+              - link "Pinned Org console Organization" [ref=f12e306] [cursor=pointer]:
+                - /url: /org
+                - generic [ref=f12e307]:
+                  - generic [ref=f12e308]: Pinned
+                  - generic [ref=f12e311]:
+                    - generic [ref=f12e317]: Org console
+                    - generic [ref=f12e318]: Organization
+              - link "Run payroll Payroll" [ref=f12e319] [cursor=pointer]:
+                - /url: /org/payroll
+                - generic [ref=f12e321]:
+                  - generic [ref=f12e325]: Run payroll
+                  - generic [ref=f12e326]: Payroll
+              - link "Expenses Operations" [ref=f12e327] [cursor=pointer]:
+                - /url: /org/expenses
+                - generic [ref=f12e329]:
+                  - generic [ref=f12e334]: Expenses
+                  - generic [ref=f12e335]: Operations
+              - link "Analytics Insights" [ref=f12e336] [cursor=pointer]:
+                - /url: /org/analytics
+                - generic [ref=f12e338]:
+                  - generic [ref=f12e343]: Analytics
+                  - generic [ref=f12e344]: Insights
+  - region "Notifications alt+T":
+    - list:
+      - listitem [ref=f12e345]:
+        - generic [ref=f12e349]: Signed in

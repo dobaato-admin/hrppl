@@ -5,11 +5,24 @@ import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
 import { listOnboardingTrackerRows } from "@/lib/onboarding-tracker.functions";
 import { exportOnboardingTrackerAuditCsv } from "@/lib/audit-explorer.functions";
@@ -25,8 +38,14 @@ export const Route = createFileRoute("/org/onboarding/tracker")({
 function Page() {
   const { roles, loading } = useAuth();
   const navigate = useNavigate();
-  const canAccess = roles.includes("hr") || roles.includes("org_admin") || roles.includes("super_admin") || roles.includes("manager");
-  useEffect(() => { if (!loading && !canAccess) navigate({ to: "/dashboard" }); }, [loading, canAccess, navigate]);
+  const canAccess =
+    roles.includes("hr") ||
+    roles.includes("org_admin") ||
+    roles.includes("super_admin") ||
+    roles.includes("manager");
+  useEffect(() => {
+    if (!loading && !canAccess) navigate({ to: "/dashboard" });
+  }, [loading, canAccess, navigate]);
 
   const fetchRows = useServerFn(listOnboardingTrackerRows);
   const [status, setStatus] = useState<string>("");
@@ -36,18 +55,26 @@ function Page() {
 
   const rowsQ = useQuery({
     queryKey: ["onb-tracker", status, country, onlyOverdue],
-    queryFn: () => fetchRows({ data: { status: status || undefined, country: country || undefined, onlyOverdue } }),
+    queryFn: () =>
+      fetchRows({
+        data: { status: status || undefined, country: country || undefined, onlyOverdue },
+      }),
     enabled: canAccess,
   });
   const rows = (rowsQ.data?.rows ?? []).filter((r: any) => {
     if (!q) return true;
     const s = q.toLowerCase();
     const e = r.employee ?? {};
-    return [e.first_name, e.last_name, e.employee_number, e.job_title].filter(Boolean).some((v: string) => String(v).toLowerCase().includes(s));
+    return [e.first_name, e.last_name, e.employee_number, e.job_title]
+      .filter(Boolean)
+      .some((v: string) => String(v).toLowerCase().includes(s));
   });
 
   return (
-    <AppShell title="Onboarding tracker" subtitle="Cross-employee assignment, attestation, and evidence status">
+    <AppShell
+      title="Onboarding tracker"
+      subtitle="Cross-employee assignment, attestation, and evidence status"
+    >
       <div className="p-4 space-y-4">
         <Card>
           <CardHeader>
@@ -57,12 +84,21 @@ function Page() {
           <CardContent className="grid gap-3 md:grid-cols-5">
             <div>
               <Label className="text-xs">Search</Label>
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, number, title" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Name, number, title"
+              />
             </div>
             <div>
               <Label className="text-xs">Status</Label>
-              <Select value={status || "all"} onValueChange={(v) => setStatus(v === "all" ? "" : v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={status || "all"}
+                onValueChange={(v) => setStatus(v === "all" ? "" : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
@@ -74,14 +110,23 @@ function Page() {
             </div>
             <div>
               <Label className="text-xs">Country</Label>
-              <Input value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} placeholder="AU, NP, …" maxLength={3} />
+              <Input
+                value={country}
+                onChange={(e) => setCountry(e.target.value.toUpperCase())}
+                placeholder="AU, NP, …"
+                maxLength={3}
+              />
             </div>
             <div className="flex items-end gap-2">
               <Switch id="overdue" checked={onlyOverdue} onCheckedChange={setOnlyOverdue} />
-              <Label htmlFor="overdue" className="text-xs">Overdue only</Label>
+              <Label htmlFor="overdue" className="text-xs">
+                Overdue only
+              </Label>
             </div>
             <div className="flex items-end text-xs text-muted-foreground gap-2">
-              <span>{rows.length} of {rowsQ.data?.rows?.length ?? 0} rows</span>
+              <span>
+                {rows.length} of {rowsQ.data?.rows?.length ?? 0} rows
+              </span>
               <ExportAuditButton />
             </div>
           </CardContent>
@@ -103,10 +148,18 @@ function Page() {
               </TableHeader>
               <TableBody>
                 {rowsQ.isLoading && (
-                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Loading…</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      Loading…
+                    </TableCell>
+                  </TableRow>
                 )}
                 {!rowsQ.isLoading && rows.length === 0 && (
-                  <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">No assignments match.</TableCell></TableRow>
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                      No assignments match.
+                    </TableCell>
+                  </TableRow>
                 )}
                 {rows.map((r: any) => {
                   const e = r.employee ?? {};
@@ -115,19 +168,45 @@ function Page() {
                   return (
                     <TableRow key={r.id}>
                       <TableCell>
-                        <div className="font-medium">{e.first_name} {e.last_name}</div>
-                        <div className="text-xs text-muted-foreground">{e.employee_number ?? "—"} · {e.job_title ?? ""}</div>
+                        <div className="font-medium">
+                          {e.first_name} {e.last_name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {e.employee_number ?? "—"} · {e.job_title ?? ""}
+                        </div>
                       </TableCell>
-                      <TableCell><Badge variant="outline">{r.status}</Badge></TableCell>
-                      <TableCell className="text-right">{r.stats.done}/{r.stats.total} ({pct}%)</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{r.status}</Badge>
+                      </TableCell>
                       <TableCell className="text-right">
-                        {r.stats.overdue > 0 ? <span className="text-destructive font-medium inline-flex items-center gap-1"><AlertTriangle className="h-3 w-3" />{r.stats.overdue}</span> : <span className="text-muted-foreground">0</span>}
+                        {r.stats.done}/{r.stats.total} ({pct}%)
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {r.stats.overdue > 0 ? (
+                          <span className="text-destructive font-medium inline-flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            {r.stats.overdue}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">{r.stats.missingAttest}</TableCell>
                       <TableCell className="text-right">{r.stats.missingEvidence}</TableCell>
                       <TableCell className="text-right">
-                        <Link to="/org/onboarding/control-room/$id" params={{ id: r.id }} className="text-primary text-xs hover:underline">
-                          {warn ? "Resolve →" : <span className="inline-flex items-center gap-1"><CheckCircle2 className="h-3 w-3" />Open</span>}
+                        <Link
+                          to="/org/onboarding/control-room/$id"
+                          params={{ id: r.id }}
+                          className="text-primary text-xs hover:underline"
+                        >
+                          {warn ? (
+                            "Resolve →"
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Open
+                            </span>
+                          )}
                         </Link>
                       </TableCell>
                     </TableRow>
@@ -145,16 +224,25 @@ function Page() {
 function ExportAuditButton() {
   const f = useServerFn(exportOnboardingTrackerAuditCsv);
   return (
-    <Button size="sm" variant="outline" onClick={async () => {
-      try {
-        const res = await f({ data: {} });
-        const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = `onboarding-audit-${Date.now()}.csv`; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        toast.success(`Exported ${res.rowCount} rows`);
-      } catch (e: any) { toast.error(e?.message ?? "Export failed"); }
-    }}>
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={async () => {
+        try {
+          const res = await f({ data: {} });
+          const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `onboarding-audit-${Date.now()}.csv`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          toast.success(`Exported ${res.rowCount} rows`);
+        } catch (e: any) {
+          toast.error(e?.message ?? "Export failed");
+        }
+      }}
+    >
       <Download className="h-3 w-3 mr-1" /> Audit CSV
     </Button>
   );

@@ -9,24 +9,49 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { listDepartments, upsertDepartment, deleteDepartment } from "@/lib/departments.functions";
 import { AdminGate } from "@/components/AdminGate";
-import { ORG_ADMIN_ONLY } from "@/lib/rbac";
+import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/departments")({
   head: () => ({ meta: [{ title: "Departments — hrppl" }] }),
   component: () => (
-    <AdminGate allow={ORG_ADMIN_ONLY}>
+    <AdminGate feature="org.departments">
       <DepartmentsPage />
     </AdminGate>
   ),
 });
 
-interface Dept { id: string; name: string; parent_id: string | null; manager_id: string | null; headcount: number }
+interface Dept {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  manager_id: string | null;
+  headcount: number;
+}
 
 function DepartmentsPage() {
   const { user, roles, loading, rolesLoaded } = useAuth();
@@ -35,14 +60,25 @@ function DepartmentsPage() {
   const listFn = useServerFn(listDepartments);
   const saveFn = useServerFn(upsertDepartment);
   const delFn = useServerFn(deleteDepartment);
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Derived from the SAME feature key the route gate quotes, so this
+  // page has one answer to "who may be here" instead of two. It previously
+  // hand-rolled its own role list, which meant widening the route gate left
+  // this check still rejecting — AdminGate let the user in and the page
+  // bounced them a moment later.
+  const canAccess = can("org.departments", roles);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState<{ id?: string; name: string; parent_id: string | null }>({ name: "", parent_id: null });
+  const [form, setForm] = useState<{ id?: string; name: string; parent_id: string | null }>({
+    name: "",
+    parent_id: null,
+  });
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
-    else if (!loading && user && !canAccess) { toast.error("Admin only"); navigate({ to: "/dashboard" }); }
+    else if (!loading && user && !canAccess) {
+      toast.error("Admin only");
+      navigate({ to: "/dashboard" });
+    }
   }, [loading, user, canAccess, navigate]);
 
   const { data, isLoading } = useQuery({
@@ -52,8 +88,14 @@ function DepartmentsPage() {
   });
   const departments: Dept[] = (data?.departments ?? []) as Dept[];
 
-  function startNew() { setForm({ name: "", parent_id: null }); setOpen(true); }
-  function startEdit(d: Dept) { setForm({ id: d.id, name: d.name, parent_id: d.parent_id }); setOpen(true); }
+  function startNew() {
+    setForm({ name: "", parent_id: null });
+    setOpen(true);
+  }
+  function startEdit(d: Dept) {
+    setForm({ id: d.id, name: d.name, parent_id: d.parent_id });
+    setOpen(true);
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -63,8 +105,11 @@ function DepartmentsPage() {
       toast.success("Saved");
       setOpen(false);
       qc.invalidateQueries({ queryKey: ["departments-admin"] });
-    } catch (e: any) { toast.error(e?.message ?? "Failed"); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(d: Dept) {
@@ -73,14 +118,25 @@ function DepartmentsPage() {
       await delFn({ data: { id: d.id } });
       toast.success("Deleted");
       qc.invalidateQueries({ queryKey: ["departments-admin"] });
-    } catch (e: any) { toast.error(e?.message ?? "Failed"); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed");
+    }
   }
 
   if (loading || (user && !rolesLoaded)) {
-    return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
   }
 
-  if (!user) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+  if (!user)
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
 
   return (
     <AppShell title="Departments" subtitle="Teams and reporting structure">
@@ -90,8 +146,14 @@ function DepartmentsPage() {
             Used across employees, payroll, leave, and onboarding.
           </div>
           <div className="flex gap-2">
-            <Link to="/org/employees"><Button variant="outline" size="sm">View employees</Button></Link>
-            <Button size="sm" onClick={startNew} data-testid="add-department">Add department</Button>
+            <Link to="/org/employees">
+              <Button variant="outline" size="sm">
+                View employees
+              </Button>
+            </Link>
+            <Button size="sm" onClick={startNew} data-testid="add-department">
+              Add department
+            </Button>
           </div>
         </div>
 
@@ -99,7 +161,9 @@ function DepartmentsPage() {
           <CardHeader>
             <CardTitle className="text-base">Departments</CardTitle>
             <CardDescription>
-              {isLoading ? "Loading…" : `${departments.length} department${departments.length === 1 ? "" : "s"}`}
+              {isLoading
+                ? "Loading…"
+                : `${departments.length} department${departments.length === 1 ? "" : "s"}`}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -126,10 +190,16 @@ function DepartmentsPage() {
                     <TableRow key={d.id} data-testid="department-row">
                       <TableCell className="font-medium">{d.name}</TableCell>
                       <TableCell className="text-muted-foreground">{parent}</TableCell>
-                      <TableCell><Badge variant="outline">{d.headcount}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{d.headcount}</Badge>
+                      </TableCell>
                       <TableCell className="text-right space-x-1">
-                        <Button size="sm" variant="outline" onClick={() => startEdit(d)}>Edit</Button>
-                        <Button size="sm" variant="ghost" onClick={() => remove(d)}>Delete</Button>
+                        <Button size="sm" variant="outline" onClick={() => startEdit(d)}>
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => remove(d)}>
+                          Delete
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
@@ -162,17 +232,25 @@ function DepartmentsPage() {
                 value={form.parent_id ?? "none"}
                 onValueChange={(v) => setForm({ ...form, parent_id: v === "none" ? null : v })}
               >
-                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">— None —</SelectItem>
-                  {departments.filter((d) => d.id !== form.id).map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                  ))}
+                  {departments
+                    .filter((d) => d.id !== form.id)
+                    .map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
               <Button type="submit" disabled={busy} data-testid="department-save">
                 {busy ? "Saving…" : form.id ? "Save changes" : "Add department"}
               </Button>

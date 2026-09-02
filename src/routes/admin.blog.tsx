@@ -11,12 +11,35 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  listAdminPosts, upsertPost, deletePost, getAdminPost, listCategories,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  listAdminPosts,
+  upsertPost,
+  deletePost,
+  getAdminPost,
+  listCategories,
 } from "@/lib/blog.functions";
 import { SuperAdminGuard } from "@/components/SuperAdminGuard";
 
@@ -42,9 +65,18 @@ type PostForm = {
 };
 
 const emptyForm = (): PostForm => ({
-  title: "", slug: "", excerpt: "", content_md: "", cover_image_url: "",
-  category_id: "", tags_text: "", status: "draft", scheduled_for: "",
-  seo_title: "", seo_description: "", og_image_url: "",
+  title: "",
+  slug: "",
+  excerpt: "",
+  content_md: "",
+  cover_image_url: "",
+  category_id: "",
+  tags_text: "",
+  status: "draft",
+  scheduled_for: "",
+  seo_title: "",
+  seo_description: "",
+  og_image_url: "",
 });
 
 function BlogAdmin() {
@@ -88,7 +120,10 @@ function BlogAdmin() {
   });
   const categories = catData?.categories ?? [];
 
-  function startNew() { setForm(emptyForm()); setOpen(true); }
+  function startNew() {
+    setForm(emptyForm());
+    setOpen(true);
+  }
 
   async function startEdit(id: string) {
     const { post } = await getFn({ data: { id } });
@@ -103,7 +138,9 @@ function BlogAdmin() {
       category_id: post.category_id ?? "",
       tags_text: (post.tags ?? []).join(", "),
       status: post.status as PostForm["status"],
-      scheduled_for: post.scheduled_for ? new Date(post.scheduled_for).toISOString().slice(0, 16) : "",
+      scheduled_for: post.scheduled_for
+        ? new Date(post.scheduled_for).toISOString().slice(0, 16)
+        : "",
       seo_title: post.seo_title ?? "",
       seo_description: post.seo_description ?? "",
       og_image_url: post.og_image_url ?? "",
@@ -115,7 +152,10 @@ function BlogAdmin() {
     e.preventDefault();
     setBusy(true);
     try {
-      const tags = form.tags_text.split(",").map((t) => t.trim()).filter(Boolean);
+      const tags = form.tags_text
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
       await saveFn({
         data: {
           id: form.id,
@@ -127,7 +167,10 @@ function BlogAdmin() {
           category_id: form.category_id || null,
           tags,
           status: form.status,
-          scheduled_for: form.status === "scheduled" && form.scheduled_for ? new Date(form.scheduled_for).toISOString() : null,
+          scheduled_for:
+            form.status === "scheduled" && form.scheduled_for
+              ? new Date(form.scheduled_for).toISOString()
+              : null,
           seo_title: form.seo_title || null,
           seo_description: form.seo_description || null,
           og_image_url: form.og_image_url || null,
@@ -138,13 +181,20 @@ function BlogAdmin() {
       qc.invalidateQueries({ queryKey: ["admin-blog-posts"] });
     } catch (err) {
       toast.error((err as Error).message);
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("Delete this post?")) return;
-    try { await delFn({ data: { id } }); toast.success("Deleted"); qc.invalidateQueries({ queryKey: ["admin-blog-posts"] }); }
-    catch (err) { toast.error((err as Error).message); }
+    try {
+      await delFn({ data: { id } });
+      toast.success("Deleted");
+      qc.invalidateQueries({ queryKey: ["admin-blog-posts"] });
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
   }
 
   const posts = data?.posts ?? [];
@@ -161,21 +211,30 @@ function BlogAdmin() {
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-4">
             <div>
-              <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> Content</CardTitle>
-              <CardDescription>Write, schedule and publish articles to hrppl.io/blog. External tools can also create posts via the API.</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" /> Content
+              </CardTitle>
+              <CardDescription>
+                Write, schedule and publish articles to hrppl.io/blog. External tools can also
+                create posts via the API.
+              </CardDescription>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" asChild>
                 <a href="/admin/blog-integrations">API keys & webhooks</a>
               </Button>
-              <Button onClick={startNew}><Plus className="h-4 w-4 mr-1" /> New post</Button>
+              <Button onClick={startNew}>
+                <Plus className="h-4 w-4 mr-1" /> New post
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : posts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No posts yet. Click <strong>New post</strong> to create one.</p>
+              <p className="text-sm text-muted-foreground">
+                No posts yet. Click <strong>New post</strong> to create one.
+              </p>
             ) : (
               <Table>
                 <TableHeader>
@@ -193,16 +252,26 @@ function BlogAdmin() {
                         <div className="font-medium">{p.title}</div>
                         <div className="text-xs text-muted-foreground">/{p.slug}</div>
                       </TableCell>
-                      <TableCell><Badge className={statusBadge[p.status] ?? ""}>{p.status}</Badge></TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{new Date(p.updated_at).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge className={statusBadge[p.status] ?? ""}>{p.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(p.updated_at).toLocaleString()}
+                      </TableCell>
                       <TableCell className="text-right space-x-1">
                         {p.status === "published" && (
                           <Button size="sm" variant="ghost" asChild>
-                            <a href={`/blog/${p.slug}`} target="_blank" rel="noreferrer"><Eye className="h-4 w-4" /></a>
+                            <a href={`/blog/${p.slug}`} target="_blank" rel="noreferrer">
+                              <Eye className="h-4 w-4" />
+                            </a>
                           </Button>
                         )}
-                        <Button size="sm" variant="ghost" onClick={() => startEdit(p.id)}><Pencil className="h-4 w-4" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => remove(p.id)}><Trash2 className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => startEdit(p.id)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => remove(p.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -214,47 +283,91 @@ function BlogAdmin() {
 
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{form.id ? "Edit post" : "New post"}</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>{form.id ? "Edit post" : "New post"}</DialogTitle>
+            </DialogHeader>
             <form onSubmit={save} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <Label>Title *</Label>
-                  <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required maxLength={200} />
+                  <Input
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                    required
+                    maxLength={200}
+                  />
                 </div>
                 <div>
                   <Label>Slug</Label>
-                  <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase() })} placeholder="auto-from-title" pattern="[a-z0-9-]*" />
+                  <Input
+                    value={form.slug}
+                    onChange={(e) => setForm({ ...form, slug: e.target.value.toLowerCase() })}
+                    placeholder="auto-from-title"
+                    pattern="[a-z0-9-]*"
+                  />
                 </div>
                 <div>
                   <Label>Category</Label>
-                  <Select value={form.category_id || "none"} onValueChange={(v) => setForm({ ...form, category_id: v === "none" ? "" : v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select
+                    value={form.category_id || "none"}
+                    onValueChange={(v) => setForm({ ...form, category_id: v === "none" ? "" : v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Uncategorised</SelectItem>
-                      {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="md:col-span-2">
                   <Label>Excerpt</Label>
-                  <Textarea value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} rows={2} maxLength={400} />
+                  <Textarea
+                    value={form.excerpt}
+                    onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
+                    rows={2}
+                    maxLength={400}
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <Label>Content (Markdown)</Label>
-                  <Textarea value={form.content_md} onChange={(e) => setForm({ ...form, content_md: e.target.value })} rows={14} className="font-mono text-sm" />
+                  <Textarea
+                    value={form.content_md}
+                    onChange={(e) => setForm({ ...form, content_md: e.target.value })}
+                    rows={14}
+                    className="font-mono text-sm"
+                  />
                 </div>
                 <div>
                   <Label>Cover image URL</Label>
-                  <Input value={form.cover_image_url} onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })} placeholder="https://…" />
+                  <Input
+                    value={form.cover_image_url}
+                    onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
+                    placeholder="https://…"
+                  />
                 </div>
                 <div>
                   <Label>Tags (comma-separated)</Label>
-                  <Input value={form.tags_text} onChange={(e) => setForm({ ...form, tags_text: e.target.value })} placeholder="payroll, compliance" />
+                  <Input
+                    value={form.tags_text}
+                    onChange={(e) => setForm({ ...form, tags_text: e.target.value })}
+                    placeholder="payroll, compliance"
+                  />
                 </div>
                 <div>
                   <Label>Status</Label>
-                  <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as PostForm["status"] })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                  <Select
+                    value={form.status}
+                    onValueChange={(v) => setForm({ ...form, status: v as PostForm["status"] })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="draft">Draft</SelectItem>
                       <SelectItem value="scheduled">Scheduled</SelectItem>
@@ -266,7 +379,11 @@ function BlogAdmin() {
                 {form.status === "scheduled" && (
                   <div>
                     <Label>Scheduled for</Label>
-                    <Input type="datetime-local" value={form.scheduled_for} onChange={(e) => setForm({ ...form, scheduled_for: e.target.value })} />
+                    <Input
+                      type="datetime-local"
+                      value={form.scheduled_for}
+                      onChange={(e) => setForm({ ...form, scheduled_for: e.target.value })}
+                    />
                   </div>
                 )}
                 <div className="md:col-span-2 border-t border-border pt-4">
@@ -274,20 +391,36 @@ function BlogAdmin() {
                 </div>
                 <div>
                   <Label>SEO title</Label>
-                  <Input value={form.seo_title} onChange={(e) => setForm({ ...form, seo_title: e.target.value })} maxLength={200} />
+                  <Input
+                    value={form.seo_title}
+                    onChange={(e) => setForm({ ...form, seo_title: e.target.value })}
+                    maxLength={200}
+                  />
                 </div>
                 <div>
                   <Label>OG image URL</Label>
-                  <Input value={form.og_image_url} onChange={(e) => setForm({ ...form, og_image_url: e.target.value })} />
+                  <Input
+                    value={form.og_image_url}
+                    onChange={(e) => setForm({ ...form, og_image_url: e.target.value })}
+                  />
                 </div>
                 <div className="md:col-span-2">
                   <Label>SEO description</Label>
-                  <Textarea value={form.seo_description} onChange={(e) => setForm({ ...form, seo_description: e.target.value })} rows={2} maxLength={300} />
+                  <Textarea
+                    value={form.seo_description}
+                    onChange={(e) => setForm({ ...form, seo_description: e.target.value })}
+                    rows={2}
+                    maxLength={300}
+                  />
                 </div>
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={busy}>
+                  {busy ? "Saving…" : "Save"}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -296,13 +429,33 @@ function BlogAdmin() {
         <Card>
           <CardHeader>
             <CardTitle>How to automate publishing</CardTitle>
-            <CardDescription>Connect Blaze.ai, AutoSEO or any tool that can POST JSON.</CardDescription>
+            <CardDescription>
+              Connect Blaze.ai, AutoSEO or any tool that can POST JSON.
+            </CardDescription>
           </CardHeader>
           <CardContent className="text-sm space-y-2">
-            <p>API base URL: <code className="bg-muted px-1.5 py-0.5 rounded">https://hrppl.io/api/public/blog/posts</code></p>
-            <p>Create an API key in <a className="text-primary underline" href="/admin/blog-integrations">API keys & webhooks</a>, then send it as <code>Authorization: Bearer hpk_…</code>.</p>
-            <p className="text-muted-foreground">External tools can create drafts, schedule, or auto-publish. New posts trigger your registered webhooks (HMAC-signed).</p>
-            <p><a className="text-primary inline-flex items-center gap-1" href="/developers"><ExternalLink className="h-3 w-3" /> Full developer docs</a></p>
+            <p>
+              API base URL:{" "}
+              <code className="bg-muted px-1.5 py-0.5 rounded">
+                https://hrppl.io/api/public/blog/posts
+              </code>
+            </p>
+            <p>
+              Create an API key in{" "}
+              <a className="text-primary underline" href="/admin/blog-integrations">
+                API keys & webhooks
+              </a>
+              , then send it as <code>Authorization: Bearer hpk_…</code>.
+            </p>
+            <p className="text-muted-foreground">
+              External tools can create drafts, schedule, or auto-publish. New posts trigger your
+              registered webhooks (HMAC-signed).
+            </p>
+            <p>
+              <a className="text-primary inline-flex items-center gap-1" href="/developers">
+                <ExternalLink className="h-3 w-3" /> Full developer docs
+              </a>
+            </p>
           </CardContent>
         </Card>
       </div>

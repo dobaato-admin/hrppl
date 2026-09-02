@@ -1,0 +1,54 @@
+- generic [active] [ref=f11e1]:
+  - generic [ref=f11e3]:
+    - generic [ref=f11e6]:
+      - generic [ref=f11e8]:
+        - img "hrppl" [ref=f11e10]
+        - generic [ref=f11e11]:
+          - generic [ref=f11e12]: hrppl
+          - generic [ref=f11e13]: Empower your people
+      - generic [ref=f11e14]:
+        - generic [ref=f11e15]:
+          - generic [ref=f11e16]: My workspace
+          - list [ref=f11e18]:
+            - listitem [ref=f11e19]:
+              - button "My workspace" [ref=f11e20] [cursor=pointer]
+        - generic [ref=f11e28]:
+          - generic [ref=f11e29]: Account
+          - list [ref=f11e31]:
+            - listitem [ref=f11e32]:
+              - link "Profile" [ref=f11e33] [cursor=pointer]:
+                - /url: /settings/profile
+            - listitem [ref=f11e40]:
+              - link "Notifications" [ref=f11e41] [cursor=pointer]:
+                - /url: /settings/notifications
+            - listitem [ref=f11e47]:
+              - link "Account & sign-in" [ref=f11e48] [cursor=pointer]:
+                - /url: /settings/account
+        - generic [ref=f11e55]:
+          - generic [ref=f11e56]: Help
+          - list [ref=f11e58]:
+            - listitem [ref=f11e59]:
+              - link "Knowledge hub" [ref=f11e60] [cursor=pointer]:
+                - /url: /help
+      - list [ref=f11e67]:
+        - listitem [ref=f11e68]:
+          - link "Account" [ref=f11e69] [cursor=pointer]:
+            - /url: /settings/account
+        - listitem [ref=f11e75]:
+          - button "Sign out" [ref=f11e76] [cursor=pointer]
+    - generic [ref=f11e82]:
+      - banner [ref=f11e83]:
+        - generic [ref=f11e85]:
+          - button "Toggle Sidebar" [ref=f11e86] [cursor=pointer]
+          - generic [ref=f11e89]:
+            - heading "Home" [level=1] [ref=f11e90]
+            - paragraph [ref=f11e91]: Loading your workspace
+          - generic [ref=f11e92]:
+            - button "Search" [ref=f11e93] [cursor=pointer]
+            - button "Help" [ref=f11e94] [cursor=pointer]
+            - button "Notifications" [ref=f11e95] [cursor=pointer]
+            - generic [ref=f11e96]: Loading role…
+            - link "Settings" [ref=f11e98] [cursor=pointer]:
+              - /url: /settings/notifications
+      - main [ref=f11e99]
+  - region "Notifications alt+T"

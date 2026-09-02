@@ -9,17 +9,30 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
-import { listControlRooms, bulkUpdateAssignmentStatus } from "@/lib/onboarding-control-room.functions";
+import {
+  listControlRooms,
+  bulkUpdateAssignmentStatus,
+} from "@/lib/onboarding-control-room.functions";
 import { Search, X, ArrowUpDown, CheckCircle2, XCircle, Clock, AlertTriangle } from "lucide-react";
-
 
 const LANES = ["hr", "it", "manager", "employee", "finance"] as const;
 const STATUSES = ["pending", "in_progress", "completed", "blocked", "skipped"] as const;
@@ -34,7 +47,10 @@ function Page() {
   const { roles, loading } = useAuth();
   const navigate = useNavigate();
   const canAccess =
-    roles.includes("hr") || roles.includes("org_admin") || roles.includes("super_admin") || roles.includes("manager");
+    roles.includes("hr") ||
+    roles.includes("org_admin") ||
+    roles.includes("super_admin") ||
+    roles.includes("manager");
   useEffect(() => {
     if (!loading && !canAccess) navigate({ to: "/dashboard" });
   }, [loading, canAccess, navigate]);
@@ -54,7 +70,14 @@ function Page() {
   const fn = useServerFn(listControlRooms);
   const bulkFn = useServerFn(bulkUpdateAssignmentStatus);
   const { data, isLoading } = useQuery({
-    queryKey: ["onboarding-control-rooms", search, ownerRole, taskStatus, dueBefore, assignmentStatus],
+    queryKey: [
+      "onboarding-control-rooms",
+      search,
+      ownerRole,
+      taskStatus,
+      dueBefore,
+      assignmentStatus,
+    ],
     queryFn: () =>
       fn({
         data: {
@@ -82,10 +105,20 @@ function Page() {
     }
     return (b.assigned_at ?? "").localeCompare(a.assigned_at ?? "");
   });
-  const hasFilter = !!(search || ownerRole !== ALL || taskStatus !== ALL || dueBefore || assignmentStatus !== ALL);
+  const hasFilter = !!(
+    search ||
+    ownerRole !== ALL ||
+    taskStatus !== ALL ||
+    dueBefore ||
+    assignmentStatus !== ALL
+  );
 
   function clearFilters() {
-    setSearch(""); setOwnerRole(ALL); setTaskStatus(ALL); setDueBefore(""); setAssignmentStatus(ALL);
+    setSearch("");
+    setOwnerRole(ALL);
+    setTaskStatus(ALL);
+    setDueBefore("");
+    setAssignmentStatus(ALL);
   }
 
   // KPI counts across the unfiltered-by-status visible rows
@@ -115,9 +148,12 @@ function Page() {
     setBulkBusy(true);
     try {
       const res = await bulkFn({ data: { ids: Array.from(selected), decision, notes } });
-      toast.success(`${decision === "approve" ? "Approved" : "Rejected"} ${res.count} assignment${res.count === 1 ? "" : "s"}`);
+      toast.success(
+        `${decision === "approve" ? "Approved" : "Rejected"} ${res.count} assignment${res.count === 1 ? "" : "s"}`,
+      );
       setSelected(new Set());
-      setRejectOpen(false); setRejectNotes("");
+      setRejectOpen(false);
+      setRejectNotes("");
       qc.invalidateQueries({ queryKey: ["onboarding-control-rooms"] });
     } catch (e: any) {
       toast.error(e?.message ?? "Bulk action failed");
@@ -128,11 +164,28 @@ function Page() {
 
   const kpiTiles = [
     { key: "pending", label: "Pending", value: kpis.pending, icon: Clock, tone: "text-amber-600" },
-    { key: "in_progress", label: "In progress", value: kpis.in_progress, icon: ArrowUpDown, tone: "text-blue-600" },
-    { key: "blocked", label: "Blocked", value: kpis.blocked, icon: AlertTriangle, tone: "text-red-600" },
-    { key: "completed", label: "Completed", value: kpis.completed, icon: CheckCircle2, tone: "text-emerald-600" },
+    {
+      key: "in_progress",
+      label: "In progress",
+      value: kpis.in_progress,
+      icon: ArrowUpDown,
+      tone: "text-blue-600",
+    },
+    {
+      key: "blocked",
+      label: "Blocked",
+      value: kpis.blocked,
+      icon: AlertTriangle,
+      tone: "text-red-600",
+    },
+    {
+      key: "completed",
+      label: "Completed",
+      value: kpis.completed,
+      icon: CheckCircle2,
+      tone: "text-emerald-600",
+    },
   ];
-
 
   return (
     <AppShell title="Onboarding control room" subtitle="Cross-team checklists for every new hire">
@@ -162,7 +215,6 @@ function Page() {
 
         <Card>
           <CardContent className="p-4">
-
             <div className="grid gap-3 md:grid-cols-4">
               <div className="md:col-span-2">
                 <Label className="text-xs">Search</Label>
@@ -179,11 +231,15 @@ function Page() {
               <div>
                 <Label className="text-xs">Owner lane</Label>
                 <Select value={ownerRole} onValueChange={setOwnerRole}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={ALL}>All lanes</SelectItem>
                     {LANES.map((l) => (
-                      <SelectItem key={l} value={l} className="capitalize">{l}</SelectItem>
+                      <SelectItem key={l} value={l} className="capitalize">
+                        {l}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -191,18 +247,26 @@ function Page() {
               <div>
                 <Label className="text-xs">Task status</Label>
                 <Select value={taskStatus} onValueChange={setTaskStatus}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={ALL}>All statuses</SelectItem>
                     {STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>
+                      <SelectItem key={s} value={s}>
+                        {s.replace("_", " ")}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label className="text-xs">Due on/before</Label>
-                <Input type="date" value={dueBefore} onChange={(e) => setDueBefore(e.target.value)} />
+                <Input
+                  type="date"
+                  value={dueBefore}
+                  onChange={(e) => setDueBefore(e.target.value)}
+                />
               </div>
               <div className="flex items-end">
                 {hasFilter && (
@@ -228,9 +292,12 @@ function Page() {
               </label>
             )}
             <div>
-              {isLoading ? "Loading…" : (
+              {isLoading ? (
+                "Loading…"
+              ) : (
                 <>
-                  <span className="font-medium text-foreground">{rows.length}</span> assignment{rows.length === 1 ? "" : "s"}
+                  <span className="font-medium text-foreground">{rows.length}</span> assignment
+                  {rows.length === 1 ? "" : "s"}
                   {hasFilter && " match these filters"}
                 </>
               )}
@@ -239,7 +306,9 @@ function Page() {
           <div className="flex items-center gap-2">
             <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-              <SelectTrigger className="h-8 w-40 text-xs"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 w-40 text-xs">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="recent">Recently assigned</SelectItem>
                 <SelectItem value="hire">Hire date (newest)</SelectItem>
@@ -266,11 +335,7 @@ function Page() {
               >
                 <XCircle className="h-3.5 w-3.5 mr-1" /> Bulk reject
               </Button>
-              <Button
-                size="sm"
-                disabled={bulkBusy}
-                onClick={() => runBulk("approve")}
-              >
+              <Button size="sm" disabled={bulkBusy} onClick={() => runBulk("approve")}>
                 <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Bulk approve
               </Button>
             </div>
@@ -281,7 +346,9 @@ function Page() {
           <div className="grid gap-4 md:grid-cols-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i} className="h-[220px] animate-pulse">
-                <CardHeader><span className="block h-4 w-2/3 rounded bg-muted" /></CardHeader>
+                <CardHeader>
+                  <span className="block h-4 w-2/3 rounded bg-muted" />
+                </CardHeader>
                 <CardContent className="space-y-2">
                   {Array.from({ length: 5 }).map((_, j) => (
                     <span key={j} className="block h-2 w-full rounded bg-muted" />
@@ -304,7 +371,10 @@ function Page() {
             const emp = row.employee ?? {};
             const isSel = selected.has(row.id);
             return (
-              <Card key={row.id} className={`transition-colors ${isSel ? "border-primary" : "hover:border-primary/40"}`}>
+              <Card
+                key={row.id}
+                className={`transition-colors ${isSel ? "border-primary" : "hover:border-primary/40"}`}
+              >
                 <CardHeader className="pb-2">
                   <div className="flex items-start gap-2">
                     <Checkbox
@@ -324,7 +394,9 @@ function Page() {
                       <CardDescription className="flex items-center gap-2 flex-wrap">
                         {emp.employee_number && <span>#{emp.employee_number}</span>}
                         {emp.job_title && <span>· {emp.job_title}</span>}
-                        <Badge variant="outline" className="ml-auto">{row.status}</Badge>
+                        <Badge variant="outline" className="ml-auto">
+                          {row.status}
+                        </Badge>
                       </CardDescription>
                     </Link>
                   </div>
@@ -355,9 +427,12 @@ function Page() {
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Reject {selected.size} assignment{selected.size === 1 ? "" : "s"}</DialogTitle>
+            <DialogTitle>
+              Reject {selected.size} assignment{selected.size === 1 ? "" : "s"}
+            </DialogTitle>
             <DialogDescription>
-              Add a short note for the audit trail. The selected onboarding assignments will be marked as blocked.
+              Add a short note for the audit trail. The selected onboarding assignments will be
+              marked as blocked.
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -384,4 +459,3 @@ function Page() {
     </AppShell>
   );
 }
-

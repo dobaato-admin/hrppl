@@ -179,6 +179,11 @@ describe("every authenticated page renders inside the app chrome", () => {
 
     const own = readFileSync(join(ROOT, "src/routes", `${name}.tsx`), "utf8");
     if (own.includes("<AppShell")) continue;
+    // A redirect-only route renders nothing at all, so it cannot render
+    // chrome-less. It has no component; the user is sent elsewhere before
+    // anything paints. Retired duplicates are kept in this form rather than
+    // deleted, so a bookmarked URL still lands somewhere sensible.
+    if (/throw redirect\(/.test(own) && !/component:/.test(own)) continue;
     // For an index route the provider is the segment itself: me.index.tsx sits
     // under me.tsx, not under a further ancestor.
     if (name.endsWith(".index") && LAYOUT_PROVIDERS.includes(base)) continue;

@@ -22,6 +22,15 @@ describe("every admin route enforces an RBAC gate", () => {
   for (const file of adminRouteFiles) {
     it(`${file} blocks non-admins`, () => {
       const src = readFileSync(join(routesDir, file), "utf8");
+      // A route that only redirects renders nothing, so it has nothing to
+      // gate. /admin/security-findings is one: retired in W5 P2 after its
+      // richer edit fields were ported to /admin/security. Requiring a gate
+      // here would mean gating a page that cannot display data.
+      const redirectOnly =
+        /beforeLoad:\s*\(\)\s*=>\s*\{\s*throw redirect\(/.test(src) &&
+        !/component:/.test(src);
+      if (redirectOnly) return;
+
       const gated =
         /AdminGate/.test(src) ||
         /roles\.includes\(['"`](?:super_admin|org_admin|regional_admin|hr|manager)['"`]\)/.test(src) ||
@@ -72,9 +81,28 @@ describe("AdminGate component contract", () => {
     expect(src).toMatch(/useAuth\(\)/);
     expect(src).toMatch(/navigate\(\{\s*to:\s*['"]\/dashboard['"]/);
     expect(src).toMatch(/navigate\(\{\s*to:\s*['"]\/auth['"]/);
-    // Roles allowed by default
-    expect(src).toMatch(/super_admin/);
-    expect(src).toMatch(/org_admin/);
+  });
+
+  it("has NO default allow-set — one of `feature` or `allow` is required", () => {
+    // W5 · This assertion replaces two that checked AdminGate's source for the
+    // literals "super_admin"/"org_admin", which were there only because the
+    // component imported ADMIN_LAYOUT_ROLES as its default allow-set.
+    //
+    // That default is deliberately gone. It admitted seven roles, so a gate
+    // written without thinking granted far more than its author usually meant —
+    // and 36 nav/route gate drifts had accumulated behind exactly that kind of
+    // implicit choice. The prop is now a discriminated union, so omitting both
+    // is a type error rather than a silently permissive gate.
+    const src = readFileSync(join(root, "src/components/AdminGate.tsx"), "utf8");
+    expect(src).not.toMatch(/allow\s*=\s*ADMIN_ROLES/);
+    expect(src).not.toMatch(/const ADMIN_ROLES/);
+    // Both declaration styles are supported, and the union makes one mandatory.
+    expect(src).toMatch(/feature\??:\s*Feature/);
+    expect(src).toMatch(/allow\??:\s*ReadonlySet<string>/);
+    expect(src).toMatch(/allow\?:\s*never/);
+    expect(src).toMatch(/feature\?:\s*never/);
+    // `feature` resolves through the same matrix the sidebar reads.
+    expect(src).toMatch(/can\(feature,/);
   });
 
   it("admin parent route is a pure layout that renders child admin pages via Outlet", () => {

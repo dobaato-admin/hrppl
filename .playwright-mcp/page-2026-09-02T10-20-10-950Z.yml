@@ -1,0 +1,5 @@
+- generic [active] [ref=f3e1]:
+  - region "Notifications alt+T":
+    - list:
+      - listitem [ref=f3e36]:
+        - generic [ref=f3e40]: Signed in

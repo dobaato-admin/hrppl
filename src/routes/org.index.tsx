@@ -13,7 +13,14 @@ export const Route = createFileRoute("/org/")({
   component: OrgPage,
 });
 
-interface Tenant { id: string; name: string; country_code: string; currency_code: string; status: string; plan: string }
+interface Tenant {
+  id: string;
+  name: string;
+  country_code: string;
+  currency_code: string;
+  status: string;
+  plan: string;
+}
 
 function OrgPage() {
   const { user, roles, loading } = useAuth();
@@ -29,25 +36,43 @@ function OrgPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", user.id).maybeSingle();
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("tenant_id")
+        .eq("id", user.id)
+        .maybeSingle();
       if (prof?.tenant_id) {
-        const { data } = await supabase.from("tenants").select("*").eq("id", prof.tenant_id).maybeSingle();
+        const { data } = await supabase
+          .from("tenants")
+          .select("*")
+          .eq("id", prof.tenant_id)
+          .maybeSingle();
         if (data) setTenant(data as Tenant);
       }
     })();
   }, [user]);
 
   if (loading || !user) {
-    return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
   }
 
   return (
     <AppShell
       title={tenant?.name ?? "Organization"}
-      subtitle={tenant ? `${tenant.country_code} · ${tenant.currency_code} · ${tenant.plan}` : "No tenant assigned"}
+      subtitle={
+        tenant
+          ? `${tenant.country_code} · ${tenant.currency_code} · ${tenant.plan}`
+          : "No tenant assigned"
+      }
       actions={
         tenant ? (
-          <Badge variant={tenant.status === "active" ? "default" : "secondary"}>{tenant.status}</Badge>
+          <Badge variant={tenant.status === "active" ? "default" : "secondary"}>
+            {tenant.status}
+          </Badge>
         ) : null
       }
     >
@@ -57,8 +82,8 @@ function OrgPage() {
             <CardHeader>
               <CardTitle>Let's set up your organization</CardTitle>
               <CardDescription>
-                Your account isn't linked to an organization yet. Create one now to invite your team,
-                or accept a pending invitation if you've been invited.
+                Your account isn't linked to an organization yet. Create one now to invite your
+                team, or accept a pending invitation if you've been invited.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-3">
@@ -76,8 +101,8 @@ function OrgPage() {
             <CardHeader>
               <CardTitle>Tenant pending activation</CardTitle>
               <CardDescription>
-                Your organization is <strong>{tenant.status}</strong>. Full features unlock after your
-                Regional Admin confirms your subscription payment.
+                Your organization is <strong>{tenant.status}</strong>. Full features unlock after
+                your Regional Admin confirms your subscription payment.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -88,9 +113,13 @@ function OrgPage() {
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Branches</CardTitle>
-                  <CardDescription>Manage offices across countries — addresses, contacts, currency.</CardDescription>
+                  <CardDescription>
+                    Manage offices across countries — addresses, contacts, currency.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/org/employees">
@@ -99,7 +128,9 @@ function OrgPage() {
                   <CardTitle className="text-base">Employees</CardTitle>
                   <CardDescription>Directory, hires, terminations, org chart.</CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
 
@@ -107,9 +138,13 @@ function OrgPage() {
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Timesheets</CardTitle>
-                  <CardDescription>Approve submitted weekly timesheets and overtime.</CardDescription>
+                  <CardDescription>
+                    Approve submitted weekly timesheets and overtime.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/org/leave">
@@ -118,16 +153,22 @@ function OrgPage() {
                   <CardTitle className="text-base">Leave</CardTitle>
                   <CardDescription>Leave types, balances, requests, approvals.</CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/org/payroll">
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Payroll</CardTitle>
-                  <CardDescription>Country-specific tax, multi-currency runs, payslips.</CardDescription>
+                  <CardDescription>
+                    Country-specific tax, multi-currency runs, payslips.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/org/performance">
@@ -136,61 +177,87 @@ function OrgPage() {
                   <CardTitle className="text-base">Performance</CardTitle>
                   <CardDescription>Review cycles, goals, and finalized ratings.</CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/admin/feedback-templates">
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">360° feedback templates</CardTitle>
-                  <CardDescription>Configure questions and rating scales for peer feedback.</CardDescription>
+                  <CardDescription>
+                    Configure questions and rating scales for peer feedback.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/admin/review-templates">
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Review templates</CardTitle>
-                  <CardDescription>Competencies and rating scales used in performance reviews.</CardDescription>
+                  <CardDescription>
+                    Competencies and rating scales used in performance reviews.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/org/onboarding">
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Onboarding</CardTitle>
-                  <CardDescription>Checklist templates, new-joinee progress, document review.</CardDescription>
+                  <CardDescription>
+                    Checklist templates, new-joinee progress, document review.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/admin/offboarding">
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Offboarding</CardTitle>
-                  <CardDescription>Exit checklists, asset return, final pay, knowledge handover.</CardDescription>
+                  <CardDescription>
+                    Exit checklists, asset return, final pay, knowledge handover.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/org/reports">
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Reports & analytics</CardTitle>
-                  <CardDescription>Headcount, payroll cost, leave, overtime trends.</CardDescription>
+                  <CardDescription>
+                    Headcount, payroll cost, leave, overtime trends.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <Link to="/org/analytics">
               <Card className="h-full transition-colors hover:border-primary">
                 <CardHeader>
                   <CardTitle className="text-base">Analytics dashboard</CardTitle>
-                  <CardDescription>Cross-module KPIs: onboarding, performance, attrition, leave mix.</CardDescription>
+                  <CardDescription>
+                    Cross-module KPIs: onboarding, performance, attrition, leave mix.
+                  </CardDescription>
                 </CardHeader>
-                <CardContent><Badge>Available</Badge></CardContent>
+                <CardContent>
+                  <Badge>Available</Badge>
+                </CardContent>
               </Card>
             </Link>
             <ModuleCard title="Expenses" desc="Claims, approvals, reimbursements." />
@@ -199,7 +266,8 @@ function OrgPage() {
       </section>
 
       <footer className="mx-auto max-w-6xl px-6 py-6 text-xs text-muted-foreground">
-        Modules above are Phase 2+ scope. Phase 1 ships tenant lifecycle, RBAC, and the API skeleton.
+        Modules above are Phase 2+ scope. Phase 1 ships tenant lifecycle, RBAC, and the API
+        skeleton.
       </footer>
     </AppShell>
   );

@@ -96,8 +96,8 @@ function ApiDocsPage() {
             <CardHeader>
               <CardTitle>Super admin only</CardTitle>
               <CardDescription>
-                The developer API reference is available to super administrators
-                only. If you need API access, contact a super admin.
+                The developer API reference is available to super administrators only. If you need
+                API access, contact a super admin.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -118,9 +118,7 @@ function ApiDocsPage() {
     >
       <div className="p-4">
         {error && error !== "forbidden" && (
-          <p className="mb-3 text-sm text-destructive">
-            Could not load the API reference: {error}
-          </p>
+          <p className="mb-3 text-sm text-destructive">Could not load the API reference: {error}</p>
         )}
         <div ref={containerRef} className="rounded-lg border bg-card" />
       </div>

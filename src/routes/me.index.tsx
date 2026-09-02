@@ -3,8 +3,15 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { getMeOverview } from "@/lib/me.functions";
-import { KpiTile, SectionCard, SkeletonRows, StatusChip, statusTone, EmptyState } from "@/components/monday";
+import { getMeOverview, getMyTeam } from "@/lib/me.functions";
+import {
+  KpiTile,
+  SectionCard,
+  SkeletonRows,
+  StatusChip,
+  statusTone,
+  EmptyState,
+} from "@/components/monday";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, FolderOpen, Receipt, ListChecks, Plus, ArrowUpRight } from "lucide-react";
@@ -17,23 +24,44 @@ export const Route = createFileRoute("/me/")({
 function fmtMoney(n: number | null | undefined, c?: string | null) {
   if (n == null) return "—";
   try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency: c || "USD" }).format(Number(n));
-  } catch { return `${n} ${c ?? ""}`.trim(); }
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: c || "USD" }).format(
+      Number(n),
+    );
+  } catch {
+    return `${n} ${c ?? ""}`.trim();
+  }
 }
 function fmtDate(d?: string | null) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(d).toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function MeOverview() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
-  useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [loading, user, navigate]);
+  useEffect(() => {
+    if (!loading && !user) navigate({ to: "/auth" });
+  }, [loading, user, navigate]);
 
   const fn = useServerFn(getMeOverview);
   const { data, isLoading } = useQuery({
     queryKey: ["me-overview"],
     queryFn: () => fn({}),
+    enabled: !!user,
+  });
+
+  // W5 P3 · getMyTeam had no caller. The Me page named the employee's manager
+  // and stopped there, so there was nowhere in the product to see who you
+  // actually sit next to — the company directory lists the whole tenant, which
+  // is a different question.
+  const teamFn = useServerFn(getMyTeam);
+  const { data: team } = useQuery({
+    queryKey: ["me-team"],
+    queryFn: () => teamFn(),
     enabled: !!user,
   });
 
@@ -53,23 +81,35 @@ function MeOverview() {
       <SectionCard tone="primary">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-primary">Employee #{e.employee_number}</div>
-            <h2 className="font-display text-2xl font-bold tracking-tight">{e.first_name} {e.last_name}</h2>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-primary">
+              Employee #{e.employee_number}
+            </div>
+            <h2 className="font-display text-2xl font-bold tracking-tight">
+              {e.first_name} {e.last_name}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              {e.job_title ?? "—"}{data.department ? ` · ${data.department.name}` : ""} · Hired {fmtDate(e.hire_date)}
+              {e.job_title ?? "—"}
+              {data.department ? ` · ${data.department.name}` : ""} · Hired {fmtDate(e.hire_date)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {e.email}{e.phone ? ` · ${e.phone}` : ""}
+              {e.email}
+              {e.phone ? ` · ${e.phone}` : ""}
             </p>
           </div>
           <div className="text-right">
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Manager</div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Manager
+            </div>
             {data.manager ? (
-              <div className="font-medium">{data.manager.first_name} {data.manager.last_name}</div>
+              <div className="font-medium">
+                {data.manager.first_name} {data.manager.last_name}
+              </div>
             ) : (
               <div className="text-sm text-muted-foreground">No manager set</div>
             )}
-            {data.manager?.job_title && <div className="text-xs text-muted-foreground">{data.manager.job_title}</div>}
+            {data.manager?.job_title && (
+              <div className="text-xs text-muted-foreground">{data.manager.job_title}</div>
+            )}
           </div>
         </div>
         <div className="mt-4">
@@ -80,42 +120,89 @@ function MeOverview() {
           <Progress value={data.profileCompleteness} />
           {data.profileCompleteness < 100 && (
             <div className="mt-2 flex gap-2">
-              <Button asChild size="sm" variant="outline"><Link to="/me/contact">Update contact <ArrowUpRight className="ml-1 h-3 w-3" /></Link></Button>
-              <Button asChild size="sm" variant="outline"><Link to="/me/banking-tax">Banking & tax <ArrowUpRight className="ml-1 h-3 w-3" /></Link></Button>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/me/contact">
+                  Update contact <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/me/banking-tax">
+                  Banking & tax <ArrowUpRight className="ml-1 h-3 w-3" />
+                </Link>
+              </Button>
             </div>
           )}
         </div>
       </SectionCard>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile label="Leave pending" value={data.pendingLeaveCount} tone="working" to="/leave" icon={CalendarDays} />
-        <KpiTile label="Open tasks" value={data.openTaskCount} tone="pending" to="/onboarding" icon={ListChecks} />
-        <KpiTile label="Documents" value={data.documentCount} tone="info" to="/me/documents" icon={FolderOpen} />
-        <KpiTile label="Payslips" value={data.recentPayslips.length} tone="primary" to="/my-payslips" icon={Receipt} />
+        <KpiTile
+          label="Leave pending"
+          value={data.pendingLeaveCount}
+          tone="working"
+          to="/leave"
+          icon={CalendarDays}
+        />
+        <KpiTile
+          label="Open tasks"
+          value={data.openTaskCount}
+          tone="pending"
+          to="/onboarding"
+          icon={ListChecks}
+        />
+        <KpiTile
+          label="Documents"
+          value={data.documentCount}
+          tone="info"
+          to="/me/documents"
+          icon={FolderOpen}
+        />
+        <KpiTile
+          label="Payslips"
+          value={data.recentPayslips.length}
+          tone="primary"
+          to="/my-payslips"
+          icon={Receipt}
+        />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard
           title="Leave balances"
           description="Days available across leave types"
-          actions={<Button asChild size="sm"><Link to="/leave"><Plus className="mr-1 h-3.5 w-3.5" /> Request</Link></Button>}
+          actions={
+            <Button asChild size="sm">
+              <Link to="/leave">
+                <Plus className="mr-1 h-3.5 w-3.5" /> Request
+              </Link>
+            </Button>
+          }
         >
           {data.leaveBalances.length === 0 ? (
-            <EmptyState title="No leave types configured" description="Ask your admin to set up leave types." />
+            <EmptyState
+              title="No leave types configured"
+              description="Ask your admin to set up leave types."
+            />
           ) : (
             <ul className="divide-y">
               {data.leaveBalances.map((b: any, i: number) => {
-                const available = Number(b.accrued_days ?? 0) + Number(b.carried_over_days ?? 0) - Number(b.used_days ?? 0) - Number(b.pending_days ?? 0);
+                const available =
+                  Number(b.accrued_days ?? 0) +
+                  Number(b.carried_over_days ?? 0) -
+                  Number(b.used_days ?? 0) -
+                  Number(b.pending_days ?? 0);
                 return (
                   <li key={i} className="flex items-center justify-between py-2.5">
                     <div className="min-w-0">
                       <div className="font-medium">{b.leave_type?.name ?? "Leave"}</div>
                       <div className="text-xs text-muted-foreground">
-                        {Number(b.used_days).toFixed(1)} used · {Number(b.pending_days).toFixed(1)} pending
+                        {Number(b.used_days).toFixed(1)} used · {Number(b.pending_days).toFixed(1)}{" "}
+                        pending
                       </div>
                     </div>
                     <span className="tabular-nums font-semibold">
-                      {available.toFixed(1)} <span className="text-xs font-normal text-muted-foreground">days</span>
+                      {available.toFixed(1)}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">days</span>
                     </span>
                   </li>
                 );
@@ -135,7 +222,10 @@ function MeOverview() {
                   <li key={r.id} className="flex items-center justify-between py-2.5">
                     <div className="min-w-0">
                       <div className="font-medium">{r.leave_type?.name ?? "Leave"}</div>
-                      <div className="text-xs text-muted-foreground">{fmtDate(r.start_date)} → {fmtDate(r.end_date)} · {Number(r.days).toFixed(1)} days</div>
+                      <div className="text-xs text-muted-foreground">
+                        {fmtDate(r.start_date)} → {fmtDate(r.end_date)} ·{" "}
+                        {Number(r.days).toFixed(1)} days
+                      </div>
                     </div>
                     <StatusChip tone={st.tone}>{st.label}</StatusChip>
                   </li>
@@ -146,13 +236,56 @@ function MeOverview() {
         </SectionCard>
       </div>
 
+      {team && (team.peers.length > 0 || team.reports.length > 0) && (
+        <SectionCard
+          tone="working"
+          title="My team"
+          description={
+            team.reports.length > 0
+              ? `${team.reports.length} direct report${team.reports.length === 1 ? "" : "s"}`
+              : `${team.peers.length} colleague${team.peers.length === 1 ? "" : "s"} reporting to the same manager`
+          }
+          actions={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/me/directory">Full directory</Link>
+            </Button>
+          }
+        >
+          <ul className="divide-y">
+            {[
+              ...team.reports.map((m: any) => ({ ...m, relation: "Reports to you" })),
+              ...team.peers.map((m: any) => ({ ...m, relation: "Peer" })),
+            ].map((m: any) => (
+              <li key={m.id} className="flex items-center justify-between gap-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate font-medium">
+                    {m.first_name} {m.last_name}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">{m.job_title ?? "—"}</div>
+                </div>
+                <StatusChip tone={m.relation === "Reports to you" ? "working" : "info"}>
+                  {m.relation}
+                </StatusChip>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      )}
+
       <SectionCard
         title="Recent payslips"
         description="Latest 3 pay periods"
-        actions={<Button asChild size="sm" variant="outline"><Link to="/my-payslips">All payslips</Link></Button>}
+        actions={
+          <Button asChild size="sm" variant="outline">
+            <Link to="/my-payslips">All payslips</Link>
+          </Button>
+        }
       >
         {data.recentPayslips.length === 0 ? (
-          <EmptyState title="No payslips yet" description="Once your first pay run is approved, payslips will appear here." />
+          <EmptyState
+            title="No payslips yet"
+            description="Once your first pay run is approved, payslips will appear here."
+          />
         ) : (
           <ul className="divide-y">
             {data.recentPayslips.map((p: any) => {
@@ -160,11 +293,17 @@ function MeOverview() {
               return (
                 <li key={p.id} className="flex items-center justify-between py-2.5">
                   <div className="min-w-0">
-                    <div className="font-medium">{fmtDate(p.run?.period_start)} → {fmtDate(p.run?.period_end)}</div>
-                    <div className="text-xs text-muted-foreground">Pay date {fmtDate(p.run?.pay_date)}</div>
+                    <div className="font-medium">
+                      {fmtDate(p.run?.period_start)} → {fmtDate(p.run?.period_end)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Pay date {fmtDate(p.run?.pay_date)}
+                    </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="font-display text-lg font-semibold tabular-nums">{fmtMoney(p.net_pay, p.currency_code)}</span>
+                    <span className="font-display text-lg font-semibold tabular-nums">
+                      {fmtMoney(p.net_pay, p.currency_code)}
+                    </span>
                     <StatusChip tone={st.tone}>{st.label}</StatusChip>
                   </div>
                 </li>

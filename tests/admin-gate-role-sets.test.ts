@@ -8,8 +8,23 @@ import {
   ORG_ADMIN_OR_FINANCE,
   PLATFORM_OR_ORG_ADMIN,
   SUPER_ADMIN_ONLY,
+  ORG_ADMIN_OR_HR,
+  ORG_ADMIN_HR_MANAGER,
+  can,
   type AppRole,
+  type Feature,
 } from "../src/lib/rbac";
+
+const ALL_ROLES: AppRole[] = [
+  "super_admin",
+  "regional_admin",
+  "org_admin",
+  "branch_admin",
+  "hr",
+  "finance",
+  "manager",
+  "employee",
+];
 
 /**
  * Finalization Plan §1 #10 — the safety net for standardizing admin gating.
@@ -38,45 +53,124 @@ const NAMED: Record<string, ReadonlySet<AppRole>> = {
   SUPER_ADMIN_ONLY,
 };
 
-/** Roles each admin route admitted before the standardization. */
+/**
+ * Roles each admin route admits. A SECURITY CONTRACT, not a snapshot to be
+ * regenerated: when a page's effective set changes, either the change is
+ * deliberate and this table is updated in the same commit with the reason, or
+ * it is an accident and this test just caught it.
+ *
+ * W5 P1 · Nineteen entries below changed deliberately, applying decisions
+ * D-1 to D-4. Every one of them was a nav row that rendered for a role the
+ * route then rejected — 36 such drifts across five roles, with `hr` seeing 13
+ * and `branch_admin` 17. The reason each moved is on the group heading.
+ */
 const EXPECTED: Record<string, ReadonlySet<AppRole>> = {
-  // org_admin + super_admin
-  "admin.departments.tsx": ORG_ADMIN_ONLY,
-  "admin.designations.tsx": ORG_ADMIN_ONLY,
-  "admin.feedback-templates.tsx": ORG_ADMIN_ONLY,
-  "admin.holiday-categories.tsx": ORG_ADMIN_ONLY,
+  // ---- D-1 · records administration: hr IN, branch_admin OUT ---------------
+  // Departments, designations, team assignments, leave types and holiday
+  // categories are records administration, squarely people operations — and
+  // all five were dead links for hr. branch_admin comes out because defining
+  // the org's structure is an org-defining power, the one thing that role is
+  // defined as lacking.
+  "admin.departments.tsx": ORG_ADMIN_OR_HR,
+  "admin.designations.tsx": ORG_ADMIN_OR_HR,
+  "admin.team-assignments.tsx": ORG_ADMIN_OR_HR,
+  "admin.leave-types.tsx": ORG_ADMIN_OR_HR,
+  "admin.holiday-categories.tsx": ORG_ADMIN_OR_HR,
+  // Same reasoning — review and feedback template libraries are HR's to define.
+  "admin.feedback-templates.tsx": ORG_ADMIN_OR_HR,
+  "admin.review-templates.tsx": ORG_ADMIN_OR_HR,
+  "admin.kpi-kra.tsx": ORG_ADMIN_OR_HR,
+
+  // ---- D-2 · performance operations: hr AND manager IN --------------------
+  // All four already admitted manager at the route and only the nav was hiding
+  // them, so four pages built for managers were reachable solely by URL.
+  "admin.review-cycles.tsx": ORG_ADMIN_HR_MANAGER,
+  "admin.review-analytics.tsx": ORG_ADMIN_HR_MANAGER,
+  "admin.duty-reviews.tsx": ORG_ADMIN_HR_MANAGER,
+  "admin.training.tsx": ORG_ADMIN_HR_MANAGER,
+  // Was ADMIN_LAYOUT_ROLES at the route — wider than its own nav row, so
+  // finance and regional_admin could reach it by URL. Narrowed to match.
+  "admin.employee-duties.tsx": ORG_ADMIN_HR_MANAGER,
+
+  // ---- D-4 · finance owns payroll configuration ---------------------------
+  // finance is defined as owning payroll and all four were dead links for
+  // exactly that role. branch_admin out, as in D-1.
+  "admin.payroll-setup.tsx": ORG_ADMIN_OR_FINANCE,
+  "admin.payroll-settings.tsx": ORG_ADMIN_OR_FINANCE,
+  "admin.payslip-templates.tsx": ORG_ADMIN_OR_FINANCE,
+
+  // ---- Confidentiality alignment ------------------------------------------
+  // /admin/medical was gated ADMIN_LAYOUT_ROLES, which admits finance, manager
+  // and regional_admin — against a compliance.confidential rule that restricts
+  // medical incidents to super_admin/org_admin/hr. The route gate and the
+  // confidentiality rule disagreed, and the route gate was the permissive one.
+  "admin.medical.tsx": ORG_ADMIN_OR_HR,
+
+  // ---- Unchanged: org_admin + super_admin ---------------------------------
   "admin.leave-setup-wizard.tsx": ORG_ADMIN_ONLY,
-  "admin.leave-types.tsx": ORG_ADMIN_ONLY,
   "admin.onboarding-packs.tsx": ORG_ADMIN_ONLY,
   "admin.overtime-setup-wizard.tsx": ORG_ADMIN_ONLY,
   "admin.payroll-setup-wizard.tsx": ORG_ADMIN_ONLY,
-  "admin.payroll-setup.tsx": ORG_ADMIN_ONLY,
   "admin.payroll-wizard.tsx": ORG_ADMIN_ONLY,
-  "admin.team-assignments.tsx": ORG_ADMIN_ONLY,
 
-  // + regional_admin (cross-tenant, country-scoped reference data)
-  "admin.holiday-calendar.tsx": PLATFORM_OR_ORG_ADMIN,
-  "admin.holidays.tsx": PLATFORM_OR_ORG_ADMIN,
-  "admin.overtime-rates.tsx": PLATFORM_OR_ORG_ADMIN,
-  "admin.payroll-settings.tsx": PLATFORM_OR_ORG_ADMIN,
-  "admin.payslip-templates.tsx": PLATFORM_OR_ORG_ADMIN,
+  // D-4 again, with regional_admin retained: overtime rates are cross-tenant
+  // reference data AND payroll configuration, so the set is
+  // PLATFORM_OR_ORG_ADMIN plus finance.
+  "admin.overtime-rates.tsx": new Set<AppRole>([
+    "super_admin",
+    "regional_admin",
+    "org_admin",
+    "finance",
+  ]),
 
-  // + manager (people-management surfaces)
-  "admin.duty-reviews.tsx": ORG_ADMIN_OR_MANAGER,
+  // ---- Unchanged: + manager ----------------------------------------------
   "admin.employee-holidays.tsx": ORG_ADMIN_OR_MANAGER,
-  "admin.review-analytics.tsx": ORG_ADMIN_OR_MANAGER,
-  "admin.review-cycles.tsx": ORG_ADMIN_OR_MANAGER,
-  "admin.training.tsx": ORG_ADMIN_OR_MANAGER,
 
-  // platform console
+  // ---- Public holidays: read for all, edit for admins ---------------------
+  // The only destination with no honest allow/deny answer. Every employee has
+  // a reason to look at the holiday calendar and almost none to change it, so
+  // the route now admits everyone (org.publicHolidays) and the page hides its
+  // own mutations. This was the one drift that reached EVERY role, employees
+  // included: the nav admitted them and the page bounced them with "Admin
+  // access required".
+  "admin.holiday-calendar.tsx": new Set<AppRole>([
+    "super_admin",
+    "regional_admin",
+    "org_admin",
+    "branch_admin",
+    "hr",
+    "manager",
+    "employee",
+  ]),
+  "admin.holidays.tsx": new Set<AppRole>([
+    "super_admin",
+    "regional_admin",
+    "org_admin",
+    "branch_admin",
+    "hr",
+    "manager",
+    "employee",
+  ]),
+
+  // ---- Platform console ---------------------------------------------------
   "admin.index.tsx": SUPER_ADMIN_ONLY,
-
-  // W4 IA (docs/w4-information-architecture-design.md) — gated for the
-  // first time while giving each page a nav entry.
-  "admin.expenses.tsx": ORG_ADMIN_OR_FINANCE,
   "admin.billing.tsx": SUPER_ADMIN_ONLY,
   "admin.billing-ops.tsx": SUPER_ADMIN_ONLY,
-  "org.documents.templates.tsx": ADMIN_LAYOUT_ROLES,
+
+  // ---- W4 IA — gated for the first time while gaining a nav entry ---------
+  "admin.expenses.tsx": ORG_ADMIN_OR_FINANCE,
+  // Narrowed from ADMIN_LAYOUT_ROLES to match its own nav row: the W4 gate was
+  // added in a hurry and admitted regional_admin, which org.documentTemplates
+  // never did. A platform role has no business editing one tenant's document
+  // templates.
+  "org.documents.templates.tsx": new Set<AppRole>([
+    "super_admin",
+    "org_admin",
+    "branch_admin",
+    "hr",
+    "finance",
+    "manager",
+  ]),
 };
 
 /**
@@ -91,6 +185,14 @@ function effectiveRoles(src: string): Set<AppRole> {
     const set = NAMED[gate[1]];
     if (!set) throw new Error(`Unknown allow-set "${gate[1]}" — add it to NAMED`);
     return new Set(set);
+  }
+  // W5 · The default form is now `feature="…"`, resolved through the same
+  // MATRIX entry the sidebar reads. The set below is what the page actually
+  // admits, so this contract keeps testing effective access rather than the
+  // spelling of the gate.
+  const byFeature = src.match(/<AdminGate\s+feature="([^"]+)"/);
+  if (byFeature) {
+    return new Set(ALL_ROLES.filter((r) => can(byFeature[1] as Feature, [r])));
   }
   if (/<AdminGate(\s|>)/.test(src)) return new Set(ADMIN_LAYOUT_ROLES);
 
@@ -119,7 +221,7 @@ describe("no admin page silently inherits the permissive default", () => {
     const widened: string[] = [];
     for (const [file, expected] of Object.entries(EXPECTED)) {
       const src = readFileSync(join(routesDir, file), "utf8");
-      const usesBareGate = /<AdminGate(\s*>|\s+(?!allow=))/.test(src);
+      const usesBareGate = /<AdminGate(\s*>|\s+(?!allow=|feature=))/.test(src);
       if (usesBareGate && sorted(expected).join() !== sorted(ADMIN_LAYOUT_ROLES).join()) {
         widened.push(file);
       }

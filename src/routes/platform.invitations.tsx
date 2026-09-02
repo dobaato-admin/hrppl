@@ -10,7 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   listOrgTrialInvitations,
   createOrgTrialInvitation,
@@ -76,16 +83,14 @@ function PlatformInvitationsPage() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const origin = useMemo(
-    () => (typeof window !== "undefined" ? window.location.origin : ""),
-    [],
-  );
+  const origin = useMemo(() => (typeof window !== "undefined" ? window.location.origin : ""), []);
 
   const invitations: Invitation[] = (data?.invitations ?? []) as Invitation[];
   const audit: AuditEvent[] = (data?.audit ?? []) as AuditEvent[];
   const now = Date.now();
   const isExpired = (inv: Invitation) =>
-    inv.status === "expired" || (inv.status === "pending" && new Date(inv.expires_at).getTime() < now);
+    inv.status === "expired" ||
+    (inv.status === "pending" && new Date(inv.expires_at).getTime() < now);
   const active = invitations.filter((i) => !isExpired(i) && i.status !== "revoked");
   const expired = invitations.filter((i) => isExpired(i) || i.status === "revoked");
 
@@ -122,7 +127,14 @@ function PlatformInvitationsPage() {
         },
       });
       toast.success("Invitation created");
-      setForm({ email: "", org_name: "", contact_name: "", country_code: "", trial_days: 30, notes: "" });
+      setForm({
+        email: "",
+        org_name: "",
+        contact_name: "",
+        country_code: "",
+        trial_days: 30,
+        notes: "",
+      });
       qc.invalidateQueries({ queryKey: ["platform-org-trial-invitations"] });
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to create invitation");
@@ -146,8 +158,12 @@ function PlatformInvitationsPage() {
     try {
       const res: any = await resendFn({ data: { id: inv.id, extend_days: inv.trial_days || 30 } });
       const link = `${origin}/auth?trial=${inv.token}`;
-      try { await navigator.clipboard.writeText(link); } catch {}
-      toast.success(`Resent — link copied. New expiry ${new Date(res.expires_at).toLocaleDateString()}`);
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch {}
+      toast.success(
+        `Resent — link copied. New expiry ${new Date(res.expires_at).toLocaleDateString()}`,
+      );
       qc.invalidateQueries({ queryKey: ["platform-org-trial-invitations"] });
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to resend");
@@ -162,7 +178,7 @@ function PlatformInvitationsPage() {
     );
   }
 
-  const renderTable = (rows: Invitation[], showRevoke: boolean) => (
+  const renderTable = (rows: Invitation[], showRevoke: boolean) =>
     rows.length === 0 ? (
       <p className="p-4 text-sm text-muted-foreground">Nothing here.</p>
     ) : (
@@ -180,7 +196,8 @@ function PlatformInvitationsPage() {
         </TableHeader>
         <TableBody>
           {rows.map((inv) => {
-            const displayStatus = isExpired(inv) && inv.status === "pending" ? "expired" : inv.status;
+            const displayStatus =
+              isExpired(inv) && inv.status === "pending" ? "expired" : inv.status;
             return (
               <TableRow key={inv.id}>
                 <TableCell className="font-medium">
@@ -218,8 +235,7 @@ function PlatformInvitationsPage() {
           })}
         </TableBody>
       </Table>
-    )
-  );
+    );
 
   return (
     <AppShell title="Org trial invitations" subtitle="Invite organizations to a free trial">
@@ -232,27 +248,64 @@ function PlatformInvitationsPage() {
             <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="email">Recipient email</Label>
-                <Input id="email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="founder@example.com" required />
+                <Input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="founder@example.com"
+                  required
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="org_name">Organization name</Label>
-                <Input id="org_name" value={form.org_name} onChange={(e) => setForm({ ...form, org_name: e.target.value })} placeholder="Acme Pty Ltd" required />
+                <Input
+                  id="org_name"
+                  value={form.org_name}
+                  onChange={(e) => setForm({ ...form, org_name: e.target.value })}
+                  placeholder="Acme Pty Ltd"
+                  required
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="contact_name">Contact name</Label>
-                <Input id="contact_name" value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} placeholder="Jane Doe" />
+                <Input
+                  id="contact_name"
+                  value={form.contact_name}
+                  onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
+                  placeholder="Jane Doe"
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="country_code">Country code</Label>
-                <Input id="country_code" value={form.country_code} onChange={(e) => setForm({ ...form, country_code: e.target.value.toUpperCase() })} placeholder="AU" maxLength={3} />
+                <Input
+                  id="country_code"
+                  value={form.country_code}
+                  onChange={(e) => setForm({ ...form, country_code: e.target.value.toUpperCase() })}
+                  placeholder="AU"
+                  maxLength={3}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="trial_days">Trial length (days)</Label>
-                <Input id="trial_days" type="number" min={1} max={365} value={form.trial_days} onChange={(e) => setForm({ ...form, trial_days: Number(e.target.value) })} />
+                <Input
+                  id="trial_days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={form.trial_days}
+                  onChange={(e) => setForm({ ...form, trial_days: Number(e.target.value) })}
+                />
               </div>
               <div className="md:col-span-2 space-y-1.5">
                 <Label htmlFor="notes">Notes (internal)</Label>
-                <Textarea id="notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Context, source, expectations…" rows={3} />
+                <Textarea
+                  id="notes"
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="Context, source, expectations…"
+                  rows={3}
+                />
               </div>
               <div className="md:col-span-2">
                 <Button type="submit" disabled={submitting}>
@@ -276,8 +329,12 @@ function PlatformInvitationsPage() {
                   <TabsTrigger value="active">Active ({active.length})</TabsTrigger>
                   <TabsTrigger value="expired">Expired / revoked ({expired.length})</TabsTrigger>
                 </TabsList>
-                <TabsContent value="active" className="mt-0">{renderTable(active, true)}</TabsContent>
-                <TabsContent value="expired" className="mt-0">{renderTable(expired, false)}</TabsContent>
+                <TabsContent value="active" className="mt-0">
+                  {renderTable(active, true)}
+                </TabsContent>
+                <TabsContent value="expired" className="mt-0">
+                  {renderTable(expired, false)}
+                </TabsContent>
               </Tabs>
             )}
           </CardContent>
