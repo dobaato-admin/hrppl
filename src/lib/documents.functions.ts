@@ -1460,15 +1460,9 @@ export const listStarterTemplates = createServerFn({ method: "GET" })
     };
   });
 
-export const getStarterTemplate = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ key: z.string().min(1).max(80) }).parse(d))
-  .handler(async ({ data }) => {
-    const { getPresetByKey } = await import("@/lib/document-template-presets");
-    const preset = getPresetByKey(data.key);
-    if (!preset) throw new Error("Starter template not found");
-    return { preset };
-  });
+// Removed in W5 P3: `getStarterTemplate`.
+// Superseded by instantiateStarterTemplate, which resolves the same preset and
+// creates the template from it in one step. The templates page calls that.
 
 export const instantiateStarterTemplate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

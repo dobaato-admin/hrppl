@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -8,6 +9,7 @@ import {
   listMappings,
   upsertMapping,
   listPunches,
+  importPunchesManually,
 } from "@/lib/biometric.functions";
 import { BIOMETRIC_VENDORS } from "@/lib/biometric-vendors";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,9 +39,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Plus, RefreshCw, Copy, Fingerprint } from "lucide-react";
@@ -64,6 +67,55 @@ function BiometricPage() {
   const listMap = useServerFn(listMappings);
   const upMap = useServerFn(upsertMapping);
   const listP = useServerFn(listPunches);
+
+  // W5 P3 · importPunchesManually had no caller, so when a device's webhook
+  // failed — the exact situation this function exists for — there was no way to
+  // get the missing punches in. Attendance is the input to pay, so a gap here
+  // is not a cosmetic one.
+  //
+  // CSV rather than a form: a recovery import is dozens of rows exported from
+  // the device, not something anyone types.
+  const importFn = useServerFn(importPunchesManually);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importCsv, setImportCsv] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  async function runImport() {
+    if (!active) return;
+    const punches = importCsv
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const [raw_user_id, punch_at, punch_type] = line.split(",").map((c) => c.trim());
+        return {
+          raw_user_id,
+          punch_at,
+          punch_type: (["in", "out", "break_in", "break_out"].includes(punch_type)
+            ? punch_type
+            : "unknown") as "in" | "out" | "break_in" | "break_out" | "unknown",
+          raw: { source: "manual_csv" },
+        };
+      })
+      .filter((p) => p.raw_user_id && p.punch_at);
+
+    if (punches.length === 0) {
+      toast.error("No usable rows. Expected: device user id, timestamp, type");
+      return;
+    }
+    setImporting(true);
+    try {
+      const res: any = await importFn({ data: { device_id: active.id, punches } });
+      toast.success(`Imported ${res?.inserted ?? punches.length} punch(es)`);
+      setImportOpen(false);
+      setImportCsv("");
+      await refreshActive(active.id);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const [devices, setDevices] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -196,6 +248,34 @@ function BiometricPage() {
 
         {active ? (
           <div className="space-y-4">
+            <Dialog open={importOpen} onOpenChange={setImportOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Import punches for {active.name}</DialogTitle>
+                  <DialogDescription>
+                    One punch per line: device user id, timestamp, type. Use this when the device
+                    webhook has failed and punches are missing.
+                  </DialogDescription>
+                </DialogHeader>
+                <Textarea
+                  rows={8}
+                  className="font-mono text-xs"
+                  value={importCsv}
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                    setImportCsv(e.target.value)
+                  }
+                  placeholder={"1042, 2026-09-02T08:59:00Z, in\n1042, 2026-09-02T17:05:00Z, out"}
+                />
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setImportOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={runImport} disabled={importing || !importCsv.trim()}>
+                    {importing ? "Importing…" : "Import"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -218,6 +298,9 @@ function BiometricPage() {
                   <Button size="sm" variant="outline" onClick={doRotate}>
                     <RefreshCw className="h-3.5 w-3.5 mr-1" />
                     Rotate
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+                    Import punches
                   </Button>
                 </div>
               </CardHeader>

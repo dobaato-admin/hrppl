@@ -1,6 +1,6 @@
 import { AdminGate } from "@/components/AdminGate";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -37,7 +37,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   listBillingAlerts,
   retryBillingAlert,
@@ -57,6 +64,7 @@ import {
   upsertRetryPolicy,
   exportBillingOpsAuditCsv,
   listBillingOpsAuditFiltered,
+  scheduleTenantPlanChange,
 } from "@/lib/billing-admin.functions";
 import { SUPER_ADMIN_ONLY } from "@/lib/rbac";
 
@@ -102,6 +110,34 @@ function BillingOps() {
   const resolveFn = useServerFn(resolveBillingAlert);
   const reconFn = useServerFn(runReconciliationForMonth);
   const exportFn = useServerFn(exportBillingForMonth);
+
+  // W5 P3 · scheduleTenantPlanChange had no caller. A tenant can change its own
+  // plan from /settings/billing, but the platform side had no way to do it on
+  // their behalf — the case that actually comes up in support, when someone is
+  // on the wrong plan and cannot get themselves off it.
+  const queryClient = useQueryClient();
+  const planChangeFn = useServerFn(scheduleTenantPlanChange);
+  const [planFor, setPlanFor] = useState<{ id: string; name: string; current: string } | null>(
+    null,
+  );
+  const [newPlan, setNewPlan] = useState<"starter_v2" | "pro_v2">("pro_v2");
+  const [immediate, setImmediate] = useState(true);
+
+  async function applyPlanChange() {
+    if (!planFor) return;
+    try {
+      await planChangeFn({
+        data: { tenantId: planFor.id, newPlanCode: newPlan, effectiveImmediately: immediate },
+      });
+      toast.success(
+        immediate ? "Plan changed" : "Plan change scheduled for the next billing period",
+      );
+      setPlanFor(null);
+      queryClient.invalidateQueries();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not change the plan");
+    }
+  }
 
   const retry = useMutation({
     mutationFn: (id: string) => retryFn({ data: { id } }),
@@ -337,6 +373,7 @@ function BillingOps() {
                       <TableHead>Mandate</TableHead>
                       <TableHead>Debit regions</TableHead>
                       <TableHead>Recent invoices</TableHead>
+                      <TableHead className="text-right">Plan</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -427,6 +464,21 @@ function BillingOps() {
                                 </span>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setPlanFor({
+                                  id: t.tenant_id,
+                                  name: t.tenants?.name ?? "this tenant",
+                                  current: t.subscription_plans?.code ?? "—",
+                                })
+                              }
+                            >
+                              Change
+                            </Button>
                           </TableCell>
                         </TableRow>
                       );
@@ -525,6 +577,48 @@ function BillingOps() {
           <TabsContent value="audit">
             <AuditTimeline tenantOptions={tenantOptions} />
           </TabsContent>
+
+          {/* Plan change — platform side, on a tenant's behalf. */}
+          <Dialog open={!!planFor} onOpenChange={(o) => !o && setPlanFor(null)}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Change plan for {planFor?.name}</DialogTitle>
+                <DialogDescription>
+                  Currently on <span className="font-mono">{planFor?.current}</span>. This is
+                  recorded in the billing ops audit against your account.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">New plan</Label>
+                  <Select value={newPlan} onValueChange={(v) => setNewPlan(v as typeof newPlan)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="starter_v2">Starter</SelectItem>
+                      <SelectItem value="pro_v2">Pro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center justify-between rounded border p-2.5">
+                  <div>
+                    <Label className="text-xs">Apply immediately</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Off means it takes effect at the next billing period.
+                    </p>
+                  </div>
+                  <Switch checked={immediate} onCheckedChange={setImmediate} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setPlanFor(null)}>
+                  Cancel
+                </Button>
+                <Button onClick={applyPlanChange}>Change plan</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <TabsContent value="suppressions">
             <SuppressionsTab tenantOptions={tenantOptions} />

@@ -70,22 +70,10 @@ export const createSupportTicket = createServerFn({ method: "POST" })
     return { id: ticket.id };
   });
 
-export const listMyTickets = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
-    const { supabase, userId } = context as any;
-    const { data: emp } = await supabase
-      .from("employees").select("id").eq("user_id", userId).maybeSingle();
-    if (!emp) return { tickets: [] };
-    const { data, error } = await supabase
-      .from("support_tickets")
-      .select("id, subject, category, status, priority, requested_amount, currency_code, requested_for_date, created_at, decided_at, decision_notes")
-      .eq("employee_id", emp.id)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (error) throw new Error(error.message);
-    return { tickets: data ?? [] };
-  });
+// Removed in W5 P3: `listMyTickets`.
+// Superseded by requests-inbox.functions.ts, which reads all six request types
+// including tickets. Keeping a second 'my tickets' reader invites a divergent
+// surface that answers the same question differently.
 
 export const listInboxTickets = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -94,7 +82,7 @@ export const listInboxTickets = createServerFn({ method: "GET" })
     const { data, error } = await supabase
       .from("support_tickets")
       .select(
-        "id, subject, category, status, priority, requested_amount, currency_code, requested_for_date, created_at, decided_at, decision_notes, assigned_to, employee_id, employees!support_tickets_employee_id_fkey(first_name,last_name,job_title)"
+        "id, subject, category, status, priority, requested_amount, currency_code, requested_for_date, created_at, decided_at, decision_notes, assigned_to, employee_id, employees!support_tickets_employee_id_fkey(first_name,last_name,job_title)",
       )
       .order("created_at", { ascending: false })
       .limit(500);
@@ -118,8 +106,7 @@ export const updateTicketStatus = createServerFn({ method: "POST" })
       patch.approver_id = userId;
       patch.decided_at = new Date().toISOString();
     }
-    const { error } = await supabase
-      .from("support_tickets").update(patch).eq("id", data.ticket_id);
+    const { error } = await supabase.from("support_tickets").update(patch).eq("id", data.ticket_id);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -136,7 +123,10 @@ export const addTicketComment = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const { data: t, error: te } = await supabase
-      .from("support_tickets").select("tenant_id").eq("id", data.ticket_id).maybeSingle();
+      .from("support_tickets")
+      .select("tenant_id")
+      .eq("id", data.ticket_id)
+      .maybeSingle();
     if (te) throw new Error(te.message);
     if (!t) throw new Error("Ticket not found");
     const { error } = await supabase.from("support_ticket_comments").insert({
