@@ -10,16 +10,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listEmployeeTimeline } from "@/lib/timeline.functions";
 import { listEventAccessLog } from "@/lib/audit.functions";
 import { AdminGate } from "@/components/AdminGate";
-import { ADMIN_LAYOUT_ROLES } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/employees/$employeeId")({
-  component: () => (<AdminGate allow={ADMIN_LAYOUT_ROLES}><EmployeeRecordPage /></AdminGate>),
+  component: () => (
+    <AdminGate feature="org.employees">
+      <EmployeeRecordPage />
+    </AdminGate>
+  ),
   errorComponent: ({ error, reset }) => {
     const router = useRouter();
     return (
       <div className="p-6">
         <p className="text-destructive">{(error as Error).message}</p>
-        <Button onClick={() => { reset(); router.invalidate(); }}>Retry</Button>
+        <Button
+          onClick={() => {
+            reset();
+            router.invalidate();
+          }}
+        >
+          Retry
+        </Button>
       </div>
     );
   },
@@ -27,8 +37,19 @@ export const Route = createFileRoute("/admin/employees/$employeeId")({
 });
 
 const CATEGORIES = [
-  "all", "medical", "disciplinary", "grievance", "training", "payroll",
-  "review", "onboarding", "leave", "expense", "promotion", "pay_change", "document",
+  "all",
+  "medical",
+  "disciplinary",
+  "grievance",
+  "training",
+  "payroll",
+  "review",
+  "onboarding",
+  "leave",
+  "expense",
+  "promotion",
+  "pay_change",
+  "document",
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -79,7 +100,10 @@ function EmployeeRecordPage() {
   }, [events]);
 
   return (
-    <AppShell title="Employee record" subtitle="Comprehensive timeline of everything that touches this employee">
+    <AppShell
+      title="Employee record"
+      subtitle="Comprehensive timeline of everything that touches this employee"
+    >
       <div className="space-y-4 p-4">
         <Card>
           <CardHeader>
@@ -98,8 +122,20 @@ function EmployeeRecordPage() {
         </Card>
 
         <div className="flex gap-2">
-          <Button size="sm" variant={view === "timeline" ? "default" : "outline"} onClick={() => setView("timeline")}>Timeline</Button>
-          <Button size="sm" variant={view === "audit" ? "default" : "outline"} onClick={() => setView("audit")}>Access audit</Button>
+          <Button
+            size="sm"
+            variant={view === "timeline" ? "default" : "outline"}
+            onClick={() => setView("timeline")}
+          >
+            Timeline
+          </Button>
+          <Button
+            size="sm"
+            variant={view === "audit" ? "default" : "outline"}
+            onClick={() => setView("audit")}
+          >
+            Access audit
+          </Button>
         </div>
 
         {view === "audit" ? (
@@ -117,9 +153,16 @@ function EmployeeRecordPage() {
                   {auditData.entries.map((row: any) => {
                     const actor = row.actor_id ? auditData.actors[row.actor_id] : null;
                     return (
-                      <div key={row.id} className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2 text-sm">
-                        <Badge variant="outline" className="capitalize">{row.action}</Badge>
-                        <Badge variant="outline" className="capitalize">{row.resource_type.replace("_", " ")}</Badge>
+                      <div
+                        key={row.id}
+                        className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2 text-sm"
+                      >
+                        <Badge variant="outline" className="capitalize">
+                          {row.action}
+                        </Badge>
+                        <Badge variant="outline" className="capitalize">
+                          {row.resource_type.replace("_", " ")}
+                        </Badge>
                         {row.was_confidential && (
                           <Badge className="bg-status-stuck text-white">confidential</Badge>
                         )}
@@ -138,61 +181,67 @@ function EmployeeRecordPage() {
           </Card>
         ) : null}
 
-        {view === "timeline" && <Tabs value={filter} onValueChange={setFilter}>
-          <TabsList className="flex flex-wrap">
-            {CATEGORIES.map((c) => (
-              <TabsTrigger key={c} value={c} className="capitalize">
-                {c.replace("_", " ")}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        {view === "timeline" && (
+          <Tabs value={filter} onValueChange={setFilter}>
+            <TabsList className="flex flex-wrap">
+              {CATEGORIES.map((c) => (
+                <TabsTrigger key={c} value={c} className="capitalize">
+                  {c.replace("_", " ")}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-          <TabsContent value={filter} className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Timeline</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading…</p>
-                ) : events.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nothing recorded.</p>
-                ) : (
-                  <ol className="relative space-y-4 border-l border-border pl-4">
-                    {events.map((e: any) => (
-                      <li key={e.id} className="relative">
-                        <span className="absolute -left-[22px] mt-1 inline-block h-3 w-3 rounded-full bg-primary" />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge className={CATEGORY_COLORS[e.category] ?? "bg-muted"}>
-                            {e.category.replace("_", " ")}
-                          </Badge>
-                          <span className="font-medium">{e.title}</span>
-                          {e.severity && (
-                            <Badge variant="outline" className="capitalize">{e.severity}</Badge>
+            <TabsContent value={filter} className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Timeline</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {isLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading…</p>
+                  ) : events.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nothing recorded.</p>
+                  ) : (
+                    <ol className="relative space-y-4 border-l border-border pl-4">
+                      {events.map((e: any) => (
+                        <li key={e.id} className="relative">
+                          <span className="absolute -left-[22px] mt-1 inline-block h-3 w-3 rounded-full bg-primary" />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={CATEGORY_COLORS[e.category] ?? "bg-muted"}>
+                              {e.category.replace("_", " ")}
+                            </Badge>
+                            <span className="font-medium">{e.title}</span>
+                            {e.severity && (
+                              <Badge variant="outline" className="capitalize">
+                                {e.severity}
+                              </Badge>
+                            )}
+                            {e.visibility !== "employee" && (
+                              <Badge variant="outline" className="capitalize">
+                                {e.visibility}
+                              </Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(e.occurred_at).toLocaleString()}
+                            </span>
+                          </div>
+                          {e.summary && (
+                            <p className="mt-1 text-sm text-muted-foreground">{e.summary}</p>
                           )}
-                          {e.visibility !== "employee" && (
-                            <Badge variant="outline" className="capitalize">{e.visibility}</Badge>
+                          {e.source_table && (
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              Source: {e.source_table} · {e.source_id?.slice(0, 8)}
+                            </p>
                           )}
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(e.occurred_at).toLocaleString()}
-                          </span>
-                        </div>
-                        {e.summary && (
-                          <p className="mt-1 text-sm text-muted-foreground">{e.summary}</p>
-                        )}
-                        {e.source_table && (
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            Source: {e.source_table} · {e.source_id?.slice(0, 8)}
-                          </p>
-                        )}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </AppShell>
   );

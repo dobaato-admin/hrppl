@@ -31,6 +31,8 @@ export type Feature =
   | "regional.console"
   // Organization (org_admin + branch_admin + hr + finance, depending)
   | "org.console"
+  | "org.onboardingAdmin"
+  | "org.auStpAudit"
   | "org.setup"
   | "org.branches"
   | "org.whiteLabel"
@@ -44,7 +46,9 @@ export type Feature =
   | "org.recruitment"
   | "org.promotions"
   | "org.payRates"
+  | "org.leaveManagement"
   | "org.leaveTypes"
+  | "org.toilAdmin"
   | "org.holidayCalendars"
   | "org.publicHolidays"
   | "org.employeeHolidays"
@@ -63,6 +67,12 @@ export type Feature =
   | "org.trainingCatalog"
   | "org.feedbackTemplates"
   | "org.reviewTemplates"
+  | "org.reviewCycles"
+  | "org.reviewAnalytics"
+  | "org.kpiLibrary"
+  | "org.employeeDuties"
+  | "org.dutyReviews"
+  | "org.templatesHub"
   | "org.performance"
   | "org.discipline"
   | "org.medical"
@@ -121,6 +131,14 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
 
   // Org-level — all org roles see the console, deeper features filter below
   "org.console": SET("super_admin", "org_admin", "branch_admin", "hr", "finance", "manager"),
+  // Split out of org.console in W5 P1. Onboarding administration is people ops,
+  // not "anyone who can see the org console".
+  "org.onboardingAdmin": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  // Also split out of org.console, which admitted six roles while the page's
+  // own inline check requires is_org_admin — so it was a dead link for
+  // branch_admin, hr, finance and manager. Not caught by the parity test
+  // because the page gates inline rather than with <AdminGate>.
+  "org.auStpAudit": SET("super_admin", "org_admin", "finance"),
   "org.setup": SET("super_admin", "org_admin"),
   "org.branches": SET("super_admin", "org_admin"),
   "org.whiteLabel": SET("super_admin", "org_admin"),
@@ -128,17 +146,33 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "org.roles": SET("super_admin", "org_admin"),
 
   "org.employees": SET("super_admin", "org_admin", "branch_admin", "hr", "finance", "manager"),
-  "org.departments": SET("super_admin", "org_admin", "branch_admin", "hr"),
-  "org.designations": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  "org.departments": SET("super_admin", "org_admin", "hr"),
+  "org.designations": SET("super_admin", "org_admin", "hr"),
   "org.teams": SET("super_admin", "org_admin", "branch_admin", "hr", "manager"),
-  "org.teamAssignments": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  "org.teamAssignments": SET("super_admin", "org_admin", "hr"),
   "org.recruitment": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.promotions": SET("super_admin", "org_admin", "branch_admin", "hr", "finance", "manager"),
   "org.payRates": SET("super_admin", "org_admin", "branch_admin", "finance", "manager"),
 
-  "org.leaveTypes": SET("super_admin", "org_admin", "branch_admin", "hr"),
-  "org.holidayCalendars": SET("super_admin", "org_admin", "branch_admin", "hr"),
-  "org.publicHolidays": SET("super_admin", "regional_admin", "org_admin", "branch_admin", "hr", "manager", "employee"),
+  // Who APPROVES leave. Split from org.leaveTypes in W5 P1: one key used to
+  // gate leave approvals, the leave-type library and TOIL admin alike, so any
+  // answer that suited one was wrong for the others.
+  "org.leaveManagement": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  // Who DEFINES leave types. D-1: records administration, squarely HR.
+  // branch_admin dropped — defining the org's leave policy is an org-defining
+  // power, which is the one thing that role is defined as lacking.
+  "org.leaveTypes": SET("super_admin", "org_admin", "hr"),
+  "org.toilAdmin": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  "org.holidayCalendars": SET("super_admin", "org_admin", "hr"),
+  "org.publicHolidays": SET(
+    "super_admin",
+    "regional_admin",
+    "org_admin",
+    "branch_admin",
+    "hr",
+    "manager",
+    "employee",
+  ),
   // Matches ORG_ADMIN_OR_MANAGER, the AdminGate allow-set on
   // /admin/employee-holidays itself — this nav item was gated by
   // org.reviewTemplates (super_admin/org_admin/branch_admin/hr), a leftover
@@ -146,10 +180,13 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   // and hr see a link the route then rejected, and hid it from manager, who
   // the route does allow.
   "org.employeeHolidays": SET("super_admin", "org_admin", "manager"),
-  "org.overtimeRates": SET("super_admin", "regional_admin", "org_admin", "branch_admin", "finance"),
+  "org.overtimeRates": SET("super_admin", "regional_admin", "org_admin", "finance"),
 
-  "org.payrollSetup": SET("super_admin", "org_admin", "branch_admin", "finance"),
-  "org.payrollSettings": SET("super_admin", "org_admin", "branch_admin", "finance"),
+  // D-4 · finance is defined as owning payroll, and all four payroll-config
+  // routes were dead links for exactly that role. branch_admin dropped:
+  // configuring how the org pays people is an org-defining power.
+  "org.payrollSetup": SET("super_admin", "org_admin", "finance"),
+  "org.payrollSettings": SET("super_admin", "org_admin", "finance"),
   "org.payslipTemplates": SET("super_admin", "org_admin", "finance"),
   "org.payroll": SET("super_admin", "org_admin", "branch_admin", "finance"),
 
@@ -175,15 +212,36 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   // Matches hr.variations.tsx's own inline role check.
   "org.employmentVariations": SET("super_admin", "org_admin", "hr"),
   "org.training": SET("super_admin", "org_admin", "branch_admin", "hr", "manager"),
-  "org.trainingCatalog": SET("super_admin", "org_admin", "branch_admin", "hr"),
-  "org.feedbackTemplates": SET("super_admin", "org_admin", "branch_admin", "hr"),
-  "org.reviewTemplates": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  "org.trainingCatalog": SET("super_admin", "org_admin", "hr", "manager"),
+  "org.feedbackTemplates": SET("super_admin", "org_admin", "hr"),
+  // W5 P1 · org.reviewTemplates used to gate SEVEN destinations at once —
+  // review cycles, analytics, the KPI library, duties, duty reviews, the
+  // template pages and the Templates Hub. D-2 admits manager to four of them
+  // and not the other three, so one key could not express both. Split.
+  "org.reviewTemplates": SET("super_admin", "org_admin", "hr"),
+  "org.kpiLibrary": SET("super_admin", "org_admin", "hr"),
+  "org.templatesHub": SET("super_admin", "org_admin", "hr"),
+  // D-2 · the routes already admitted manager and the nav wrongly hid it.
+  "org.reviewCycles": SET("super_admin", "org_admin", "hr", "manager"),
+  "org.reviewAnalytics": SET("super_admin", "org_admin", "hr", "manager"),
+  "org.dutyReviews": SET("super_admin", "org_admin", "hr", "manager"),
+  "org.employeeDuties": SET("super_admin", "org_admin", "hr", "manager"),
   "org.performance": SET("super_admin", "org_admin", "branch_admin", "hr", "manager"),
 
-  "org.discipline": SET("super_admin", "org_admin", "branch_admin", "hr"),
-  "org.medical": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  // Narrowed to match compliance.confidential. These two hold disciplinary and
+  // medical records; the confidentiality rule restricts them to
+  // super_admin/org_admin/hr, and the nav keys admitted branch_admin as well.
+  // /admin/medical's route gate was wider still (ADMIN_LAYOUT_ROLES), so
+  // finance, manager and regional_admin could reach medical incidents by URL.
+  "org.discipline": SET("super_admin", "org_admin", "hr"),
+  "org.medical": SET("super_admin", "org_admin", "hr"),
   "org.assets": SET("super_admin", "org_admin", "branch_admin", "hr", "finance"),
-  "org.offboarding": SET("super_admin", "org_admin", "branch_admin", "hr"),
+  // D-3 · MUST equal OFFBOARDING_ROLES, which mirrors the `offb tenant admin`
+  // RLS policy on offboarding_cases. The nav was the only one of the three
+  // that admitted branch_admin, so it advertised a page the database refuses.
+  // manager added for the opposite reason: the policy allows it and the
+  // sidebar was hiding it.
+  "org.offboarding": SET("super_admin", "org_admin", "manager", "hr"),
   "org.biometric": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.geofences": SET("super_admin", "org_admin", "branch_admin", "hr"),
   // Must stay equal to WFH_APPROVER_ROLES and to the RLS policy on
@@ -231,13 +289,14 @@ export function can(feature: Feature, roles: readonly AppRole[] | undefined | nu
 /** Convenience: true if user holds any org-level role (incl. super_admin). */
 export function isOrgMember(roles: readonly AppRole[] | undefined | null): boolean {
   if (!roles) return false;
-  return roles.some((r) =>
-    r === "super_admin" ||
-    r === "org_admin" ||
-    r === "branch_admin" ||
-    r === "hr" ||
-    r === "finance" ||
-    r === "manager",
+  return roles.some(
+    (r) =>
+      r === "super_admin" ||
+      r === "org_admin" ||
+      r === "branch_admin" ||
+      r === "hr" ||
+      r === "finance" ||
+      r === "manager",
   );
 }
 
@@ -289,6 +348,31 @@ export const PLATFORM_OR_ORG_ADMIN: ReadonlySet<AppRole> = SET(
 );
 
 export const SUPER_ADMIN_ONLY: ReadonlySet<AppRole> = SET("super_admin");
+
+/**
+ * D-1 · Records administration — the org's structural lookup tables.
+ *
+ * hr is in because departments, designations, leave types and holiday
+ * categories are records administration, squarely people operations.
+ * branch_admin is out because defining the org's structure is an org-defining
+ * power, and that role is defined as org_admin minus exactly those.
+ */
+export const ORG_ADMIN_OR_HR: ReadonlySet<AppRole> = SET("super_admin", "org_admin", "hr");
+
+/**
+ * D-2 · Performance operations — running review cycles, reading their
+ * analytics, scoring duties, assigning from the training catalog.
+ *
+ * manager is in because all four routes already admitted it and only the nav
+ * was hiding them, so four pages built for managers were reachable solely by
+ * typing the URL.
+ */
+export const ORG_ADMIN_HR_MANAGER: ReadonlySet<AppRole> = SET(
+  "super_admin",
+  "org_admin",
+  "hr",
+  "manager",
+);
 
 /** Matches the org.expenseSettings feature — policy owners, not approvers. */
 export const ORG_ADMIN_OR_FINANCE: ReadonlySet<AppRole> = SET(

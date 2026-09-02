@@ -427,7 +427,7 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/org/leave",
         icon: CalendarDays,
         accent: "bg-status-done",
-        feature: "org.leaveTypes",
+        feature: "org.leaveManagement",
       },
       {
         title: "Timesheets",
@@ -464,6 +464,11 @@ export const ORG_SECTIONS: NavSection[] = [
         icon: CalendarDays,
         accent: "bg-status-pending",
         feature: "org.publicHolidays",
+        // Everyone may read the holiday calendar; only admins may
+        // change it. Gating the page to admins made this a dead
+        // link for branch_admin, hr, manager AND employee — the
+        // one drift that reached every role in the product.
+        readOnlyFor: ["branch_admin", "hr", "manager", "employee", "regional_admin"],
       },
       {
         title: "Per-employee holidays",
@@ -477,7 +482,7 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/admin/toil",
         icon: Clock,
         accent: "bg-status-working",
-        feature: "org.leaveTypes",
+        feature: "org.toilAdmin",
       },
     ],
   },
@@ -570,7 +575,7 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/org/onboarding",
         icon: GraduationCap,
         accent: "bg-status-info",
-        feature: "org.console",
+        feature: "org.onboardingAdmin",
         keywords: "checklist",
       },
       {
@@ -578,7 +583,7 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/org/onboarding/tracker",
         icon: ClipboardCheck,
         accent: "bg-status-working",
-        feature: "org.console",
+        feature: "org.onboardingAdmin",
       },
       {
         // NEW — defines what an onboarding pack contains; had no
@@ -608,35 +613,35 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/admin/review-cycles",
         icon: TrendingUp,
         accent: "bg-status-pending",
-        feature: "org.reviewTemplates",
+        feature: "org.reviewCycles",
       },
       {
         title: "Review analytics",
         to: "/admin/review-analytics",
         icon: TrendingUp,
         accent: "bg-status-info",
-        feature: "org.reviewTemplates",
+        feature: "org.reviewAnalytics",
       },
       {
         title: "KPI & KRA library",
         to: "/admin/kpi-kra",
         icon: Sparkles,
         accent: "bg-accent",
-        feature: "org.reviewTemplates",
+        feature: "org.kpiLibrary",
       },
       {
         title: "Duties & responsibilities",
         to: "/admin/employee-duties",
         icon: ClipboardCheck,
         accent: "bg-status-working",
-        feature: "org.reviewTemplates",
+        feature: "org.employeeDuties",
       },
       {
         title: "Duty-based KPI review",
         to: "/admin/duty-reviews",
         icon: TrendingUp,
         accent: "bg-status-info",
-        feature: "org.reviewTemplates",
+        feature: "org.dutyReviews",
       },
       {
         title: "Review templates",
@@ -665,7 +670,7 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/admin/templates",
         icon: ClipboardCheck,
         accent: "bg-accent",
-        feature: "org.reviewTemplates",
+        feature: "org.templatesHub",
         keywords: "review onboarding training documents",
       },
     ],
@@ -719,7 +724,7 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/admin/au-stp-audit",
         icon: ShieldAlert,
         accent: "bg-status-stuck",
-        feature: "org.console",
+        feature: "org.auStpAudit",
       },
       {
         title: "Missing info requests",

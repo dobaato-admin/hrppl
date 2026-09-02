@@ -30,16 +30,26 @@ import {
   getMedicalAttachmentUrl,
 } from "@/lib/medical.functions";
 import { AdminGate } from "@/components/AdminGate";
-import { ADMIN_LAYOUT_ROLES } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/medical")({
-  component: () => (<AdminGate allow={ADMIN_LAYOUT_ROLES}><MedicalPage /></AdminGate>),
+  component: () => (
+    <AdminGate feature="org.medical">
+      <MedicalPage />
+    </AdminGate>
+  ),
   errorComponent: ({ error, reset }) => {
     const router = useRouter();
     return (
       <div className="p-6">
         <p className="text-destructive">{(error as Error).message}</p>
-        <Button onClick={() => { reset(); router.invalidate(); }}>Retry</Button>
+        <Button
+          onClick={() => {
+            reset();
+            router.invalidate();
+          }}
+        >
+          Retry
+        </Button>
       </div>
     );
   },
@@ -88,7 +98,10 @@ function MedicalPage() {
   });
 
   return (
-    <AppShell title="Medical incidents" subtitle="Workplace medical events. High-severity events open a confidential case automatically.">
+    <AppShell
+      title="Medical incidents"
+      subtitle="Workplace medical events. High-severity events open a confidential case automatically."
+    >
       <div className="grid gap-4 p-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
@@ -97,8 +110,13 @@ function MedicalPage() {
           <CardContent className="space-y-3">
             <div>
               <Label>Employee</Label>
-              <Select value={form.employeeId} onValueChange={(v) => setForm({ ...form, employeeId: v })}>
-                <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+              <Select
+                value={form.employeeId}
+                onValueChange={(v) => setForm({ ...form, employeeId: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
                 <SelectContent>
                   {(empsQ.data?.employees ?? []).map((e: any) => (
                     <SelectItem key={e.id} value={e.id}>
@@ -111,12 +129,21 @@ function MedicalPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Incident type</Label>
-                <Input value={form.incidentType} onChange={(e) => setForm({ ...form, incidentType: e.target.value })} placeholder="e.g. Slip, Cut, Allergic reaction" />
+                <Input
+                  value={form.incidentType}
+                  onChange={(e) => setForm({ ...form, incidentType: e.target.value })}
+                  placeholder="e.g. Slip, Cut, Allergic reaction"
+                />
               </div>
               <div>
                 <Label>Severity</Label>
-                <Select value={form.severity} onValueChange={(v) => setForm({ ...form, severity: v as any })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Select
+                  value={form.severity}
+                  onValueChange={(v) => setForm({ ...form, severity: v as any })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="low">Low</SelectItem>
                     <SelectItem value="medium">Medium</SelectItem>
@@ -128,27 +155,47 @@ function MedicalPage() {
             </div>
             <div>
               <Label>Location</Label>
-              <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+              <Input
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+              />
             </div>
             <div>
               <Label>Description</Label>
-              <Textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              <Textarea
+                rows={3}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
             </div>
             <div>
               <Label>Treatment notes</Label>
-              <Textarea rows={2} value={form.treatmentNotes} onChange={(e) => setForm({ ...form, treatmentNotes: e.target.value })} />
+              <Textarea
+                rows={2}
+                value={form.treatmentNotes}
+                onChange={(e) => setForm({ ...form, treatmentNotes: e.target.value })}
+              />
             </div>
             <div className="flex items-center justify-between rounded border p-2">
               <Label>Requires case file</Label>
-              <Switch checked={form.requiresCase} onCheckedChange={(v) => setForm({ ...form, requiresCase: v })} />
+              <Switch
+                checked={form.requiresCase}
+                onCheckedChange={(v) => setForm({ ...form, requiresCase: v })}
+              />
             </div>
             <div className="flex items-center justify-between rounded border p-2">
               <Label>Reported to authority</Label>
-              <Switch checked={form.reportedToAuthority} onCheckedChange={(v) => setForm({ ...form, reportedToAuthority: v })} />
+              <Switch
+                checked={form.reportedToAuthority}
+                onCheckedChange={(v) => setForm({ ...form, reportedToAuthority: v })}
+              />
             </div>
             <div className="flex items-center justify-between rounded border p-2">
               <Label>Confidential (HR-only)</Label>
-              <Switch checked={form.confidential} onCheckedChange={(v) => setForm({ ...form, confidential: v })} />
+              <Switch
+                checked={form.confidential}
+                onCheckedChange={(v) => setForm({ ...form, confidential: v })}
+              />
             </div>
             <Button
               disabled={!form.employeeId || !form.incidentType || !form.description || m.isPending}
@@ -176,7 +223,9 @@ function MedicalPage() {
                   <div key={i.id} className="rounded border p-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{i.incident_type}</span>
-                      <Badge variant="outline" className="capitalize">{i.severity}</Badge>
+                      <Badge variant="outline" className="capitalize">
+                        {i.severity}
+                      </Badge>
                       {i.confidential && <Badge variant="outline">Confidential</Badge>}
                       <span className="text-xs text-muted-foreground">
                         {new Date(i.occurred_at).toLocaleString()}
@@ -281,8 +330,13 @@ function MedicalAttachments({ incident }: { incident: any }) {
       {items.length > 0 && (
         <ul className="mt-2 space-y-1">
           {items.map((a: any) => (
-            <li key={a.id} className="flex items-center justify-between gap-2 rounded bg-card px-2 py-1 text-xs">
-              <span className="truncate" title={a.file_name}>{a.file_name}</span>
+            <li
+              key={a.id}
+              className="flex items-center justify-between gap-2 rounded bg-card px-2 py-1 text-xs"
+            >
+              <span className="truncate" title={a.file_name}>
+                {a.file_name}
+              </span>
               <span className="flex items-center gap-1">
                 <Button size="sm" variant="ghost" onClick={() => download(a.storage_path)}>
                   <Download className="h-3.5 w-3.5" />

@@ -10,7 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
@@ -26,7 +32,19 @@ import {
 import { getOrgSettings } from "@/lib/org-settings.functions";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Check, ChevronLeft, ChevronRight, CircleDashed, Download, Printer, AlertCircle, Plus, Trash2, History, Settings2 } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CircleDashed,
+  Download,
+  Printer,
+  AlertCircle,
+  Plus,
+  Trash2,
+  History,
+  Settings2,
+} from "lucide-react";
 import { NepalPayrollWizardDialog } from "@/components/payroll/NepalPayrollWizardDialog";
 import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
@@ -74,7 +92,6 @@ function Wizard() {
     enabled: !!user && rolesLoaded && canAccess,
   });
 
-
   const [step, setStep] = useState(0);
   const [nepalOpen, setNepalOpen] = useState(false);
   const [previewGross, setPreviewGross] = useState(5000);
@@ -104,7 +121,11 @@ function Wizard() {
   });
 
   if (!user || !rolesLoaded) {
-    return <AppShell title="Payroll configuration wizard"><main className="p-6 text-muted-foreground">Loading…</main></AppShell>;
+    return (
+      <AppShell title="Payroll configuration wizard">
+        <main className="p-6 text-muted-foreground">Loading…</main>
+      </AppShell>
+    );
   }
   const tenant = (org.data as any)?.tenant;
   const countrySettings = (org.data as any)?.countryPayrollSettings;
@@ -113,7 +134,11 @@ function Wizard() {
   const currency = tenant?.currency_code ?? "USD";
 
   const formatMoney = (n: number) =>
-    new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
+    new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 2,
+    }).format(n);
 
   const preview = useMemo(() => {
     const basic = previewGross;
@@ -136,7 +161,12 @@ function Wizard() {
         kind: isDeduction ? "deduction" : "earning",
       });
     }
-    return { lines, gross: grossEarnings, deductions: totalDeductions, net: grossEarnings - totalDeductions };
+    return {
+      lines,
+      gross: grossEarnings,
+      deductions: totalDeductions,
+      net: grossEarnings - totalDeductions,
+    };
   }, [components, previewGross]);
 
   // ---- Validation per step ----
@@ -145,9 +175,15 @@ function Wizard() {
     if (!tenant?.country_code) errors[0].push("Country is not set on this organisation.");
     if (!tenant?.currency_code) errors[0].push("Currency is not set on this organisation.");
     if (!settings?.pay_period) errors[1].push("Choose a pay period and save before continuing.");
-    if (settings && (settings.standard_hours_per_day == null || settings.standard_hours_per_day <= 0))
+    if (
+      settings &&
+      (settings.standard_hours_per_day == null || settings.standard_hours_per_day <= 0)
+    )
       errors[1].push("Standard hours per day must be greater than 0.");
-    if (settings && (settings.standard_days_per_week == null || settings.standard_days_per_week <= 0))
+    if (
+      settings &&
+      (settings.standard_days_per_week == null || settings.standard_days_per_week <= 0)
+    )
       errors[1].push("Standard days per week must be greater than 0.");
     const taxKinds = ["tax", "pf", "retirement", "deduction"];
     const hasTax = components.some((c) => taxKinds.includes(c.kind) && c.is_active);
@@ -180,7 +216,12 @@ function Wizard() {
       else grossEarnings += amt;
       lines.push({ label: `${c.label}`, amount: amt, kind: isDeduction ? "deduction" : "earning" });
     }
-    return { lines, gross: grossEarnings, deductions: totalDeductions, net: grossEarnings - totalDeductions };
+    return {
+      lines,
+      gross: grossEarnings,
+      deductions: totalDeductions,
+      net: grossEarnings - totalDeductions,
+    };
   }
 
   // ---- Export ----
@@ -188,8 +229,12 @@ function Wizard() {
     return scenarios.map((s) => {
       const r = runScenario(s.gross, s.overrides);
       return {
-        id: s.id, name: s.name, gross_input: s.gross,
-        gross_earnings: r.gross, total_deductions: r.deductions, net_pay: r.net,
+        id: s.id,
+        name: s.name,
+        gross_input: s.gross,
+        gross_earnings: r.gross,
+        total_deductions: r.deductions,
+        net_pay: r.net,
         overrides_active: s.overrides.filter((o) => o.enabled).length,
       };
     });
@@ -219,7 +264,10 @@ function Wizard() {
     return filtered;
   }
   async function handleExportCsv() {
-    if (exportSections.length === 0) { toast.error("Pick at least one section"); return; }
+    if (exportSections.length === 0) {
+      toast.error("Pick at least one section");
+      return;
+    }
     setExporting(true);
     try {
       const bundle = await fetchExport();
@@ -233,7 +281,13 @@ function Wizard() {
       a.download = `payroll-rules-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      await logExport({ data: { format: "csv", sections: exportSections, scenarios: scenarios.map((s) => ({ id: s.id, name: s.name })) } }).catch(() => {});
+      await logExport({
+        data: {
+          format: "csv",
+          sections: exportSections,
+          scenarios: scenarios.map((s) => ({ id: s.id, name: s.name })),
+        },
+      }).catch(() => {});
       toast.success("Export downloaded");
     } catch (e: any) {
       toast.error(e.message ?? "Export failed");
@@ -242,7 +296,10 @@ function Wizard() {
     }
   }
   async function handleExportPdf() {
-    if (exportSections.length === 0) { toast.error("Pick at least one section"); return; }
+    if (exportSections.length === 0) {
+      toast.error("Pick at least one section");
+      return;
+    }
     setExporting(true);
     try {
       const bundle = await fetchExport();
@@ -250,11 +307,23 @@ function Wizard() {
       const filtered = filterBundleBySections(bundle as any);
       const html = bundleToPrintableHtml(filtered, currency, meta);
       const w = window.open("", "_blank", "width=900,height=1200");
-      if (!w) { toast.error("Pop-up blocked"); return; }
+      if (!w) {
+        toast.error("Pop-up blocked");
+        return;
+      }
       w.document.write(html);
       w.document.close();
-      w.onload = () => { w.focus(); w.print(); };
-      await logExport({ data: { format: "pdf", sections: exportSections, scenarios: scenarios.map((s) => ({ id: s.id, name: s.name })) } }).catch(() => {});
+      w.onload = () => {
+        w.focus();
+        w.print();
+      };
+      await logExport({
+        data: {
+          format: "pdf",
+          sections: exportSections,
+          scenarios: scenarios.map((s) => ({ id: s.id, name: s.name })),
+        },
+      }).catch(() => {});
     } catch (e: any) {
       toast.error(e.message ?? "Export failed");
     } finally {
@@ -264,15 +333,23 @@ function Wizard() {
 
   return (
     <AppShell title="Payroll configuration wizard">
-      <a href="#wizard-main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground">
+      <a
+        href="#wizard-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"
+      >
         Skip to wizard content
       </a>
-      <main id="wizard-main" tabIndex={-1} className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6 focus:outline-none">
+      <main
+        id="wizard-main"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6 focus:outline-none"
+      >
         <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 sm:flex sm:flex-wrap sm:justify-between">
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-semibold">Payroll setup wizard</h1>
             <p className="text-sm text-muted-foreground">
-              Guided configuration for taxes, hours, overtime and leave — with a live payslip preview.
+              Guided configuration for taxes, hours, overtime and leave — with a live payslip
+              preview.
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
@@ -289,7 +366,13 @@ function Wizard() {
                     <button
                       type="button"
                       className="text-xs text-muted-foreground underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                      onClick={() => setExportSections(exportSections.length === ALL_SECTIONS.length ? [] : ALL_SECTIONS.map((s) => s.id))}
+                      onClick={() =>
+                        setExportSections(
+                          exportSections.length === ALL_SECTIONS.length
+                            ? []
+                            : ALL_SECTIONS.map((s) => s.id),
+                        )
+                      }
                     >
                       {exportSections.length === ALL_SECTIONS.length ? "Clear" : "All"}
                     </button>
@@ -302,11 +385,20 @@ function Wizard() {
                           <Checkbox
                             id={`exp-${s.id}`}
                             checked={checked}
-                            onCheckedChange={(v) => setExportSections(v
-                              ? Array.from(new Set([...exportSections, s.id]))
-                              : exportSections.filter((x) => x !== s.id))}
+                            onCheckedChange={(v) =>
+                              setExportSections(
+                                v
+                                  ? Array.from(new Set([...exportSections, s.id]))
+                                  : exportSections.filter((x) => x !== s.id),
+                              )
+                            }
                           />
-                          <Label htmlFor={`exp-${s.id}`} className="cursor-pointer text-sm font-normal">{s.label}</Label>
+                          <Label
+                            htmlFor={`exp-${s.id}`}
+                            className="cursor-pointer text-sm font-normal"
+                          >
+                            {s.label}
+                          </Label>
                         </li>
                       );
                     })}
@@ -320,7 +412,13 @@ function Wizard() {
             <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={exporting}>
               <Printer className="size-4" /> Print / PDF
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setAuditOpen((v) => !v)} aria-expanded={auditOpen} aria-controls="audit-panel">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAuditOpen((v) => !v)}
+              aria-expanded={auditOpen}
+              aria-controls="audit-panel"
+            >
               <History className="size-4" /> Audit log
             </Button>
             <Button variant="outline" size="sm" asChild>
@@ -333,7 +431,9 @@ function Wizard() {
           <Card id="audit-panel">
             <CardHeader>
               <CardTitle className="text-base">Admin audit log</CardTitle>
-              <CardDescription>Recent payroll rule edits, scenario events and exports.</CardDescription>
+              <CardDescription>
+                Recent payroll rule edits, scenario events and exports.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {audit.isLoading ? (
@@ -342,16 +442,30 @@ function Wizard() {
                 <div className="max-h-80 overflow-y-auto rounded-md border">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <tr><th className="px-3 py-2">When</th><th className="px-3 py-2">Category</th><th className="px-3 py-2">Action</th><th className="px-3 py-2">Entity</th><th className="px-3 py-2">Details</th></tr>
+                      <tr>
+                        <th className="px-3 py-2">When</th>
+                        <th className="px-3 py-2">Category</th>
+                        <th className="px-3 py-2">Action</th>
+                        <th className="px-3 py-2">Entity</th>
+                        <th className="px-3 py-2">Details</th>
+                      </tr>
                     </thead>
                     <tbody>
                       {(audit.data as any).entries.map((e: any) => (
                         <tr key={e.id} className="border-t focus-within:bg-muted/40">
-                          <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">{new Date(e.created_at).toLocaleString()}</td>
-                          <td className="px-3 py-2"><Badge variant="outline">{e.category}</Badge></td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground tabular-nums">
+                            {new Date(e.created_at).toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge variant="outline">{e.category}</Badge>
+                          </td>
                           <td className="px-3 py-2">{e.action}</td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground">{e.entity_type ?? "—"}</td>
-                          <td className="px-3 py-2 text-xs"><code className="text-[11px]">{JSON.stringify(e.details)}</code></td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {e.entity_type ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            <code className="text-[11px]">{JSON.stringify(e.details)}</code>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -379,11 +493,21 @@ function Wizard() {
                   onClick={() => setStep(s.id)}
                   aria-current={active ? "step" : undefined}
                   className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    active ? "bg-primary text-primary-foreground" : done ? "bg-muted" : "hover:bg-muted"
+                    active
+                      ? "bg-primary text-primary-foreground"
+                      : done
+                        ? "bg-muted"
+                        : "hover:bg-muted"
                   }`}
                 >
-                  {done ? <Check className="size-4 shrink-0" /> : <CircleDashed className="size-4 shrink-0" />}
-                  <span className="truncate">{s.id + 1}. {s.label}</span>
+                  {done ? (
+                    <Check className="size-4 shrink-0" />
+                  ) : (
+                    <CircleDashed className="size-4 shrink-0" />
+                  )}
+                  <span className="truncate">
+                    {s.id + 1}. {s.label}
+                  </span>
                 </button>
               </li>
             );
@@ -397,7 +521,8 @@ function Wizard() {
                 <CardHeader>
                   <CardTitle>Country & currency</CardTitle>
                   <CardDescription>
-                    Payroll rules apply per country. Update these in organisation settings if they're wrong.
+                    Payroll rules apply per country. Update these in organisation settings if
+                    they're wrong.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -410,17 +535,31 @@ function Wizard() {
                     </div>
                     <div>
                       <Label>Currency</Label>
-                      <div className="mt-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">{currency}</div>
+                      <div className="mt-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                        {currency}
+                      </div>
                     </div>
                   </div>
                   {countrySettings ? (
                     <div className="rounded-md border bg-muted/20 p-3 text-sm">
                       <p className="mb-2 font-medium">Country defaults</p>
                       <ul className="grid gap-1 sm:grid-cols-2">
-                        <li><span className="text-muted-foreground">Pay frequency:</span> {countrySettings.pay_frequency}</li>
-                        <li><span className="text-muted-foreground">Workweek hours:</span> {countrySettings.workweek_hours}</li>
-                        <li><span className="text-muted-foreground">Overtime ×:</span> {countrySettings.overtime_multiplier}</li>
-                        <li><span className="text-muted-foreground">Fiscal start:</span> month {countrySettings.fiscal_year_start_month}</li>
+                        <li>
+                          <span className="text-muted-foreground">Pay frequency:</span>{" "}
+                          {countrySettings.pay_frequency}
+                        </li>
+                        <li>
+                          <span className="text-muted-foreground">Workweek hours:</span>{" "}
+                          {countrySettings.workweek_hours}
+                        </li>
+                        <li>
+                          <span className="text-muted-foreground">Overtime ×:</span>{" "}
+                          {countrySettings.overtime_multiplier}
+                        </li>
+                        <li>
+                          <span className="text-muted-foreground">Fiscal start:</span> month{" "}
+                          {countrySettings.fiscal_year_start_month}
+                        </li>
                       </ul>
                     </div>
                   ) : (
@@ -431,21 +570,38 @@ function Wizard() {
                   {tenant?.country_code === "NP" && (
                     <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
                       <p className="font-medium">Nepal payroll quick-seed (FY 2081/82)</p>
-                      <p className="text-xs text-muted-foreground">Seeds income tax slabs, SSF 11%/20%, CIT, festival bonus and PF election as draft rules.</p>
-                      <Button size="sm" className="mt-2" onClick={() => setNepalOpen(true)}>Open Nepal wizard</Button>
+                      <p className="text-xs text-muted-foreground">
+                        Seeds income tax slabs, SSF 11%/20%, CIT, festival bonus and PF election as
+                        draft rules.
+                      </p>
+                      <Button size="sm" className="mt-2" onClick={() => setNepalOpen(true)}>
+                        Open Nepal wizard
+                      </Button>
                     </div>
                   )}
                   <div className="flex justify-end">
-                    <Button asChild variant="link"><Link to="/settings/organization">Change in organisation settings</Link></Button>
+                    <Button asChild variant="link">
+                      <Link to="/settings/organization">Change in organisation settings</Link>
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             )}
 
-            {step === 1 && <PayPeriodStep settings={settings} onSave={async (v) => {
-              try { await saveSettings({ data: v }); toast.success("Saved"); qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] }); }
-              catch (e: any) { toast.error(e.message ?? "Save failed"); }
-            }} />}
+            {step === 1 && (
+              <PayPeriodStep
+                settings={settings}
+                onSave={async (v) => {
+                  try {
+                    await saveSettings({ data: v });
+                    toast.success("Saved");
+                    qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] });
+                  } catch (e: any) {
+                    toast.error(e.message ?? "Save failed");
+                  }
+                }}
+              />
+            )}
 
             {step === 2 && (
               <ComponentStep
@@ -454,12 +610,21 @@ function Wizard() {
                 allowedKinds={["tax", "pf", "retirement", "deduction"]}
                 components={components}
                 onSave={async (v) => {
-                  try { await saveComponent({ data: v }); toast.success("Saved"); qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] }); }
-                  catch (e: any) { toast.error(e.message ?? "Save failed"); }
+                  try {
+                    await saveComponent({ data: v });
+                    toast.success("Saved");
+                    qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] });
+                  } catch (e: any) {
+                    toast.error(e.message ?? "Save failed");
+                  }
                 }}
                 onToggle={async (id, active) => {
-                  try { await toggleComp({ data: { id, is_active: active } }); qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] }); }
-                  catch (e: any) { toast.error(e.message ?? "Toggle failed"); }
+                  try {
+                    await toggleComp({ data: { id, is_active: active } });
+                    qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] });
+                  } catch (e: any) {
+                    toast.error(e.message ?? "Toggle failed");
+                  }
                 }}
               />
             )}
@@ -471,12 +636,21 @@ function Wizard() {
                 allowedKinds={["allowance", "other"]}
                 components={components}
                 onSave={async (v) => {
-                  try { await saveComponent({ data: v }); toast.success("Saved"); qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] }); }
-                  catch (e: any) { toast.error(e.message ?? "Save failed"); }
+                  try {
+                    await saveComponent({ data: v });
+                    toast.success("Saved");
+                    qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] });
+                  } catch (e: any) {
+                    toast.error(e.message ?? "Save failed");
+                  }
                 }}
                 onToggle={async (id, active) => {
-                  try { await toggleComp({ data: { id, is_active: active } }); qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] }); }
-                  catch (e: any) { toast.error(e.message ?? "Toggle failed"); }
+                  try {
+                    await toggleComp({ data: { id, is_active: active } });
+                    qc.invalidateQueries({ queryKey: ["payroll-wizard-setup"] });
+                  } catch (e: any) {
+                    toast.error(e.message ?? "Toggle failed");
+                  }
                 }}
               />
             )}
@@ -489,7 +663,15 @@ function Wizard() {
                 runScenario={runScenario}
                 formatMoney={formatMoney}
                 onScenarioEvent={(s, action) =>
-                  logScenario({ data: { scenarioId: s.id, name: s.name, action, gross: s.gross, overrideCount: s.overrides.filter((o) => o.enabled).length } }).catch(() => {})
+                  logScenario({
+                    data: {
+                      scenarioId: s.id,
+                      name: s.name,
+                      action,
+                      gross: s.gross,
+                      overrideCount: s.overrides.filter((o) => o.enabled).length,
+                    },
+                  }).catch(() => {})
                 }
               />
             )}
@@ -498,16 +680,27 @@ function Wizard() {
               <Card>
                 <CardHeader>
                   <CardTitle>Review</CardTitle>
-                  <CardDescription>Confirm your configuration. Use the preview pane to validate calculations.</CardDescription>
+                  <CardDescription>
+                    Confirm your configuration. Use the preview pane to validate calculations.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <SummaryRow label="Country" value={tenant?.country_code ?? "—"} />
                     <SummaryRow label="Currency" value={currency} />
                     <SummaryRow label="Pay period" value={settings?.pay_period ?? "not set"} />
-                    <SummaryRow label="Workday hours" value={settings?.standard_hours_per_day ?? "—"} />
-                    <SummaryRow label="Workweek days" value={settings?.standard_days_per_week ?? "—"} />
-                    <SummaryRow label="Active components" value={components.filter((c) => c.is_active).length} />
+                    <SummaryRow
+                      label="Workday hours"
+                      value={settings?.standard_hours_per_day ?? "—"}
+                    />
+                    <SummaryRow
+                      label="Workweek days"
+                      value={settings?.standard_days_per_week ?? "—"}
+                    />
+                    <SummaryRow
+                      label="Active components"
+                      value={components.filter((c) => c.is_active).length}
+                    />
                   </div>
                   <Separator />
                   <div className="flex flex-wrap justify-end gap-2">
@@ -517,7 +710,9 @@ function Wizard() {
                     <Button variant="outline" onClick={handleExportPdf} disabled={exporting}>
                       <Printer className="size-4" /> Print PDF
                     </Button>
-                    <Button asChild variant="outline"><Link to="/admin/payroll-setup">Advanced settings</Link></Button>
+                    <Button asChild variant="outline">
+                      <Link to="/admin/payroll-setup">Advanced settings</Link>
+                    </Button>
                     <Button onClick={() => toast.success("Setup looks good")}>Finish</Button>
                   </div>
                 </CardContent>
@@ -525,18 +720,27 @@ function Wizard() {
             )}
 
             {currentErrors.length > 0 && (
-              <div role="alert" className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              <div
+                role="alert"
+                className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm"
+              >
                 <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
                   <AlertCircle className="size-4" /> Resolve before continuing
                 </div>
                 <ul className="list-inside list-disc text-destructive/90">
-                  {currentErrors.map((e, i) => <li key={i}>{e}</li>)}
+                  {currentErrors.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
                 </ul>
               </div>
             )}
 
             <div className="mt-4 flex justify-between">
-              <Button variant="ghost" disabled={step === 0} onClick={() => setStep((s) => Math.max(0, s - 1))}>
+              <Button
+                variant="ghost"
+                disabled={step === 0}
+                onClick={() => setStep((s) => Math.max(0, s - 1))}
+              >
                 <ChevronLeft className="size-4" /> Back
               </Button>
               <Button
@@ -571,8 +775,13 @@ function Wizard() {
                   {preview.lines.map((l, i) => (
                     <div key={i} className="flex items-center justify-between gap-2">
                       <span className="truncate text-muted-foreground">{l.label}</span>
-                      <span className={l.kind === "deduction" ? "text-destructive tabular-nums" : "tabular-nums"}>
-                        {l.kind === "deduction" ? "-" : ""}{formatMoney(l.amount)}
+                      <span
+                        className={
+                          l.kind === "deduction" ? "text-destructive tabular-nums" : "tabular-nums"
+                        }
+                      >
+                        {l.kind === "deduction" ? "-" : ""}
+                        {formatMoney(l.amount)}
                       </span>
                     </div>
                   ))}
@@ -583,8 +792,12 @@ function Wizard() {
                   <Row label="Total deductions" value={formatMoney(preview.deductions)} muted />
                 </div>
                 <div className="rounded-md bg-primary/5 p-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">Net pay</div>
-                  <div className="text-2xl font-semibold tabular-nums">{formatMoney(preview.net)}</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Net pay
+                  </div>
+                  <div className="text-2xl font-semibold tabular-nums">
+                    {formatMoney(preview.net)}
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Preview assumes the current basic; per-employee bands are evaluated at run time.
@@ -642,14 +855,18 @@ function PayPeriodStep({
     <Card>
       <CardHeader>
         <CardTitle>Pay period & working hours</CardTitle>
-        <CardDescription>How often you pay employees and the standard working week.</CardDescription>
+        <CardDescription>
+          How often you pay employees and the standard working week.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="pp">Pay period</Label>
             <Select value={payPeriod} onValueChange={setPayPeriod}>
-              <SelectTrigger id="pp"><SelectValue /></SelectTrigger>
+              <SelectTrigger id="pp">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="weekly">Weekly</SelectItem>
                 <SelectItem value="fortnightly">Fortnightly</SelectItem>
@@ -661,20 +878,48 @@ function PayPeriodStep({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="hpd">Hours / day</Label>
-              <Input id="hpd" type="number" min={0} max={24} value={hpd} onChange={(e) => setHpd(Number(e.target.value))} />
+              <Input
+                id="hpd"
+                type="number"
+                min={0}
+                max={24}
+                value={hpd}
+                onChange={(e) => setHpd(Number(e.target.value))}
+              />
             </div>
             <div>
               <Label htmlFor="dpw">Days / week</Label>
-              <Input id="dpw" type="number" min={0} max={7} value={dpw} onChange={(e) => setDpw(Number(e.target.value))} />
+              <Input
+                id="dpw"
+                type="number"
+                min={0}
+                max={7}
+                value={dpw}
+                onChange={(e) => setDpw(Number(e.target.value))}
+              />
             </div>
           </div>
           <div>
             <Label htmlFor="meal">Meal break (min)</Label>
-            <Input id="meal" type="number" min={0} max={240} value={meal} onChange={(e) => setMeal(Number(e.target.value))} />
+            <Input
+              id="meal"
+              type="number"
+              min={0}
+              max={240}
+              value={meal}
+              onChange={(e) => setMeal(Number(e.target.value))}
+            />
           </div>
           <div>
             <Label htmlFor="rest">Rest break (min)</Label>
-            <Input id="rest" type="number" min={0} max={240} value={rest} onChange={(e) => setRest(Number(e.target.value))} />
+            <Input
+              id="rest"
+              type="number"
+              min={0}
+              max={240}
+              value={rest}
+              onChange={(e) => setRest(Number(e.target.value))}
+            />
           </div>
         </div>
         <div className="flex justify-end">
@@ -746,7 +991,9 @@ function ComponentStep({
                     <Badge variant="secondary">{c.kind}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {c.calc_type === "flat" ? `Flat ${c.rate}` : `${c.rate}% of ${c.calc_type === "pct_of_basic" ? "basic" : "gross"}`}
+                    {c.calc_type === "flat"
+                      ? `Flat ${c.rate}`
+                      : `${c.rate}% of ${c.calc_type === "pct_of_basic" ? "basic" : "gross"}`}
                   </p>
                 </div>
                 <Switch
@@ -764,19 +1011,33 @@ function ComponentStep({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="c-code">Code</Label>
-              <Input id="c-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="PF" />
+              <Input
+                id="c-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="PF"
+              />
             </div>
             <div>
               <Label htmlFor="c-label">Label</Label>
-              <Input id="c-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Provident Fund" />
+              <Input
+                id="c-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Provident Fund"
+              />
             </div>
             <div>
               <Label htmlFor="c-kind">Kind</Label>
               <Select value={kind} onValueChange={setKind}>
-                <SelectTrigger id="c-kind"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="c-kind">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {allowedKinds.map((k) => (
-                    <SelectItem key={k} value={k}>{k}</SelectItem>
+                    <SelectItem key={k} value={k}>
+                      {k}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -784,7 +1045,9 @@ function ComponentStep({
             <div>
               <Label htmlFor="c-calc">Calculation</Label>
               <Select value={calc} onValueChange={setCalc}>
-                <SelectTrigger id="c-calc"><SelectValue /></SelectTrigger>
+                <SelectTrigger id="c-calc">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="flat">Flat amount</SelectItem>
                   <SelectItem value="pct_of_basic">% of basic</SelectItem>
@@ -794,7 +1057,13 @@ function ComponentStep({
             </div>
             <div>
               <Label htmlFor="c-rate">{calc === "flat" ? "Amount" : "Rate (%)"}</Label>
-              <Input id="c-rate" type="number" min={0} value={rate} onChange={(e) => setRate(Number(e.target.value))} />
+              <Input
+                id="c-rate"
+                type="number"
+                min={0}
+                value={rate}
+                onChange={(e) => setRate(Number(e.target.value))}
+              />
             </div>
           </div>
           <div className="mt-3 flex justify-end">
@@ -804,11 +1073,22 @@ function ComponentStep({
                 setBusy(true);
                 try {
                   await onSave({
-                    code, label, kind, calc_type: calc, rate, is_taxable: false,
-                    show_on_payslip: true, is_active: true, sort_order: 100,
+                    code,
+                    label,
+                    kind,
+                    calc_type: calc,
+                    rate,
+                    is_taxable: false,
+                    show_on_payslip: true,
+                    is_active: true,
+                    sort_order: 100,
                   });
-                  setCode(""); setLabel(""); setRate(0);
-                } finally { setBusy(false); }
+                  setCode("");
+                  setLabel("");
+                  setRate(0);
+                } finally {
+                  setBusy(false);
+                }
               }}
             >
               Add component
@@ -822,12 +1102,25 @@ function ComponentStep({
 
 // ---------- Scenarios step ----------
 function ScenariosStep({
-  components, scenarios, setScenarios, runScenario, formatMoney, onScenarioEvent,
+  components,
+  scenarios,
+  setScenarios,
+  runScenario,
+  formatMoney,
+  onScenarioEvent,
 }: {
   components: any[];
   scenarios: Scenario[];
   setScenarios: (s: Scenario[]) => void;
-  runScenario: (gross: number, overrides: ScenarioOverride[]) => { lines: { label: string; amount: number; kind: "earning" | "deduction" }[]; gross: number; deductions: number; net: number };
+  runScenario: (
+    gross: number,
+    overrides: ScenarioOverride[],
+  ) => {
+    lines: { label: string; amount: number; kind: "earning" | "deduction" }[];
+    gross: number;
+    deductions: number;
+    net: number;
+  };
   formatMoney: (n: number) => string;
   onScenarioEvent?: (s: Scenario, action: "create" | "update" | "delete") => void;
 }) {
@@ -836,7 +1129,11 @@ function ScenariosStep({
       id: crypto.randomUUID(),
       name: `Scenario ${scenarios.length + 1}`,
       gross: 5000,
-      overrides: components.map((c) => ({ componentId: c.id, rate: Number(c.rate), enabled: !!c.is_active })),
+      overrides: components.map((c) => ({
+        componentId: c.id,
+        rate: Number(c.rate),
+        enabled: !!c.is_active,
+      })),
     };
     setScenarios([...scenarios, next]);
     onScenarioEvent?.(next, "create");
@@ -849,11 +1146,23 @@ function ScenariosStep({
     setScenarios(scenarios.filter((s) => s.id !== id));
     if (target) onScenarioEvent?.(target, "delete");
   }
-  function updateOverride(scenarioId: string, componentId: string, patch: Partial<ScenarioOverride>) {
-    setScenarios(scenarios.map((s) => s.id === scenarioId ? {
-      ...s,
-      overrides: s.overrides.map((o) => o.componentId === componentId ? { ...o, ...patch } : o),
-    } : s));
+  function updateOverride(
+    scenarioId: string,
+    componentId: string,
+    patch: Partial<ScenarioOverride>,
+  ) {
+    setScenarios(
+      scenarios.map((s) =>
+        s.id === scenarioId
+          ? {
+              ...s,
+              overrides: s.overrides.map((o) =>
+                o.componentId === componentId ? { ...o, ...patch } : o,
+              ),
+            }
+          : s,
+      ),
+    );
   }
 
   return (
@@ -861,13 +1170,15 @@ function ScenariosStep({
       <CardHeader>
         <CardTitle>Payroll scenarios</CardTitle>
         <CardDescription>
-          Build side-by-side what-if scenarios by overriding tax, leave, and overtime rates.
-          Compare resulting payslips before publishing changes.
+          Build side-by-side what-if scenarios by overriding tax, leave, and overtime rates. Compare
+          resulting payslips before publishing changes.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">{scenarios.length} scenario{scenarios.length === 1 ? "" : "s"}</p>
+          <p className="text-sm text-muted-foreground">
+            {scenarios.length} scenario{scenarios.length === 1 ? "" : "s"}
+          </p>
           <Button size="sm" onClick={addScenario} disabled={components.length === 0}>
             <Plus className="size-4" /> Add scenario
           </Button>
@@ -882,7 +1193,10 @@ function ScenariosStep({
               {scenarios.map((s) => {
                 const result = runScenario(s.gross, s.overrides);
                 return (
-                  <div key={s.id} className="min-w-0 rounded-md border bg-card p-3 focus-within:ring-2 focus-within:ring-ring">
+                  <div
+                    key={s.id}
+                    className="min-w-0 rounded-md border bg-card p-3 focus-within:ring-2 focus-within:ring-ring"
+                  >
                     <div className="mb-2 flex items-center gap-2">
                       <Input
                         value={s.name}
@@ -890,36 +1204,56 @@ function ScenariosStep({
                         className="h-8"
                         aria-label="Scenario name"
                       />
-                      <Button size="icon" variant="ghost" onClick={() => removeScenario(s.id)} aria-label="Remove scenario">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => removeScenario(s.id)}
+                        aria-label="Remove scenario"
+                      >
                         <Trash2 className="size-4" />
                       </Button>
                     </div>
                     <div className="mb-3">
                       <Label className="text-xs">Sample basic pay</Label>
                       <Input
-                        type="number" min={0} value={s.gross}
-                        onChange={(e) => updateScenario(s.id, { gross: Math.max(0, Number(e.target.value) || 0) })}
+                        type="number"
+                        min={0}
+                        value={s.gross}
+                        onChange={(e) =>
+                          updateScenario(s.id, { gross: Math.max(0, Number(e.target.value) || 0) })
+                        }
                         className="h-8"
                       />
                     </div>
                     <details className="mb-3 rounded-md border bg-muted/20 p-2">
-                      <summary className="cursor-pointer text-xs font-medium">Override rates ({s.overrides.filter((o) => o.enabled).length} active)</summary>
+                      <summary className="cursor-pointer text-xs font-medium">
+                        Override rates ({s.overrides.filter((o) => o.enabled).length} active)
+                      </summary>
                       <ul className="mt-2 space-y-2">
                         {components.map((c) => {
                           const ov = s.overrides.find((o) => o.componentId === c.id);
                           if (!ov) return null;
                           return (
-                            <li key={c.id} className="grid grid-cols-[minmax(0,1fr)_70px_auto] items-center gap-2">
+                            <li
+                              key={c.id}
+                              className="grid grid-cols-[minmax(0,1fr)_70px_auto] items-center gap-2"
+                            >
                               <span className="truncate text-xs">{c.label}</span>
                               <Input
-                                type="number" min={0} value={ov.rate}
-                                onChange={(e) => updateOverride(s.id, c.id, { rate: Number(e.target.value) || 0 })}
+                                type="number"
+                                min={0}
+                                value={ov.rate}
+                                onChange={(e) =>
+                                  updateOverride(s.id, c.id, { rate: Number(e.target.value) || 0 })
+                                }
                                 className="h-7"
                                 aria-label={`${c.label} rate`}
                               />
                               <Switch
                                 checked={ov.enabled}
-                                onCheckedChange={(v) => updateOverride(s.id, c.id, { enabled: !!v })}
+                                onCheckedChange={(v) =>
+                                  updateOverride(s.id, c.id, { enabled: !!v })
+                                }
                                 aria-label={`Enable ${c.label}`}
                               />
                             </li>
@@ -931,22 +1265,35 @@ function ScenariosStep({
                       {result.lines.map((l, i) => (
                         <div key={i} className="flex justify-between">
                           <span className="truncate text-muted-foreground">{l.label}</span>
-                          <span className={l.kind === "deduction" ? "tabular-nums text-destructive" : "tabular-nums"}>
-                            {l.kind === "deduction" ? "-" : ""}{formatMoney(l.amount)}
+                          <span
+                            className={
+                              l.kind === "deduction"
+                                ? "tabular-nums text-destructive"
+                                : "tabular-nums"
+                            }
+                          >
+                            {l.kind === "deduction" ? "-" : ""}
+                            {formatMoney(l.amount)}
                           </span>
                         </div>
                       ))}
                     </div>
                     <Separator className="my-2" />
                     <div className="flex justify-between text-xs">
-                      <span>Gross</span><span className="tabular-nums">{formatMoney(result.gross)}</span>
+                      <span>Gross</span>
+                      <span className="tabular-nums">{formatMoney(result.gross)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span>Deductions</span><span className="tabular-nums">{formatMoney(result.deductions)}</span>
+                      <span>Deductions</span>
+                      <span className="tabular-nums">{formatMoney(result.deductions)}</span>
                     </div>
                     <div className="mt-2 rounded bg-primary/5 p-2">
-                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Net pay</div>
-                      <div className="text-lg font-semibold tabular-nums">{formatMoney(result.net)}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Net pay
+                      </div>
+                      <div className="text-lg font-semibold tabular-nums">
+                        {formatMoney(result.net)}
+                      </div>
                     </div>
                   </div>
                 );
@@ -956,38 +1303,83 @@ function ScenariosStep({
         )}
         {scenarios.length >= 2 && (
           <div className="rounded-md border bg-card">
-            <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">Side-by-side comparison</div>
-            <div className="overflow-x-auto" role="region" aria-label="Scenario comparison" tabIndex={0}>
+            <div className="border-b bg-muted/40 px-3 py-2 text-sm font-medium">
+              Side-by-side comparison
+            </div>
+            <div
+              className="overflow-x-auto"
+              role="region"
+              aria-label="Scenario comparison"
+              tabIndex={0}
+            >
               <table className="w-full min-w-[640px] text-sm">
-                <caption className="sr-only">Comparison of each scenario's inputs and resulting net pay</caption>
+                <caption className="sr-only">
+                  Comparison of each scenario's inputs and resulting net pay
+                </caption>
                 <thead>
                   <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th scope="col" className="px-3 py-2">Scenario</th>
-                    <th scope="col" className="px-3 py-2 text-right">Basic input</th>
-                    <th scope="col" className="px-3 py-2 text-right">Active overrides</th>
-                    <th scope="col" className="px-3 py-2 text-right">Gross</th>
-                    <th scope="col" className="px-3 py-2 text-right">Deductions</th>
-                    <th scope="col" className="px-3 py-2 text-right">Net pay</th>
-                    <th scope="col" className="px-3 py-2 text-right">Δ vs. first</th>
+                    <th scope="col" className="px-3 py-2">
+                      Scenario
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right">
+                      Basic input
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right">
+                      Active overrides
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right">
+                      Gross
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right">
+                      Deductions
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right">
+                      Net pay
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right">
+                      Δ vs. first
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {(() => {
-                    const results = scenarios.map((s) => ({ s, r: runScenario(s.gross, s.overrides) }));
+                    const results = scenarios.map((s) => ({
+                      s,
+                      r: runScenario(s.gross, s.overrides),
+                    }));
                     const baseline = results[0]?.r.net ?? 0;
                     return results.map(({ s, r }, i) => {
                       const delta = r.net - baseline;
                       const deltaPct = baseline === 0 ? 0 : (delta / baseline) * 100;
                       return (
-                        <tr key={s.id} className="border-b focus-within:bg-muted/30 hover:bg-muted/20">
-                          <th scope="row" className="px-3 py-2 text-left font-medium">{s.name}</th>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(s.gross)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{s.overrides.filter((o) => o.enabled).length}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatMoney(r.gross)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-destructive">−{formatMoney(r.deductions)}</td>
-                          <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatMoney(r.net)}</td>
-                          <td className={`px-3 py-2 text-right tabular-nums ${i === 0 ? "text-muted-foreground" : delta > 0 ? "text-emerald-600" : delta < 0 ? "text-destructive" : ""}`}>
-                            {i === 0 ? "baseline" : `${delta > 0 ? "+" : ""}${formatMoney(delta)} (${deltaPct.toFixed(1)}%)`}
+                        <tr
+                          key={s.id}
+                          className="border-b focus-within:bg-muted/30 hover:bg-muted/20"
+                        >
+                          <th scope="row" className="px-3 py-2 text-left font-medium">
+                            {s.name}
+                          </th>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {formatMoney(s.gross)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {s.overrides.filter((o) => o.enabled).length}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {formatMoney(r.gross)}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-destructive">
+                            −{formatMoney(r.deductions)}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums">
+                            {formatMoney(r.net)}
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right tabular-nums ${i === 0 ? "text-muted-foreground" : delta > 0 ? "text-emerald-600" : delta < 0 ? "text-destructive" : ""}`}
+                          >
+                            {i === 0
+                              ? "baseline"
+                              : `${delta > 0 ? "+" : ""}${formatMoney(delta)} (${deltaPct.toFixed(1)}%)`}
                           </td>
                         </tr>
                       );
@@ -1051,22 +1443,27 @@ function bundleToCsv(b: any, meta: any): string {
   return sections.map((s) => `## ${s.title}\n${rowsToCsv(s.rows)}`).join("\n");
 }
 function bundleToPrintableHtml(b: any, currency: string, meta: any): string {
-  const esc = (s: any) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+  const esc = (s: any) =>
+    String(s ?? "").replace(
+      /[&<>"]/g,
+      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!,
+    );
   const tableFor = (rows: any[]) => {
     if (!rows || rows.length === 0) return "<p><em>None</em></p>";
     const colSet = new Set<string>();
     rows.forEach((r) => Object.keys(r).forEach((k) => colSet.add(k)));
     const cols = Array.from(colSet);
-    return `<table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${
-      rows.map((r: any) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")
-    }</tbody></table>`;
+    return `<table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows
+      .map((r: any) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join("")}</tr>`)
+      .join("")}</tbody></table>`;
   };
   const sectionHtml = Object.keys(SECTION_TITLES)
     .filter((k) => b[k] !== undefined)
     .map((k) => {
       const rows = Array.isArray(b[k]) ? b[k] : b[k] ? [b[k]] : [];
       return `<h2>${esc(SECTION_TITLES[k])}</h2>${tableFor(rows)}`;
-    }).join("");
+    })
+    .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>Payroll rules export</title>
     <style>
       body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; padding: 24px; color: #111; }

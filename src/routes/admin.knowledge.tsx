@@ -16,13 +16,25 @@ import { toast } from "sonner";
 import { renderMarkdown } from "@/lib/markdown";
 
 export const Route = createFileRoute("/admin/knowledge")({
-  component: KnowledgeAdminPage,
+  component: () => (
+    <AdminGate feature="platform.admin">
+      <KnowledgeAdminPage />
+    </AdminGate>
+  ),
 });
 
 type Article = {
-  id: string; slug: string; title: string; summary: string | null;
-  category: string; role_audience: string[]; body_md: string;
-  video_url: string | null; tags: string[]; sort_order: number; published: boolean;
+  id: string;
+  slug: string;
+  title: string;
+  summary: string | null;
+  category: string;
+  role_audience: string[];
+  body_md: string;
+  video_url: string | null;
+  tags: string[];
+  sort_order: number;
+  published: boolean;
 };
 
 function KnowledgeAdminPage() {
@@ -39,9 +51,17 @@ function KnowledgeAdminPage() {
 
 function emptyArticle(): Article {
   return {
-    id: "", slug: "", title: "", summary: "", category: "general",
-    role_audience: ["all"], body_md: "", video_url: "", tags: [],
-    sort_order: 100, published: true,
+    id: "",
+    slug: "",
+    title: "",
+    summary: "",
+    category: "general",
+    role_audience: ["all"],
+    body_md: "",
+    video_url: "",
+    tags: [],
+    sort_order: 100,
+    published: true,
   };
 }
 
@@ -81,10 +101,17 @@ function Inner() {
         published: selected.published,
       };
       if (selected.id) {
-        const { error } = await supabase.from("knowledge_articles").update(payload).eq("id", selected.id);
+        const { error } = await supabase
+          .from("knowledge_articles")
+          .update(payload)
+          .eq("id", selected.id);
         if (error) throw error;
       } else {
-        const { data, error } = await supabase.from("knowledge_articles").insert(payload).select().single();
+        const { data, error } = await supabase
+          .from("knowledge_articles")
+          .insert(payload)
+          .select()
+          .single();
         if (error) throw error;
         setSelected(data as Article);
       }
@@ -101,7 +128,10 @@ function Inner() {
     if (!selected?.id) return;
     if (!confirm(`Delete article "${selected.title}"?`)) return;
     const { error } = await supabase.from("knowledge_articles").delete().eq("id", selected.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     setSelected(null);
     load();
     toast.success("Deleted");
@@ -124,21 +154,35 @@ function Inner() {
               className={`w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent ${selected?.id === a.id ? "bg-accent" : ""}`}
             >
               <div className="flex items-center gap-1">
-                {a.published ? <Eye className="h-3 w-3 text-status-done" /> : <EyeOff className="h-3 w-3 text-muted-foreground" />}
+                {a.published ? (
+                  <Eye className="h-3 w-3 text-status-done" />
+                ) : (
+                  <EyeOff className="h-3 w-3 text-muted-foreground" />
+                )}
                 <span className="truncate font-medium">{a.title}</span>
               </div>
-              <div className="ml-4 truncate text-[11px] text-muted-foreground">{a.category} · /{a.slug}</div>
+              <div className="ml-4 truncate text-[11px] text-muted-foreground">
+                {a.category} · /{a.slug}
+              </div>
             </button>
           ))}
           {articles.length === 0 ? (
-            <div className="px-2 py-4 text-center text-xs text-muted-foreground">No articles yet.</div>
+            <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+              No articles yet.
+            </div>
           ) : null}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">{selected?.id ? "Edit article" : selected ? "New article" : "Select or create an article"}</CardTitle>
+          <CardTitle className="text-base">
+            {selected?.id
+              ? "Edit article"
+              : selected
+                ? "New article"
+                : "Select or create an article"}
+          </CardTitle>
           {selected ? (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setShowPreview((v) => !v)}>
@@ -157,7 +201,9 @@ function Inner() {
         </CardHeader>
         <CardContent className="space-y-3">
           {!selected ? (
-            <p className="text-sm text-muted-foreground">Pick an article on the left or click <strong>New</strong>.</p>
+            <p className="text-sm text-muted-foreground">
+              Pick an article on the left or click <strong>New</strong>.
+            </p>
           ) : showPreview ? (
             <div>
               <h1 className="text-2xl font-bold">{selected.title}</h1>
@@ -172,32 +218,57 @@ function Inner() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Slug</Label>
-                  <Input value={selected.slug} onChange={(e) => setSelected({ ...selected, slug: e.target.value })} placeholder="apply-for-leave" />
+                  <Input
+                    value={selected.slug}
+                    onChange={(e) => setSelected({ ...selected, slug: e.target.value })}
+                    placeholder="apply-for-leave"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Category</Label>
-                  <Input value={selected.category} onChange={(e) => setSelected({ ...selected, category: e.target.value })} />
+                  <Input
+                    value={selected.category}
+                    onChange={(e) => setSelected({ ...selected, category: e.target.value })}
+                  />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Title</Label>
-                <Input value={selected.title} onChange={(e) => setSelected({ ...selected, title: e.target.value })} />
+                <Input
+                  value={selected.title}
+                  onChange={(e) => setSelected({ ...selected, title: e.target.value })}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Summary</Label>
-                <Input value={selected.summary ?? ""} onChange={(e) => setSelected({ ...selected, summary: e.target.value })} />
+                <Input
+                  value={selected.summary ?? ""}
+                  onChange={(e) => setSelected({ ...selected, summary: e.target.value })}
+                />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label>Roles (comma-separated, "all" for everyone)</Label>
                   <Input
                     value={selected.role_audience.join(", ")}
-                    onChange={(e) => setSelected({ ...selected, role_audience: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+                    onChange={(e) =>
+                      setSelected({
+                        ...selected,
+                        role_audience: e.target.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Video URL (optional, embed)</Label>
-                  <Input value={selected.video_url ?? ""} onChange={(e) => setSelected({ ...selected, video_url: e.target.value })} placeholder="https://www.youtube.com/embed/…" />
+                  <Input
+                    value={selected.video_url ?? ""}
+                    onChange={(e) => setSelected({ ...selected, video_url: e.target.value })}
+                    placeholder="https://www.youtube.com/embed/…"
+                  />
                 </div>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -205,12 +276,26 @@ function Inner() {
                   <Label>Tags (comma)</Label>
                   <Input
                     value={selected.tags.join(", ")}
-                    onChange={(e) => setSelected({ ...selected, tags: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+                    onChange={(e) =>
+                      setSelected({
+                        ...selected,
+                        tags: e.target.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Sort order</Label>
-                  <Input type="number" value={selected.sort_order} onChange={(e) => setSelected({ ...selected, sort_order: Number(e.target.value) || 100 })} />
+                  <Input
+                    type="number"
+                    value={selected.sort_order}
+                    onChange={(e) =>
+                      setSelected({ ...selected, sort_order: Number(e.target.value) || 100 })
+                    }
+                  />
                 </div>
                 <div className="flex items-end gap-2">
                   <Button
@@ -219,7 +304,15 @@ function Inner() {
                     size="sm"
                     onClick={() => setSelected({ ...selected, published: !selected.published })}
                   >
-                    {selected.published ? <><Eye className="mr-1 h-3.5 w-3.5"/> Published</> : <><EyeOff className="mr-1 h-3.5 w-3.5"/> Draft</>}
+                    {selected.published ? (
+                      <>
+                        <Eye className="mr-1 h-3.5 w-3.5" /> Published
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="mr-1 h-3.5 w-3.5" /> Draft
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
@@ -233,9 +326,10 @@ function Inner() {
                 />
                 <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">
                   Supports: <Badge variant="outline">#</Badge> headings,
-                  <Badge variant="outline">**bold**</Badge>, <Badge variant="outline">*italic*</Badge>,
-                  <Badge variant="outline">`code`</Badge>, <Badge variant="outline">- list</Badge>,
-                  <Badge variant="outline">1. list</Badge>, <Badge variant="outline">[link](url)</Badge>
+                  <Badge variant="outline">**bold**</Badge>,{" "}
+                  <Badge variant="outline">*italic*</Badge>,<Badge variant="outline">`code`</Badge>,{" "}
+                  <Badge variant="outline">- list</Badge>,<Badge variant="outline">1. list</Badge>,{" "}
+                  <Badge variant="outline">[link](url)</Badge>
                 </div>
               </div>
             </>

@@ -26,7 +26,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -37,7 +43,6 @@ import {
   exportEmployeeHistoryCsv,
 } from "@/lib/teams.functions";
 import { AdminGate } from "@/components/AdminGate";
-import { ADMIN_LAYOUT_ROLES } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/teams")({
   head: () => ({
@@ -49,7 +54,11 @@ export const Route = createFileRoute("/admin/teams")({
       },
     ],
   }),
-  component: () => (<AdminGate allow={ADMIN_LAYOUT_ROLES}><TeamsPage /></AdminGate>),
+  component: () => (
+    <AdminGate feature="org.teams">
+      <TeamsPage />
+    </AdminGate>
+  ),
 });
 
 const DOC_OPTIONS: { value: string; label: string }[] = [
@@ -116,7 +125,9 @@ function TeamsPage() {
     const list = data?.employees ?? [];
     if (!q) return list;
     return list.filter((e: any) =>
-      `${e.first_name} ${e.last_name} ${e.email ?? ""} ${e.job_title ?? ""}`.toLowerCase().includes(q),
+      `${e.first_name} ${e.last_name} ${e.email ?? ""} ${e.job_title ?? ""}`
+        .toLowerCase()
+        .includes(q),
     );
   }, [data, search]);
 
@@ -126,7 +137,10 @@ function TeamsPage() {
   );
 
   return (
-    <AppShell title="Team members" subtitle="Everyone you manage, with history, filters, and pending items">
+    <AppShell
+      title="Team members"
+      subtitle="Everyone you manage, with history, filters, and pending items"
+    >
       <div className="grid h-full grid-cols-1 gap-4 p-4 md:grid-cols-[360px_1fr]">
         <Card className="overflow-hidden">
           <CardHeader className="pb-3">
@@ -191,7 +205,8 @@ function TeamsPage() {
                         </div>
                         {(e.missing?.length ?? 0) > 0 && (
                           <Badge className="mt-1 bg-status-stuck text-white text-[10px]">
-                            <AlertTriangle className="mr-1 h-2.5 w-2.5" /> {e.missing.length} missing
+                            <AlertTriangle className="mr-1 h-2.5 w-2.5" /> {e.missing.length}{" "}
+                            missing
                           </Badge>
                         )}
                       </div>
@@ -270,9 +285,7 @@ function EmployeeDetail({
 
   function openRequestDialog() {
     // Pre-select all currently outstanding missing items
-    const preset = precomputedMissing.filter((m) =>
-      DOC_OPTIONS.some((o) => o.value === m),
-    );
+    const preset = precomputedMissing.filter((m) => DOC_OPTIONS.some((o) => o.value === m));
     setSelectedDocs(preset.length ? preset : []);
     setRequestOpen(true);
   }
@@ -425,7 +438,11 @@ function EmployeeDetail({
             {precomputedMissing.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {precomputedMissing.map((m) => (
-                  <Badge key={m} variant="outline" className="border-status-stuck/40 text-status-stuck">
+                  <Badge
+                    key={m}
+                    variant="outline"
+                    className="border-status-stuck/40 text-status-stuck"
+                  >
                     Missing: {DOC_OPTIONS.find((d) => d.value === m)?.label ?? m.replace(/_/g, " ")}
                   </Badge>
                 ))}
@@ -440,7 +457,9 @@ function EmployeeDetail({
                   >
                     <div>
                       <span className="font-medium">
-                        Requested: {DOC_OPTIONS.find((d) => d.value === r.document_type)?.label ?? r.document_type}
+                        Requested:{" "}
+                        {DOC_OPTIONS.find((d) => d.value === r.document_type)?.label ??
+                          r.document_type}
                       </span>
                       <span className="ml-2 text-xs text-muted-foreground">
                         {new Date(r.requested_at).toLocaleString()}
@@ -468,7 +487,11 @@ function EmployeeDetail({
           <InfoStat label="Tax ID" value={profile.tax_identification_number ?? "—"} />
           <InfoStat
             label="Address"
-            value={[profile.address_line1, profile.city, profile.country_of_residence].filter(Boolean).join(", ") || "—"}
+            value={
+              [profile.address_line1, profile.city, profile.country_of_residence]
+                .filter(Boolean)
+                .join(", ") || "—"
+            }
           />
           <InfoStat
             label="Next of kin"
@@ -493,7 +516,9 @@ function EmployeeDetail({
         <CardContent className="space-y-3">
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col">
-              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">From</Label>
+              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                From
+              </Label>
               <Input
                 type="date"
                 value={from}
@@ -505,7 +530,9 @@ function EmployeeDetail({
               />
             </div>
             <div className="flex flex-col">
-              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">To</Label>
+              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                To
+              </Label>
               <Input
                 type="date"
                 value={to}
@@ -517,7 +544,9 @@ function EmployeeDetail({
               />
             </div>
             <div className="flex flex-1 flex-col">
-              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Search</Label>
+              <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Search
+              </Label>
               <Input
                 value={eventSearch}
                 onChange={(e) => {
@@ -574,7 +603,12 @@ function EmployeeDetail({
                 Page {page} of {pageCount}
               </span>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                >
                   Previous
                 </Button>
                 <Button
@@ -596,7 +630,8 @@ function EmployeeDetail({
           <DialogHeader>
             <DialogTitle>Request information from {emp?.first_name}</DialogTitle>
             <DialogDescription>
-              Select one or more items. We'll email the employee and add each to their pending items until provided.
+              Select one or more items. We'll email the employee and add each to their pending items
+              until provided.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -656,7 +691,10 @@ function EmployeeDetail({
                       />
                       <span className="flex-1">{o.label}</span>
                       {outstanding && (
-                        <Badge variant="outline" className="border-status-stuck/40 text-[10px] text-status-stuck">
+                        <Badge
+                          variant="outline"
+                          className="border-status-stuck/40 text-[10px] text-status-stuck"
+                        >
                           Outstanding
                         </Badge>
                       )}
@@ -664,9 +702,7 @@ function EmployeeDetail({
                   );
                 })}
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                {selectedDocs.length} selected
-              </p>
+              <p className="text-[11px] text-muted-foreground">{selectedDocs.length} selected</p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Notes for the employee (optional)</Label>
@@ -679,7 +715,9 @@ function EmployeeDetail({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRequestOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={submitRequest} disabled={submitting || selectedDocs.length === 0}>
               {submitting
                 ? "Sending…"
@@ -704,11 +742,12 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 function buildPrintHtml(employee: any, csv: string) {
-  const name = employee ? `${employee.first_name ?? ""} ${employee.last_name ?? ""}`.trim() : "Employee";
+  const name = employee
+    ? `${employee.first_name ?? ""} ${employee.last_name ?? ""}`.trim()
+    : "Employee";
   const rows = csv.split("\n");
   const headers = (rows.shift() ?? "").split(",");
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const parseRow = (line: string): string[] => {
     const out: string[] = [];
     let cur = "";
@@ -716,11 +755,15 @@ function buildPrintHtml(employee: any, csv: string) {
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
       if (q) {
-        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-        else if (c === '"') q = false;
+        if (c === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else if (c === '"') q = false;
         else cur += c;
-      } else if (c === ",") { out.push(cur); cur = ""; }
-      else if (c === '"') q = true;
+      } else if (c === ",") {
+        out.push(cur);
+        cur = "";
+      } else if (c === '"') q = true;
       else cur += c;
     }
     out.push(cur);
@@ -728,7 +771,12 @@ function buildPrintHtml(employee: any, csv: string) {
   };
   const body = rows
     .filter((r) => r.trim())
-    .map((r) => `<tr>${parseRow(r).map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`)
+    .map(
+      (r) =>
+        `<tr>${parseRow(r)
+          .map((c) => `<td>${esc(c)}</td>`)
+          .join("")}</tr>`,
+    )
     .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(name)} — history</title>
     <style>
@@ -764,7 +812,9 @@ function EventList({ events }: { events: any[] }) {
             </Badge>
             <span className="font-medium">{e.title}</span>
             {e.severity && (
-              <Badge variant="outline" className="capitalize">{e.severity}</Badge>
+              <Badge variant="outline" className="capitalize">
+                {e.severity}
+              </Badge>
             )}
             <span className="ml-auto text-xs text-muted-foreground">
               {new Date(e.occurred_at).toLocaleString()}

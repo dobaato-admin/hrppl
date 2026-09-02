@@ -42,7 +42,6 @@ import {
   listRequestAudit,
 } from "@/lib/teams.functions";
 import { AdminGate } from "@/components/AdminGate";
-import { ADMIN_LAYOUT_ROLES } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/id-requests")({
   head: () => ({
@@ -54,7 +53,11 @@ export const Route = createFileRoute("/admin/id-requests")({
       },
     ],
   }),
-  component: () => (<AdminGate allow={ADMIN_LAYOUT_ROLES}><RequestsPage /></AdminGate>),
+  component: () => (
+    <AdminGate feature="org.idRequests">
+      <RequestsPage />
+    </AdminGate>
+  ),
 });
 
 const DOC_LABELS: Record<string, string> = {
@@ -155,7 +158,10 @@ function RequestsPage() {
   }
 
   return (
-    <AppShell title="Missing info requests" subtitle="Approve, cancel, or resend requests — individually or in bulk">
+    <AppShell
+      title="Missing info requests"
+      subtitle="Approve, cancel, or resend requests — individually or in bulk"
+    >
       <div className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Button asChild variant="ghost" size="sm">
@@ -166,7 +172,9 @@ function RequestsPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Filter</span>
             <Select value={status} onValueChange={(v) => setStatus(v as any)}>
-              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="submitted">Submitted</SelectItem>
@@ -189,13 +197,28 @@ function RequestsPage() {
                 </span>
               </label>
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" disabled={busy || selectedIds.length === 0} onClick={() => runBulk("resend")}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || selectedIds.length === 0}
+                  onClick={() => runBulk("resend")}
+                >
                   <RotateCw className="mr-1 h-3.5 w-3.5" /> Resend
                 </Button>
-                <Button size="sm" variant="outline" disabled={busy || selectedIds.length === 0} onClick={() => runBulk("approve")}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || selectedIds.length === 0}
+                  onClick={() => runBulk("approve")}
+                >
                   <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
                 </Button>
-                <Button size="sm" variant="ghost" disabled={busy || selectedIds.length === 0} onClick={() => runBulk("cancel")}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy || selectedIds.length === 0}
+                  onClick={() => runBulk("cancel")}
+                >
                   <XCircle className="mr-1 h-3.5 w-3.5" /> Cancel
                 </Button>
               </div>
@@ -207,7 +230,8 @@ function RequestsPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Requests ({rows.length})</CardTitle>
             <CardDescription>
-              Each request appears as a pending item on the admin dashboard and on the employee's profile until resolved. Failed emails retry automatically in the background.
+              Each request appears as a pending item on the admin dashboard and on the employee's
+              profile until resolved. Failed emails retry automatically in the background.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -247,9 +271,12 @@ function RequestsPage() {
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {r.employee?.email ?? "no email"} · requested {new Date(r.requested_at).toLocaleString()}
-                        {r.fulfilled_at && ` · resolved ${new Date(r.fulfilled_at).toLocaleString()}`}
-                        {r.next_retry_at && ` · next retry ${new Date(r.next_retry_at).toLocaleString()}`}
+                        {r.employee?.email ?? "no email"} · requested{" "}
+                        {new Date(r.requested_at).toLocaleString()}
+                        {r.fulfilled_at &&
+                          ` · resolved ${new Date(r.fulfilled_at).toLocaleString()}`}
+                        {r.next_retry_at &&
+                          ` · next retry ${new Date(r.next_retry_at).toLocaleString()}`}
                       </div>
                       {r.last_send_error && (
                         <div className="mt-1 flex items-center gap-1 text-xs text-status-stuck">
@@ -264,13 +291,25 @@ function RequestsPage() {
                       </Button>
                       {r.status === "pending" && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => runSingle(resendFn, r.id, "Reminder resent")}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => runSingle(resendFn, r.id, "Reminder resent")}
+                          >
                             <RotateCw className="mr-1 h-3.5 w-3.5" /> Resend
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => runSingle(approveFn, r.id, "Marked submitted")}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => runSingle(approveFn, r.id, "Marked submitted")}
+                          >
                             <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => runSingle(cancelFn, r.id, "Request cancelled")}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => runSingle(cancelFn, r.id, "Request cancelled")}
+                          >
                             <XCircle className="mr-1 h-3.5 w-3.5" /> Cancel
                           </Button>
                         </>
@@ -322,7 +361,9 @@ function AuditDialog({ requestId, onClose }: { requestId: string | null; onClose
             {(data?.entries ?? []).map((e: any) => (
               <li key={e.id} className="rounded-md border border-border p-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="capitalize">{e.action.replace(/_/g, " ")}</Badge>
+                  <Badge variant="outline" className="capitalize">
+                    {e.action.replace(/_/g, " ")}
+                  </Badge>
                   {e.from_status && e.to_status && (
                     <span className="text-xs text-muted-foreground">
                       {e.from_status} → {e.to_status}

@@ -9,9 +9,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { listAllTenants, upsertTenantGovernance } from "@/lib/super-admin.functions";
 import { toast } from "sonner";
 
@@ -37,7 +57,17 @@ function PlatformTenantsPage() {
   });
 
   if (error) {
-    return <AppShell title="Tenants"><div className="p-6"><Card><CardContent className="p-6 text-sm text-destructive">Forbidden — super-admin only.</CardContent></Card></div></AppShell>;
+    return (
+      <AppShell title="Tenants">
+        <div className="p-6">
+          <Card>
+            <CardContent className="p-6 text-sm text-destructive">
+              Forbidden — super-admin only.
+            </CardContent>
+          </Card>
+        </div>
+      </AppShell>
+    );
   }
 
   const govByTenant = new Map((data?.governance ?? []).map((g: any) => [g.tenant_id, g]));
@@ -46,15 +76,22 @@ function PlatformTenantsPage() {
     <AppShell title="Tenants" subtitle="Platform-wide organization governance">
       <div className="mx-auto w-full max-w-6xl space-y-4 p-4 md:p-6">
         <Card>
-          <CardHeader><CardTitle>All tenants</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>All tenants</CardTitle>
+          </CardHeader>
           <CardContent className="p-0">
-            {isLoading ? <p className="p-4 text-sm text-muted-foreground">Loading…</p> : (
+            {isLoading ? (
+              <p className="p-4 text-sm text-muted-foreground">Loading…</p>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead><TableHead>Country</TableHead>
-                    <TableHead>Plan</TableHead><TableHead>Status</TableHead>
-                    <TableHead>Health</TableHead><TableHead>Risk</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Country</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Health</TableHead>
+                    <TableHead>Risk</TableHead>
                     <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -64,13 +101,25 @@ function PlatformTenantsPage() {
                     return (
                       <TableRow key={t.id}>
                         <TableCell className="font-medium">{t.name}</TableCell>
-                        <TableCell>{t.country_code} · {t.currency_code}</TableCell>
+                        <TableCell>
+                          {t.country_code} · {t.currency_code}
+                        </TableCell>
                         <TableCell>{t.plan}</TableCell>
-                        <TableCell><Badge variant="outline">{t.status}</Badge></TableCell>
-                        <TableCell><Badge className={TONE[g?.health_status ?? "healthy"]}>{g?.health_status ?? "healthy"}</Badge></TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{t.status}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={TONE[g?.health_status ?? "healthy"]}>
+                            {g?.health_status ?? "healthy"}
+                          </Badge>
+                        </TableCell>
                         <TableCell>{g?.risk_score ?? 0}</TableCell>
                         <TableCell>
-                          <GovDialog tenant={t} existing={g} onSaved={() => qc.invalidateQueries({ queryKey: ["platform-tenants"] })} />
+                          <GovDialog
+                            tenant={t}
+                            existing={g}
+                            onSaved={() => qc.invalidateQueries({ queryKey: ["platform-tenants"] })}
+                          />
                         </TableCell>
                       </TableRow>
                     );
@@ -85,31 +134,58 @@ function PlatformTenantsPage() {
   );
 }
 
-function GovDialog({ tenant, existing, onSaved }: { tenant: any; existing: any; onSaved: () => void }) {
+function GovDialog({
+  tenant,
+  existing,
+  onSaved,
+}: {
+  tenant: any;
+  existing: any;
+  onSaved: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const save = useServerFn(upsertTenantGovernance);
   const [form, setForm] = useState({
     tenant_id: tenant.id,
-    health_status: (existing?.health_status ?? "healthy") as "healthy" | "warning" | "at_risk" | "suspended",
+    health_status: (existing?.health_status ?? "healthy") as
+      | "healthy"
+      | "warning"
+      | "at_risk"
+      | "suspended",
     internal_notes: existing?.internal_notes ?? "",
     risk_score: existing?.risk_score ?? 0,
   });
   async function submit() {
     try {
       await save({ data: { ...form, risk_score: Number(form.risk_score) } });
-      toast.success("Updated"); setOpen(false); onSaved();
-    } catch (e: any) { toast.error(e?.message ?? "Failed"); }
+      toast.success("Updated");
+      setOpen(false);
+      onSaved();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed");
+    }
   }
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline">Manage</Button></DialogTrigger>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          Manage
+        </Button>
+      </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>{tenant.name} — governance</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{tenant.name} — governance</DialogTitle>
+        </DialogHeader>
         <div className="grid gap-3">
           <div>
             <Label>Health</Label>
-            <Select value={form.health_status} onValueChange={(v: any) => setForm({ ...form, health_status: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={form.health_status}
+              onValueChange={(v: any) => setForm({ ...form, health_status: v })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="healthy">Healthy</SelectItem>
                 <SelectItem value="warning">Warning</SelectItem>
@@ -121,16 +197,34 @@ function GovDialog({ tenant, existing, onSaved }: { tenant: any; existing: any; 
                 This one is an internal account-management label and grants or
                 revokes nothing. */}
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Internal health label only — it does not block access. To actually
-              cut off an organisation, set its status on the{" "}
-              <Link to="/admin" className="underline underline-offset-2">admin console</Link>.
+              Internal health label only — it does not block access. To actually cut off an
+              organisation, set its status on the{" "}
+              <Link to="/admin" className="underline underline-offset-2">
+                admin console
+              </Link>
+              .
             </p>
           </div>
-          <div><Label>Risk score (0-100)</Label><Input type="number" value={form.risk_score} onChange={(e) => setForm({ ...form, risk_score: Number(e.target.value) })} /></div>
-          <div><Label>Internal notes</Label><Textarea value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} /></div>
+          <div>
+            <Label>Risk score (0-100)</Label>
+            <Input
+              type="number"
+              value={form.risk_score}
+              onChange={(e) => setForm({ ...form, risk_score: Number(e.target.value) })}
+            />
+          </div>
+          <div>
+            <Label>Internal notes</Label>
+            <Textarea
+              value={form.internal_notes}
+              onChange={(e) => setForm({ ...form, internal_notes: e.target.value })}
+            />
+          </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
           <Button onClick={submit}>Save</Button>
         </DialogFooter>
       </DialogContent>

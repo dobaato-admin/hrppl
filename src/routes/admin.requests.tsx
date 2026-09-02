@@ -25,7 +25,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { AdminGate } from "@/components/AdminGate";
-import { ADMIN_LAYOUT_ROLES } from "@/lib/rbac";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +63,7 @@ import {
 export const Route = createFileRoute("/admin/requests")({
   head: () => ({ meta: [{ title: "Requests — hrppl" }] }),
   component: () => (
-    <AdminGate allow={ADMIN_LAYOUT_ROLES}>
+    <AdminGate feature="manager.requestsInbox">
       <AdminRequestsPage />
     </AdminGate>
   ),

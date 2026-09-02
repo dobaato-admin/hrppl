@@ -1,17 +1,24 @@
 import { AdminGate } from "@/components/AdminGate";
-import { createFileRoute } from '@tanstack/react-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useServerFn } from '@tanstack/react-start';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
-import { AppShell } from '@/components/AppShell';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { createFileRoute } from "@tanstack/react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
+import { AppShell } from "@/components/AppShell";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   startTenantSubscription,
   createBillingSetupLink,
@@ -19,15 +26,19 @@ import {
   previewTenantHeadcount,
   listTenantBillingSnapshots,
   getMyBilling,
-} from '@/lib/billing.functions';
-import { seedStripePrices } from '@/lib/billing-admin.functions';
+} from "@/lib/billing.functions";
+import { seedStripePrices } from "@/lib/billing-admin.functions";
 import { SUPER_ADMIN_ONLY } from "@/lib/rbac";
 
-export const Route = createFileRoute('/admin/billing')({
+export const Route = createFileRoute("/admin/billing")({
   head: () => ({
     meta: [
-      { title: 'Direct-debit billing — hrppl' },
-      { name: 'description', content: 'Configure direct-debit billing, manage mandates, and view monthly net-employee usage.' },
+      { title: "Direct-debit billing — hrppl" },
+      {
+        name: "description",
+        content:
+          "Configure direct-debit billing, manage mandates, and view monthly net-employee usage.",
+      },
     ],
   }),
   // AdminGate was imported but never wired up — this page had no route-level
@@ -40,20 +51,27 @@ export const Route = createFileRoute('/admin/billing')({
 });
 
 const REGIONS = [
-  { id: 'ach', label: 'ACH (US)' },
-  { id: 'becs', label: 'BECS (Australia)' },
-  { id: 'sepa', label: 'SEPA (EU)' },
-  { id: 'bacs', label: 'BACS (UK)' },
+  { id: "ach", label: "ACH (US)" },
+  { id: "becs", label: "BECS (Australia)" },
+  { id: "sepa", label: "SEPA (EU)" },
+  { id: "bacs", label: "BACS (UK)" },
 ] as const;
 
 function AdminBilling() {
-  const billingQ = useQuery({ queryKey: ['my-billing'], queryFn: () => getMyBilling() });
-  const snapsQ = useQuery({ queryKey: ['my-snapshots'], queryFn: () => listTenantBillingSnapshots() });
+  const billingQ = useQuery({ queryKey: ["my-billing"], queryFn: () => getMyBilling() });
+  const snapsQ = useQuery({
+    queryKey: ["my-snapshots"],
+    queryFn: () => listTenantBillingSnapshots(),
+  });
 
   const sub = (billingQ.data as any)?.subscription ?? null;
-  const [plan, setPlan] = useState<'starter_v2' | 'pro_v2'>(sub?.plan_id ? (sub.plan_code as any) : 'starter_v2');
+  const [plan, setPlan] = useState<"starter_v2" | "pro_v2">(
+    sub?.plan_id ? (sub.plan_code as any) : "starter_v2",
+  );
   const [addon, setAddon] = useState<boolean>(sub?.au_payroll_addon ?? false);
-  const [regions, setRegions] = useState<string[]>(sub?.debit_regions ?? ['ach', 'becs', 'sepa', 'bacs']);
+  const [regions, setRegions] = useState<string[]>(
+    sub?.debit_regions ?? ["ach", "becs", "sepa", "bacs"],
+  );
   const [cardFallback, setCardFallback] = useState<boolean>(sub?.allow_card_fallback ?? true);
 
   const startFn = useServerFn(startTenantSubscription);
@@ -72,26 +90,33 @@ function AdminBilling() {
           allowCardFallback: cardFallback,
         },
       }),
-    onSuccess: () => { toast.success('Subscription started — 1 month free trial active'); billingQ.refetch(); },
-    onError: (e: any) => toast.error(e?.message ?? 'Failed to start subscription'),
+    onSuccess: () => {
+      toast.success("Subscription started — 1 month free trial active");
+      billingQ.refetch();
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Failed to start subscription"),
   });
 
   const setup = useMutation({
     mutationFn: () => setupFn({ data: {} as any }),
-    onSuccess: (r: any) => { if (r?.url) window.location.href = r.url; },
-    onError: (e: any) => toast.error(e?.message ?? 'Failed'),
+    onSuccess: (r: any) => {
+      if (r?.url) window.location.href = r.url;
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Failed"),
   });
 
   const seed = useMutation({
     mutationFn: () => seedFn({ data: {} as any }),
-    onSuccess: () => toast.success('Stripe prices ready'),
-    onError: (e: any) => toast.error(e?.message ?? 'Failed'),
+    onSuccess: () => toast.success("Stripe prices ready"),
+    onError: (e: any) => toast.error(e?.message ?? "Failed"),
   });
 
   const preview = useMutation({
     mutationFn: () => previewFn({ data: {} as any }),
     onSuccess: (r: any) =>
-      toast.success(`Net employees this month: ${r.net_employees} (joined ${r.joined_count}, left ${r.left_count})`),
+      toast.success(
+        `Net employees this month: ${r.net_employees} (joined ${r.joined_count}, left ${r.left_count})`,
+      ),
   });
 
   const tenantId: string | null = (billingQ.data as any)?.tenant?.id ?? null;
@@ -109,7 +134,7 @@ function AdminBilling() {
       }),
     onSuccess: (r: any) =>
       toast.success(`Reported ${r.baseUnits} base + ${r.addonUnits} addon units (${r.status})`),
-    onError: (e: any) => toast.error(e?.message ?? 'Failed to report usage'),
+    onError: (e: any) => toast.error(e?.message ?? "Failed to report usage"),
   });
 
   return (
@@ -118,7 +143,8 @@ function AdminBilling() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Direct-debit billing</h1>
           <p className="text-sm text-muted-foreground">
-            Pay monthly by bank debit based on the net active employees in your account each calendar month.
+            Pay monthly by bank debit based on the net active employees in your account each
+            calendar month.
           </p>
         </div>
 
@@ -126,16 +152,22 @@ function AdminBilling() {
           <CardHeader>
             <CardTitle>Subscription</CardTitle>
             <CardDescription>
-              Starter is $1/employee/month, Pro is $3/employee/month. AU Payroll add-on is $2/employee/month
-              (billed from day 1). Your base plan is free for the first month.
+              Starter is $1/employee/month, Pro is $3/employee/month. AU Payroll add-on is
+              $2/employee/month (billed from day 1). Your base plan is free for the first month.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex flex-wrap gap-2">
-              <Button variant={plan === 'starter_v2' ? 'default' : 'outline'} onClick={() => setPlan('starter_v2')}>
+              <Button
+                variant={plan === "starter_v2" ? "default" : "outline"}
+                onClick={() => setPlan("starter_v2")}
+              >
                 Starter · $1/emp/mo
               </Button>
-              <Button variant={plan === 'pro_v2' ? 'default' : 'outline'} onClick={() => setPlan('pro_v2')}>
+              <Button
+                variant={plan === "pro_v2" ? "default" : "outline"}
+                onClick={() => setPlan("pro_v2")}
+              >
                 Pro · $3/emp/mo
               </Button>
               <label className="flex items-center gap-2 rounded-md border px-3 py-2">
@@ -152,7 +184,9 @@ function AdminBilling() {
                     <Checkbox
                       checked={regions.includes(r.id)}
                       onCheckedChange={(v) =>
-                        setRegions((cur) => (v ? [...new Set([...cur, r.id])] : cur.filter((x) => x !== r.id)))
+                        setRegions((cur) =>
+                          v ? [...new Set([...cur, r.id])] : cur.filter((x) => x !== r.id),
+                        )
                       }
                     />
                     <span className="text-sm">{r.label}</span>
@@ -161,16 +195,27 @@ function AdminBilling() {
               </div>
               <label className="flex items-center gap-2 pt-1">
                 <Checkbox checked={cardFallback} onCheckedChange={(v) => setCardFallback(!!v)} />
-                <span className="text-sm">Allow card as fallback when bank debit is unavailable</span>
+                <span className="text-sm">
+                  Allow card as fallback when bank debit is unavailable
+                </span>
               </label>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button onClick={() => start.mutate()} disabled={start.isPending || regions.length === 0}>
+              <Button
+                onClick={() => start.mutate()}
+                disabled={start.isPending || regions.length === 0}
+              >
                 {start.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {sub?.stripe_subscription_id ? 'Update subscription' : 'Start subscription (1 month free)'}
+                {sub?.stripe_subscription_id
+                  ? "Update subscription"
+                  : "Start subscription (1 month free)"}
               </Button>
-              <Button variant="outline" onClick={() => setup.mutate()} disabled={setup.isPending || !sub?.stripe_customer_id}>
+              <Button
+                variant="outline"
+                onClick={() => setup.mutate()}
+                disabled={setup.isPending || !sub?.stripe_customer_id}
+              >
                 {setup.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Set up bank-debit mandate
               </Button>
@@ -198,7 +243,12 @@ function AdminBilling() {
               <CardDescription>Net active employees billed per calendar month.</CardDescription>
             </div>
             {tenantId && (
-              <Button size="sm" variant="outline" disabled={report.isPending} onClick={() => report.mutate()}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={report.isPending}
+                onClick={() => report.mutate()}
+              >
                 Report previous month now
               </Button>
             )}
@@ -219,14 +269,27 @@ function AdminBilling() {
               <TableBody>
                 {(snapsQ.data as any)?.items?.map((s: any) => (
                   <TableRow key={s.id}>
-                    <TableCell>{s.period_year}-{String(s.period_month).padStart(2, '0')}</TableCell>
+                    <TableCell>
+                      {s.period_year}-{String(s.period_month).padStart(2, "0")}
+                    </TableCell>
                     <TableCell className="text-right">{s.net_employees}</TableCell>
                     <TableCell className="text-right">{s.joined_count}</TableCell>
                     <TableCell className="text-right">{s.left_count}</TableCell>
-                    <TableCell className="text-right">{s.base_units}{s.trial_applied ? ' (trial)' : ''}</TableCell>
+                    <TableCell className="text-right">
+                      {s.base_units}
+                      {s.trial_applied ? " (trial)" : ""}
+                    </TableCell>
                     <TableCell className="text-right">{s.addon_units}</TableCell>
                     <TableCell>
-                      <Badge variant={s.status === 'reported' ? 'default' : s.status === 'failed' ? 'destructive' : 'secondary'}>
+                      <Badge
+                        variant={
+                          s.status === "reported"
+                            ? "default"
+                            : s.status === "failed"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                      >
                         {s.status}
                       </Badge>
                     </TableCell>
