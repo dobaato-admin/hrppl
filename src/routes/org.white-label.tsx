@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -23,7 +24,11 @@ function WhiteLabelPage() {
   const fetchData = useServerFn(getMyWhiteLabel);
   const save = useServerFn(upsertMyWhiteLabel);
   const qc = useQueryClient();
-  const canAccess = roles.includes("super_admin");
+  // W5 · Single source: the same feature key this page's nav row uses.
+  // These pages carry no route-level gate component, only this inline
+  // check, so the two were free to disagree — and did. The sidebar offered
+  // the page and the page answered "Forbidden".
+  const canAccess = can("org.whiteLabel", roles);
   const { data } = useQuery({
     queryKey: ["white-label"],
     queryFn: () => fetchData({}),

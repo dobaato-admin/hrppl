@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/use-auth";
@@ -78,8 +79,11 @@ function OrgTimesheets() {
   const fnApprove = useServerFn(approveTimesheet);
   const fnReject = useServerFn(rejectTimesheet);
 
-  const canAccess =
-    roles.includes("manager") || roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Single source: the same feature key this page's nav row uses.
+  // These pages carry no route-level gate component, only this inline
+  // check, so the two were free to disagree — and did. The sidebar offered
+  // the page and the page answered "Forbidden".
+  const canAccess = can("org.requests", roles);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });

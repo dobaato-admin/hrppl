@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -115,7 +116,10 @@ interface BranchForm {
 function BranchesPage() {
   const { user, roles, loading, rolesLoaded } = useAuth();
   const navigate = useNavigate();
-  const canManage = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Was a hand-rolled role list that happened to match this page's nav
+  // row. Deriving it from the feature key keeps them matching by construction
+  // rather than by coincidence.
+  const canManage = can("org.branches", roles);
 
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);

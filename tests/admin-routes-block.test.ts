@@ -33,6 +33,11 @@ describe("every admin route enforces an RBAC gate", () => {
 
       const gated =
         /AdminGate/.test(src) ||
+        // W5 · The preferred form: the page resolves its own access through the
+        // same feature key its nav row uses, so the two cannot disagree. This
+        // replaced hand-rolled role lists on ~20 pages, several of which had
+        // drifted from the sidebar and were refusing roles it offered them to.
+        /\bcan\(\s*["'`][\w.]+["'`]\s*,\s*roles\s*\)/.test(src) ||
         /roles\.includes\(['"`](?:super_admin|org_admin|regional_admin|hr|manager)['"`]\)/.test(src) ||
         /\b(isSuper|isOrg|isRegional|isAdmin|hasRole)\b/.test(src);
       expect(gated, `${file} has no detectable role gate`).toBe(true);

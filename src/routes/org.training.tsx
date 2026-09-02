@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,8 +64,11 @@ function OrgTrainingPage() {
   const updateFn = useServerFn(updateEnrollment);
   const delFn = useServerFn(deleteEnrollment);
   const certsFn = useServerFn(listCertifications);
-  const canAccess =
-    roles.includes("org_admin") || roles.includes("super_admin") || roles.includes("manager");
+  // W5 · Single source: the same feature key this page's nav row uses.
+  // These pages carry no route-level gate component, only this inline
+  // check, so the two were free to disagree — and did. The sidebar offered
+  // the page and the page answered "Forbidden".
+  const canAccess = can("org.training", roles);
   const [tab, setTab] = useState("enrollments");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);

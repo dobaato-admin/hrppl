@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -59,7 +60,11 @@ function downloadGapsCsv(gaps: any[], missingSuper: any[]) {
 function Page() {
   const { roles, loading } = useAuth();
   const navigate = useNavigate();
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Single source: the same feature key this page's nav row uses.
+  // These pages carry no route-level gate component, only this inline
+  // check, so the two were free to disagree — and did. The sidebar offered
+  // the page and the page answered "Forbidden".
+  const canAccess = can("org.auStpAudit", roles);
   useEffect(() => {
     if (!loading && !canAccess) navigate({ to: "/dashboard" });
   }, [loading, canAccess, navigate]);
