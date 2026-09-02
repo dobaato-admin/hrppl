@@ -11,6 +11,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { NAV_DESTINATIONS } from "../src/lib/nav-tree";
 
 const root = process.cwd();
 const fnFile = readFileSync(join(root, "src/lib/danger-zone.functions.ts"), "utf8");
@@ -91,9 +92,16 @@ describe("org.danger route + RBAC wiring", () => {
     expect(routeFile).toMatch(/can\(\s*['"]org\.danger['"]/);
   });
 
-  it("AppShell nav link is gated on can('org.danger')", () => {
-    expect(shellFile).toMatch(/can\(\s*['"]org\.danger['"]/);
-    expect(shellFile).toMatch(/to:\s*['"]\/org\/danger['"]/);
+  it("nav entry is gated on the org.danger feature", () => {
+    // W5 · The nav moved out of AppShell.tsx into src/lib/nav-tree.ts, so this
+    // reads the registry rather than the component. The guarantee is stronger
+    // than the old regex: it checks the actual entry the sidebar renders, and
+    // that its feature key is the one org.danger.tsx also quotes.
+    const entry = NAV_DESTINATIONS.find((d) => d.to === "/org/danger");
+    expect(entry, "no nav entry for /org/danger").toBeDefined();
+    expect(entry!.feature).toBe("org.danger");
+    // AppShell still resolves every entry's feature through can().
+    expect(shellFile).toMatch(/can\(i\.feature, roles\)/);
   });
 
   it("route file calls every destructive server fn through useServerFn", () => {

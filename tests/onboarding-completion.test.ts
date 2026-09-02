@@ -149,6 +149,7 @@ describe("computeOnboardingCompletion", () => {
 
 import { readFileSync } from "fs";
 import { join } from "path";
+import { NAV_DESTINATIONS } from "../src/lib/nav-tree";
 
 const root = process.cwd();
 
@@ -196,9 +197,15 @@ describe("the onboarding page acts on completion (§1 #1)", () => {
 
 describe("the nav stops advertising finished work", () => {
   const SHELL = readFileSync(join(root, "src/components/AppShell.tsx"), "utf8");
+  const NAV_TREE_SRC = readFileSync(join(root, "src/lib/nav-tree.ts"), "utf8");
 
   it("hides the Onboarding entry once complete", () => {
-    expect(SHELL).toMatch(/hideWhen: "onboardingComplete"/);
+    // W5 · `hideWhen` now lives on the registry entry in src/lib/nav-tree.ts
+    // and AppShell still applies it. Assert both halves — either one alone
+    // would leave a finished task advertising itself in the sidebar forever.
+    const entry = NAV_DESTINATIONS.find((d) => d.to === "/onboarding");
+    expect(entry, "no nav entry for /onboarding").toBeDefined();
+    expect(NAV_TREE_SRC).toMatch(/hideWhen: "onboardingComplete"/);
     expect(SHELL).toMatch(/!\(i\.hideWhen && hidden\?\.\[i\.hideWhen\]\)/);
   });
 
