@@ -24,17 +24,30 @@ function WhiteLabelPage() {
   const save = useServerFn(upsertMyWhiteLabel);
   const qc = useQueryClient();
   const canAccess = roles.includes("super_admin");
-  const { data } = useQuery({ queryKey: ["white-label"], queryFn: () => fetchData({}), enabled: canAccess });
+  const { data } = useQuery({
+    queryKey: ["white-label"],
+    queryFn: () => fetchData({}),
+    enabled: canAccess,
+  });
 
   const [form, setForm] = useState<any>({
-    brand_name: "", logo_url: "", primary_color: "", accent_color: "",
-    email_from_name: "", email_from_address: "", support_email: "",
-    footer_html: "", custom_domain: "",
+    brand_name: "",
+    logo_url: "",
+    primary_color: "",
+    accent_color: "",
+    email_from_name: "",
+    email_from_address: "",
+    support_email: "",
+    footer_html: "",
+    custom_domain: "",
   });
 
   useEffect(() => {
     if (data?.settings) {
-      setForm((f: any) => ({ ...f, ...Object.fromEntries(Object.entries(data.settings as any).filter(([k]) => k in f)) }));
+      setForm((f: any) => ({
+        ...f,
+        ...Object.fromEntries(Object.entries(data.settings as any).filter(([k]) => k in f)),
+      }));
     }
   }, [data]);
 
@@ -51,11 +64,17 @@ function WhiteLabelPage() {
       await save({ data: form });
       toast.success("White-label saved");
       qc.invalidateQueries({ queryKey: ["white-label"] });
-    } catch (e: any) { toast.error(e?.message ?? "Failed"); }
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed");
+    }
   }
 
   if (loading || !user || !canAccess) {
-    return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
   }
 
   return (
@@ -64,19 +83,84 @@ function WhiteLabelPage() {
         <Card>
           <CardHeader>
             <CardTitle>Branding</CardTitle>
-            <CardDescription>These settings apply to your organization's portal and outbound emails.</CardDescription>
+            <CardDescription>
+              These settings apply to your organization's portal and outbound emails.
+            </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
-            <div className="sm:col-span-2"><Label>Brand name</Label><Input value={form.brand_name} onChange={(e) => setForm({ ...form, brand_name: e.target.value })} /></div>
-            <div className="sm:col-span-2"><Label>Logo URL</Label><Input value={form.logo_url} onChange={(e) => setForm({ ...form, logo_url: e.target.value })} placeholder="https://…" /></div>
-            <div><Label>Primary color</Label><Input value={form.primary_color} onChange={(e) => setForm({ ...form, primary_color: e.target.value })} placeholder="#3b82f6" /></div>
-            <div><Label>Accent color</Label><Input value={form.accent_color} onChange={(e) => setForm({ ...form, accent_color: e.target.value })} placeholder="#22c55e" /></div>
-            <div><Label>Email from name</Label><Input value={form.email_from_name} onChange={(e) => setForm({ ...form, email_from_name: e.target.value })} /></div>
-            <div><Label>Email from address</Label><Input type="email" value={form.email_from_address} onChange={(e) => setForm({ ...form, email_from_address: e.target.value })} /></div>
-            <div><Label>Support email</Label><Input type="email" value={form.support_email} onChange={(e) => setForm({ ...form, support_email: e.target.value })} /></div>
-            <div><Label>Custom domain</Label><Input value={form.custom_domain} onChange={(e) => setForm({ ...form, custom_domain: e.target.value })} placeholder="hr.example.com" /></div>
-            <div className="sm:col-span-2"><Label>Email footer (HTML)</Label><Textarea rows={4} value={form.footer_html} onChange={(e) => setForm({ ...form, footer_html: e.target.value })} /></div>
-            <div className="sm:col-span-2"><Button onClick={submit}>Save</Button></div>
+            <div className="sm:col-span-2">
+              <Label>Brand name</Label>
+              <Input
+                value={form.brand_name}
+                onChange={(e) => setForm({ ...form, brand_name: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Logo URL</Label>
+              <Input
+                value={form.logo_url}
+                onChange={(e) => setForm({ ...form, logo_url: e.target.value })}
+                placeholder="https://…"
+              />
+            </div>
+            <div>
+              <Label>Primary color</Label>
+              <Input
+                value={form.primary_color}
+                onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
+                placeholder="#3b82f6"
+              />
+            </div>
+            <div>
+              <Label>Accent color</Label>
+              <Input
+                value={form.accent_color}
+                onChange={(e) => setForm({ ...form, accent_color: e.target.value })}
+                placeholder="#22c55e"
+              />
+            </div>
+            <div>
+              <Label>Email from name</Label>
+              <Input
+                value={form.email_from_name}
+                onChange={(e) => setForm({ ...form, email_from_name: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Email from address</Label>
+              <Input
+                type="email"
+                value={form.email_from_address}
+                onChange={(e) => setForm({ ...form, email_from_address: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Support email</Label>
+              <Input
+                type="email"
+                value={form.support_email}
+                onChange={(e) => setForm({ ...form, support_email: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Custom domain</Label>
+              <Input
+                value={form.custom_domain}
+                onChange={(e) => setForm({ ...form, custom_domain: e.target.value })}
+                placeholder="hr.example.com"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Email footer (HTML)</Label>
+              <Textarea
+                rows={4}
+                value={form.footer_html}
+                onChange={(e) => setForm({ ...form, footer_html: e.target.value })}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Button onClick={submit}>Save</Button>
+            </div>
           </CardContent>
         </Card>
       </div>

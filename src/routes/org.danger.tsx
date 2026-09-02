@@ -3,13 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,9 +72,7 @@ function DangerZonePage() {
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>No organization</AlertTitle>
-            <AlertDescription>
-              You are not currently scoped to an organization.
-            </AlertDescription>
+            <AlertDescription>You are not currently scoped to an organization.</AlertDescription>
           </Alert>
         )}
 
@@ -90,8 +82,8 @@ function DangerZonePage() {
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>These actions cannot be undone</AlertTitle>
               <AlertDescription>
-                Each action requires a typed confirmation and your password. Deleted data
-                cannot be recovered.
+                Each action requires a typed confirmation and your password. Deleted data cannot be
+                recovered.
               </AlertDescription>
             </Alert>
 
@@ -137,8 +129,8 @@ function TransferOwnershipCard({ tenantId, tenantName }: { tenantId: string; ten
       <CardHeader>
         <CardTitle>Transfer ownership</CardTitle>
         <CardDescription>
-          Grant another linked staff member the org_admin role. Optionally remove the
-          role from yourself.
+          Grant another linked staff member the org_admin role. Optionally remove the role from
+          yourself.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -158,17 +150,10 @@ function TransferOwnershipCard({ tenantId, tenantName }: { tenantId: string; ten
           </Select>
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={demoteSelf}
-            onCheckedChange={(v) => setDemoteSelf(v === true)}
-          />
+          <Checkbox checked={demoteSelf} onCheckedChange={(v) => setDemoteSelf(v === true)} />
           Remove org_admin from my account afterwards
         </label>
-        <Button
-          variant="destructive"
-          disabled={!employeeId}
-          onClick={() => setOpen(true)}
-        >
+        <Button variant="destructive" disabled={!employeeId} onClick={() => setOpen(true)}>
           Transfer ownership
         </Button>
         <DestructiveConfirm
@@ -197,7 +182,13 @@ function TransferOwnershipCard({ tenantId, tenantName }: { tenantId: string; ten
   );
 }
 
-function BulkDeleteEmployeesCard({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+function BulkDeleteEmployeesCard({
+  tenantId,
+  tenantName,
+}: {
+  tenantId: string;
+  tenantName: string;
+}) {
   const [csv, setCsv] = useState("");
   const [open, setOpen] = useState(false);
   const run = useServerFn(bulkDeleteEmployees);
@@ -215,8 +206,8 @@ function BulkDeleteEmployeesCard({ tenantId, tenantName }: { tenantId: string; t
       <CardHeader>
         <CardTitle>Bulk-delete employees</CardTitle>
         <CardDescription>
-          Permanently removes employee records and all linked data. Paste employee UUIDs
-          separated by commas, spaces, or new lines (max 500).
+          Permanently removes employee records and all linked data. Paste employee UUIDs separated
+          by commas, spaces, or new lines (max 500).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -233,11 +224,7 @@ function BulkDeleteEmployeesCard({ tenantId, tenantName }: { tenantId: string; t
             {ids.length} valid UUID{ids.length === 1 ? "" : "s"} detected.
           </p>
         </div>
-        <Button
-          variant="destructive"
-          disabled={ids.length === 0}
-          onClick={() => setOpen(true)}
-        >
+        <Button variant="destructive" disabled={ids.length === 0} onClick={() => setOpen(true)}>
           Delete {ids.length} employee{ids.length === 1 ? "" : "s"}
         </Button>
         <DestructiveConfirm
@@ -246,8 +233,8 @@ function BulkDeleteEmployeesCard({ tenantId, tenantName }: { tenantId: string; t
           title="Delete employees permanently?"
           description={
             <p>
-              {ids.length} employee record{ids.length === 1 ? "" : "s"} and their linked
-              history will be removed from{" "}
+              {ids.length} employee record{ids.length === 1 ? "" : "s"} and their linked history
+              will be removed from{" "}
               <span className="font-semibold text-foreground">{tenantName}</span>.
             </p>
           }
@@ -299,8 +286,8 @@ function PurgePayrollCard({ tenantId, tenantName }: { tenantId: string; tenantNa
           description={
             <p>
               All payroll runs and payslips before{" "}
-              <span className="font-semibold text-foreground">{before}</span> will be
-              deleted from <span className="font-semibold text-foreground">{tenantName}</span>.
+              <span className="font-semibold text-foreground">{before}</span> will be deleted from{" "}
+              <span className="font-semibold text-foreground">{tenantName}</span>.
             </p>
           }
           typedToken={tenantName}
@@ -325,9 +312,8 @@ function DeleteTenantCard({ tenantId, tenantName }: { tenantId: string; tenantNa
       <CardHeader>
         <CardTitle className="text-destructive">Delete organization</CardTitle>
         <CardDescription>
-          Permanently deletes{" "}
-          <span className="font-semibold text-foreground">{tenantName}</span> and all its
-          data — employees, payroll, documents, everything. This cannot be undone.
+          Permanently deletes <span className="font-semibold text-foreground">{tenantName}</span>{" "}
+          and all its data — employees, payroll, documents, everything. This cannot be undone.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -341,8 +327,7 @@ function DeleteTenantCard({ tenantId, tenantName }: { tenantId: string; tenantNa
           description={
             <p>
               Every record belonging to{" "}
-              <span className="font-semibold text-foreground">{tenantName}</span> will be
-              destroyed.
+              <span className="font-semibold text-foreground">{tenantName}</span> will be destroyed.
             </p>
           }
           typedToken={tenantName}

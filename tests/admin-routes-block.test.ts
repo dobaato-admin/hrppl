@@ -22,6 +22,15 @@ describe("every admin route enforces an RBAC gate", () => {
   for (const file of adminRouteFiles) {
     it(`${file} blocks non-admins`, () => {
       const src = readFileSync(join(routesDir, file), "utf8");
+      // A route that only redirects renders nothing, so it has nothing to
+      // gate. /admin/security-findings is one: retired in W5 P2 after its
+      // richer edit fields were ported to /admin/security. Requiring a gate
+      // here would mean gating a page that cannot display data.
+      const redirectOnly =
+        /beforeLoad:\s*\(\)\s*=>\s*\{\s*throw redirect\(/.test(src) &&
+        !/component:/.test(src);
+      if (redirectOnly) return;
+
       const gated =
         /AdminGate/.test(src) ||
         /roles\.includes\(['"`](?:super_admin|org_admin|regional_admin|hr|manager)['"`]\)/.test(src) ||

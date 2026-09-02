@@ -56,7 +56,11 @@ import { RefreshCw, AlertTriangle, History, Radio } from "lucide-react";
 
 export const Route = createFileRoute("/admin/audit-history")({
   head: () => ({ meta: [{ title: "Audit history — HRPPL" }] }),
-  component: Page,
+  component: () => (
+    <AdminGate feature="org.auditHistory">
+      <Page />
+    </AdminGate>
+  ),
 });
 
 function downloadCsv(name: string, csv: string) {

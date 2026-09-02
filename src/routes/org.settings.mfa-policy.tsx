@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { AdminGate } from "@/components/AdminGate";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +24,11 @@ const ROLE_OPTIONS = [
 
 export const Route = createFileRoute("/org/settings/mfa-policy")({
   head: () => ({ meta: [{ title: "MFA policy — HRPPL" }] }),
-  component: MfaPolicyPage,
+  component: () => (
+    <AdminGate feature="settings.organization">
+      <MfaPolicyPage />
+    </AdminGate>
+  ),
 });
 
 function MfaPolicyPage() {
@@ -58,7 +63,11 @@ function MfaPolicyPage() {
   const save = useMutation({
     mutationFn: () =>
       updateFn({
-        data: { required_roles: requiredRoles as any, grace_period_days: grace, is_enforced: enforced },
+        data: {
+          required_roles: requiredRoles as any,
+          grace_period_days: grace,
+          is_enforced: enforced,
+        },
       }),
     onSuccess: () => {
       toast.success("MFA policy updated");
@@ -74,12 +83,19 @@ function MfaPolicyPage() {
         <Card>
           <CardHeader>
             <CardTitle>Enforcement</CardTitle>
-            <CardDescription>Users in selected roles must enrol MFA within the grace period.</CardDescription>
+            <CardDescription>
+              Users in selected roles must enrol MFA within the grace period.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="enf">Enforce policy</Label>
-              <Switch id="enf" checked={enforced} onCheckedChange={setEnforced} disabled={isLoading} />
+              <Switch
+                id="enf"
+                checked={enforced}
+                onCheckedChange={setEnforced}
+                disabled={isLoading}
+              />
             </div>
 
             <div className="space-y-2">
@@ -88,12 +104,17 @@ function MfaPolicyPage() {
                 {ROLE_OPTIONS.map((r) => {
                   const checked = requiredRoles.includes(r.value);
                   return (
-                    <label key={r.value} className="flex items-center gap-2 border rounded-md p-2 cursor-pointer">
+                    <label
+                      key={r.value}
+                      className="flex items-center gap-2 border rounded-md p-2 cursor-pointer"
+                    >
                       <Checkbox
                         checked={checked}
                         onCheckedChange={(v) =>
                           setRequiredRoles((prev) =>
-                            v ? Array.from(new Set([...prev, r.value])) : prev.filter((x) => x !== r.value),
+                            v
+                              ? Array.from(new Set([...prev, r.value]))
+                              : prev.filter((x) => x !== r.value),
                           )
                         }
                       />

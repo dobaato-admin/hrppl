@@ -55,6 +55,8 @@ type Finding = {
   status: "open" | "fixed" | "ignored" | "accepted_risk";
   description: string | null;
   remediation: string | null;
+  ticket_url: string | null;
+  fixed_in_commit: string | null;
   resolved_at: string | null;
 };
 
@@ -91,6 +93,14 @@ function SecurityFindingsPage() {
   const [editing, setEditing] = useState<Finding | null>(null);
   const [editStatus, setEditStatus] = useState<Finding["status"]>("fixed");
   const [editNote, setEditNote] = useState("");
+  // W5 P2 · updateSecurityFindingStatus has always accepted ticket_url and
+  // fixed_in_commit; this page never offered either, so two columns of the
+  // audit trail could not be filled in from the surface that owns it. The
+  // near-duplicate at /admin/security-findings did have them, which is why it
+  // was 404 lines to this page's 318 — the "duplicate" was the more complete
+  // implementation. Ported here before that route was retired.
+  const [editTicket, setEditTicket] = useState("");
+  const [editCommit, setEditCommit] = useState("");
 
   useEffect(() => {
     if (!rolesLoaded) return;
@@ -133,7 +143,13 @@ function SecurityFindingsPage() {
     if (!editing) return;
     try {
       await update({
-        data: { id: editing.id, status: editStatus, remediation: editNote || undefined },
+        data: {
+          id: editing.id,
+          status: editStatus,
+          remediation: editNote || undefined,
+          ticket_url: editTicket,
+          fixed_in_commit: editCommit,
+        },
       });
       const r = await list();
       setRows((r.findings ?? []) as Finding[]);
@@ -246,6 +262,8 @@ function SecurityFindingsPage() {
                           setEditing(f);
                           setEditStatus(f.status);
                           setEditNote(f.remediation ?? "");
+                          setEditTicket(f.ticket_url ?? "");
+                          setEditCommit(f.fixed_in_commit ?? "");
                         }}
                       >
                         Edit
@@ -302,6 +320,24 @@ function SecurityFindingsPage() {
                   onChange={(e) => setEditNote(e.target.value)}
                   placeholder="Describe what was changed in code/DB or why this is accepted."
                 />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Ticket URL</label>
+                  <Input
+                    value={editTicket}
+                    onChange={(e) => setEditTicket(e.target.value)}
+                    placeholder="https://…"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Fixed in commit / PR</label>
+                  <Input
+                    value={editCommit}
+                    onChange={(e) => setEditCommit(e.target.value)}
+                    placeholder="commit SHA or PR URL"
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>

@@ -4,10 +4,29 @@ import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid,
-  PieChart, Pie, Cell, LineChart, Line, AreaChart, Area,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
 } from "recharts";
 import { getOrgAnalytics } from "@/lib/analytics.functions";
 
@@ -30,7 +49,13 @@ interface AnalyticsData {
     expenseCurrency: string;
   };
   byDepartment: { name: string; count: number }[];
-  onboarding: { total: number; in_progress: number; completed: number; signed_off: number; cancelled: number };
+  onboarding: {
+    total: number;
+    in_progress: number;
+    completed: number;
+    signed_off: number;
+    cancelled: number;
+  };
   reviewMix: { name: string; value: number }[];
   leaveBreakdown: { name: string; days: number }[];
   timesheetMix: { name: string; value: number }[];
@@ -57,23 +82,31 @@ function AnalyticsPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const fnAnalytics = useServerFn(getOrgAnalytics);
-  const canAccess = roles.includes("manager") || roles.includes("org_admin") || roles.includes("super_admin");
+  const canAccess =
+    roles.includes("manager") || roles.includes("org_admin") || roles.includes("super_admin");
 
-  useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [loading, user, navigate]);
+  useEffect(() => {
+    if (!loading && !user) navigate({ to: "/auth" });
+  }, [loading, user, navigate]);
 
   const refresh = useMemo(() => {
     return () => {
       if (!user || !canAccess) return;
       setBusy(true);
       fnAnalytics({ data: { monthsBack: months } })
-        .then((r) => { setData(r as AnalyticsData); setLastUpdated(new Date()); })
+        .then((r) => {
+          setData(r as AnalyticsData);
+          setLastUpdated(new Date());
+        })
         .catch(() => {})
         .finally(() => setBusy(false));
     };
   }, [user, canAccess, months, fnAnalytics]);
 
   // Initial load + reload when months change
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   // Auto-refresh every 60s so KPIs reflect new timesheets / leave / onboarding / HR changes
   useEffect(() => {
@@ -86,7 +119,9 @@ function AnalyticsPage() {
 
   // Refresh when the tab regains focus
   useEffect(() => {
-    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    const onVis = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [refresh]);
@@ -102,8 +137,18 @@ function AnalyticsPage() {
     ].filter((d) => d.value > 0);
   }, [data]);
 
-  if (loading || !user) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
-  if (!canAccess) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Forbidden.</main>;
+  if (loading || !user)
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
+  if (!canAccess)
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Forbidden.
+      </main>
+    );
 
   return (
     <main className="min-h-screen bg-background">
@@ -118,7 +163,9 @@ function AnalyticsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Select value={String(months)} onValueChange={(v) => setMonths(Number(v))}>
-              <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="3">Last 3 months</SelectItem>
                 <SelectItem value="6">Last 6 months</SelectItem>
@@ -129,35 +176,74 @@ function AnalyticsPage() {
             <Button size="sm" variant="outline" onClick={refresh} disabled={busy}>
               {busy ? "Refreshing…" : "Refresh"}
             </Button>
-            <Link to="/org/reports"><Button variant="outline" size="sm">Reports</Button></Link>
-            <Link to="/org"><Button variant="outline" size="sm">Back</Button></Link>
+            <Link to="/org/reports">
+              <Button variant="outline" size="sm">
+                Reports
+              </Button>
+            </Link>
+            <Link to="/org">
+              <Button variant="outline" size="sm">
+                Back
+              </Button>
+            </Link>
           </div>
         </div>
       </header>
 
       <section className="mx-auto max-w-6xl space-y-6 px-6 py-8">
         <div className="grid gap-4 md:grid-cols-4">
-          <Kpi label="Active headcount" value={data ? String(data.kpis.activeHeadcount) : "—"} href="/org/employees?status=active" linkLabel="View employees" />
-          <Kpi label="Onboarding completion" value={data ? `${data.kpis.onboardingCompletionRate}%` : "—"} href="/org/onboarding" linkLabel="View assignments" />
-          <Kpi label="Terminations (window)" value={data ? String(data.kpis.terminationsInWindow) : "—"} href={`/org/employees?status=terminated&monthsBack=${months}`} linkLabel="View terminations" />
-          <Kpi label="Attrition rate" value={data ? `${data.kpis.attritionRate}%` : "—"} href="/org/employees" linkLabel="View employees" />
+          <Kpi
+            label="Active headcount"
+            value={data ? String(data.kpis.activeHeadcount) : "—"}
+            href="/org/employees?status=active"
+            linkLabel="View employees"
+          />
+          <Kpi
+            label="Onboarding completion"
+            value={data ? `${data.kpis.onboardingCompletionRate}%` : "—"}
+            href="/org/onboarding"
+            linkLabel="View assignments"
+          />
+          <Kpi
+            label="Terminations (window)"
+            value={data ? String(data.kpis.terminationsInWindow) : "—"}
+            href={`/org/employees?status=terminated&monthsBack=${months}`}
+            linkLabel="View terminations"
+          />
+          <Kpi
+            label="Attrition rate"
+            value={data ? `${data.kpis.attritionRate}%` : "—"}
+            href="/org/employees"
+            linkLabel="View employees"
+          />
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           <Kpi
             label="Payroll cost (window)"
-            value={data ? `${data.kpis.payrollCurrency || ""} ${data.kpis.payrollTotalInWindow.toLocaleString()}`.trim() : "—"}
-            href="/org/payroll" linkLabel="View payroll runs"
+            value={
+              data
+                ? `${data.kpis.payrollCurrency || ""} ${data.kpis.payrollTotalInWindow.toLocaleString()}`.trim()
+                : "—"
+            }
+            href="/org/payroll"
+            linkLabel="View payroll runs"
           />
           <Kpi
             label="Approved expense spend"
-            value={data ? `${data.kpis.expenseCurrency || ""} ${data.kpis.expenseTotalInWindow.toLocaleString()}`.trim() : "—"}
-            href="/org/expenses?status=approved" linkLabel="View expenses"
+            value={
+              data
+                ? `${data.kpis.expenseCurrency || ""} ${data.kpis.expenseTotalInWindow.toLocaleString()}`.trim()
+                : "—"
+            }
+            href="/org/expenses?status=approved"
+            linkLabel="View expenses"
           />
           <Kpi
             label="Training completion"
             value={data ? `${data.kpis.trainingCompletionRate}%` : "—"}
-            href="/org/training" linkLabel="View training"
+            href="/org/training"
+            linkLabel="View training"
           />
         </div>
 
@@ -171,9 +257,16 @@ function AnalyticsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data?.headcountTrend ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} />
+                  <XAxis dataKey="month" fontSize={11} />
+                  <YAxis fontSize={11} />
                   <Tooltip />
-                  <Area type="monotone" dataKey="headcount" stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.2} />
+                  <Area
+                    type="monotone"
+                    dataKey="headcount"
+                    stroke="hsl(var(--primary))"
+                    fill="hsl(var(--primary))"
+                    fillOpacity={0.2}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -182,15 +275,25 @@ function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Payroll cost trend</CardTitle>
-              <CardDescription>Approved runs, net pay per month{data?.kpis.payrollCurrency ? ` (${data.kpis.payrollCurrency})` : ""}.</CardDescription>
+              <CardDescription>
+                Approved runs, net pay per month
+                {data?.kpis.payrollCurrency ? ` (${data.kpis.payrollCurrency})` : ""}.
+              </CardDescription>
             </CardHeader>
             <CardContent style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data?.payrollTrend ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} />
+                  <XAxis dataKey="month" fontSize={11} />
+                  <YAxis fontSize={11} />
                   <Tooltip />
-                  <Line type="monotone" dataKey="amount" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="amount"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
@@ -204,12 +307,19 @@ function AnalyticsPage() {
             <CardContent style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data?.trainingMix ?? []} dataKey="value" nameKey="name" outerRadius={80} label>
+                  <Pie
+                    data={data?.trainingMix ?? []}
+                    dataKey="value"
+                    nameKey="name"
+                    outerRadius={80}
+                    label
+                  >
                     {(data?.trainingMix ?? []).map((_, i) => (
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip /><Legend />
+                  <Tooltip />
+                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -226,13 +336,17 @@ function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Expense spend trend</CardTitle>
-              <CardDescription>Approved &amp; paid claims per month{data?.kpis.expenseCurrency ? ` (${data.kpis.expenseCurrency})` : ""}.</CardDescription>
+              <CardDescription>
+                Approved &amp; paid claims per month
+                {data?.kpis.expenseCurrency ? ` (${data.kpis.expenseCurrency})` : ""}.
+              </CardDescription>
             </CardHeader>
             <CardContent style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data?.expenseTrend ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" fontSize={11} /><YAxis fontSize={11} />
+                  <XAxis dataKey="month" fontSize={11} />
+                  <YAxis fontSize={11} />
                   <Tooltip />
                   <Bar dataKey="amount" fill="hsl(var(--primary))" />
                 </BarChart>
@@ -277,18 +391,37 @@ function AnalyticsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={onboardingPie} dataKey="value" nameKey="name" outerRadius={90} label>
-                    {onboardingPie.map((_, i) => (<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}
+                    {onboardingPie.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
                   </Pie>
-                  <Tooltip /><Legend />
+                  <Tooltip />
+                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
             <DrilldownList
               items={[
-                { label: "In progress", count: data?.onboarding.in_progress ?? 0, href: "/org/onboarding?status=in_progress" },
-                { label: "Completed", count: data?.onboarding.completed ?? 0, href: "/org/onboarding?status=completed" },
-                { label: "Signed off", count: data?.onboarding.signed_off ?? 0, href: "/org/onboarding?status=signed_off" },
-                { label: "Cancelled", count: data?.onboarding.cancelled ?? 0, href: "/org/onboarding?status=cancelled" },
+                {
+                  label: "In progress",
+                  count: data?.onboarding.in_progress ?? 0,
+                  href: "/org/onboarding?status=in_progress",
+                },
+                {
+                  label: "Completed",
+                  count: data?.onboarding.completed ?? 0,
+                  href: "/org/onboarding?status=completed",
+                },
+                {
+                  label: "Signed off",
+                  count: data?.onboarding.signed_off ?? 0,
+                  href: "/org/onboarding?status=signed_off",
+                },
+                {
+                  label: "Cancelled",
+                  count: data?.onboarding.cancelled ?? 0,
+                  href: "/org/onboarding?status=cancelled",
+                },
               ]}
               emptyLabel="No assignments"
             />
@@ -297,13 +430,18 @@ function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Review status</CardTitle>
-              <CardDescription>{data?.kpis.latestCycleName ? `Cycle: ${data.kpis.latestCycleName}` : "Latest cycle"}</CardDescription>
+              <CardDescription>
+                {data?.kpis.latestCycleName
+                  ? `Cycle: ${data.kpis.latestCycleName}`
+                  : "Latest cycle"}
+              </CardDescription>
             </CardHeader>
             <CardContent style={{ height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data?.reviewMix ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} />
+                  <XAxis dataKey="name" fontSize={11} />
+                  <YAxis fontSize={11} />
                   <Tooltip />
                   <Bar dataKey="value" fill="hsl(var(--primary))" />
                 </BarChart>
@@ -328,7 +466,8 @@ function AnalyticsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data?.leaveBreakdown ?? []}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} />
+                  <XAxis dataKey="name" fontSize={11} />
+                  <YAxis fontSize={11} />
                   <Tooltip />
                   <Bar dataKey="days" fill="hsl(var(--primary))" />
                 </BarChart>
@@ -353,12 +492,19 @@ function AnalyticsPage() {
             <CardContent style={{ height: 240 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={data?.timesheetMix ?? []} dataKey="value" nameKey="name" outerRadius={80} label>
+                  <Pie
+                    data={data?.timesheetMix ?? []}
+                    dataKey="value"
+                    nameKey="name"
+                    outerRadius={80}
+                    label
+                  >
                     {(data?.timesheetMix ?? []).map((_, i) => (
                       <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip /><Legend />
+                  <Tooltip />
+                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -379,10 +525,22 @@ function AnalyticsPage() {
   );
 }
 
-function Kpi({ label, value, href, linkLabel }: { label: string; value: string; href?: string; linkLabel?: string }) {
+function Kpi({
+  label,
+  value,
+  href,
+  linkLabel,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+  linkLabel?: string;
+}) {
   return (
     <Card>
-      <CardHeader className="pb-2"><CardDescription>{label}</CardDescription></CardHeader>
+      <CardHeader className="pb-2">
+        <CardDescription>{label}</CardDescription>
+      </CardHeader>
       <CardContent>
         <div className="text-2xl font-semibold">{value}</div>
         {href && (
@@ -403,18 +561,26 @@ function DrilldownList({
   emptyLabel: string;
 }) {
   if (!items.length) {
-    return <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">{emptyLabel}</div>;
+    return (
+      <div className="border-t border-border px-6 py-3 text-xs text-muted-foreground">
+        {emptyLabel}
+      </div>
+    );
   }
   return (
     <div className="border-t border-border px-6 py-3">
       <ul className="grid gap-1 sm:grid-cols-2">
         {items.map((it) => (
           <li key={it.label} className="flex items-center justify-between gap-2 text-xs">
-            <a href={it.href} className="truncate text-foreground hover:text-primary hover:underline">
+            <a
+              href={it.href}
+              className="truncate text-foreground hover:text-primary hover:underline"
+            >
               {it.label}
             </a>
             <a href={it.href} className="shrink-0 text-muted-foreground hover:text-primary">
-              {it.count}{it.suffix ? ` ${it.suffix}` : ""} →
+              {it.count}
+              {it.suffix ? ` ${it.suffix}` : ""} →
             </a>
           </li>
         ))}

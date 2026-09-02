@@ -437,6 +437,15 @@ export const ORG_SECTIONS: NavSection[] = [
         feature: "org.requests",
       },
       {
+        // W5 P2 · 373 lines of working timesheet approval with no nav entry
+        // and no route gate. Sits beside the Timesheets page it reviews.
+        title: "Timesheet review",
+        to: "/org/timesheet-review",
+        icon: ClipboardCheck,
+        accent: "bg-status-pending",
+        feature: "org.timesheetReview",
+      },
+      {
         title: "Leave types",
         to: "/admin/leave-types",
         icon: CalendarDays,
@@ -727,11 +736,64 @@ export const ORG_SECTIONS: NavSection[] = [
         feature: "org.auStpAudit",
       },
       {
+        // W5 P2 · 74 lines, and the only orphan that also rendered with no
+        // AppShell — reaching it by URL gave a page with no sidebar at all.
+        title: "Expiring documents",
+        to: "/org/documents/expiring",
+        icon: FileText,
+        accent: "bg-status-stuck",
+        feature: "org.documents",
+      },
+      {
+        // W5 P2 · 649-line audit explorer with export, no nav entry, no route
+        // gate. Also gives exportAuditCsv its first caller.
+        title: "Audit history",
+        to: "/admin/audit-history",
+        icon: FileText,
+        accent: "bg-accent",
+        feature: "org.auditHistory",
+      },
+      {
         title: "Missing info requests",
         to: "/admin/id-requests",
         icon: Inbox,
         accent: "bg-status-pending",
         feature: "org.idRequests",
+      },
+    ],
+  },
+  {
+    /**
+     * W5 P2 · Two settings that decide what the outside world sees of this
+     * organization, and neither was anywhere sensible.
+     *
+     * White-label sat under "Compliance & safety" — it is branding, not
+     * compliance, and was filed there in W4 apparently for want of anywhere
+     * better. Careers page had no nav entry at all despite the public job
+     * board it configures being live and reachable at /careers/:tenantSlug.
+     *
+     * Team was the natural home for Careers page (it configures Recruitment's
+     * public face) but Team is at the nine-item cap, and quietly raising a cap
+     * to avoid a placement decision is how the old 17-item Operations list
+     * happened. Pairing the two by what they actually do is the better answer.
+     */
+    title: "Public presence",
+    icon: Palette,
+    accent: "bg-accent",
+    items: [
+      {
+        title: "Careers page",
+        to: "/org/careers/settings",
+        icon: UserSearch,
+        accent: "bg-accent",
+        feature: "org.recruitment",
+      },
+      {
+        title: "White-label",
+        to: "/org/white-label",
+        icon: Palette,
+        accent: "bg-accent",
+        feature: "org.whiteLabel",
       },
     ],
   },
@@ -812,13 +874,6 @@ export const ORG_SECTIONS: NavSection[] = [
         accent: "bg-status-pending",
         feature: "org.geofences",
         keywords: "google map location radius",
-      },
-      {
-        title: "White-label",
-        to: "/org/white-label",
-        icon: Palette,
-        accent: "bg-accent",
-        feature: "org.whiteLabel",
       },
     ],
   },
@@ -968,6 +1023,16 @@ export const ACCOUNT_ITEMS: NavItem[] = [
     icon: CreditCard,
     accent: "bg-status-done",
     feature: "settings.billing",
+  },
+  {
+    // W5 P2 · An org-wide security control with no path to it is the worst
+    // kind of orphan. Sits beside Organization: it is a tenant-wide setting,
+    // not an operational page.
+    title: "MFA policy",
+    to: "/org/settings/mfa-policy",
+    icon: ShieldCheck,
+    accent: "bg-status-stuck",
+    feature: "settings.organization",
   },
   {
     title: "Notifications",

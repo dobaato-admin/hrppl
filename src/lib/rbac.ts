@@ -85,6 +85,8 @@ export type Feature =
   | "org.idRequests"
   | "org.analytics"
   | "org.reports"
+  | "org.auditHistory"
+  | "org.timesheetReview"
   | "org.security"
   // Manager
   | "manager.team"
@@ -252,6 +254,11 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "org.idRequests": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.analytics": SET("super_admin", "org_admin", "branch_admin", "hr", "finance"),
   "org.reports": SET("super_admin", "org_admin", "branch_admin", "hr", "finance"),
+  // W5 P2 · An audit trail names every actor and what they touched. Narrower
+  // than the admin surfaces it reports on, deliberately.
+  "org.auditHistory": SET("super_admin", "org_admin"),
+  // Mirrors who already approves time: the same people who see Timesheets.
+  "org.timesheetReview": SET("super_admin", "org_admin", "branch_admin", "finance", "manager"),
   "org.security": SET("super_admin", "org_admin"),
 
   // Manager

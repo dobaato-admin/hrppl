@@ -10,8 +10,20 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import {
   getControlRoom,
@@ -42,7 +54,10 @@ function Page() {
   const { roles, loading } = useAuth();
   const navigate = useNavigate();
   const canAccess =
-    roles.includes("hr") || roles.includes("org_admin") || roles.includes("super_admin") || roles.includes("manager");
+    roles.includes("hr") ||
+    roles.includes("org_admin") ||
+    roles.includes("super_admin") ||
+    roles.includes("manager");
   useEffect(() => {
     if (!loading && !canAccess) navigate({ to: "/dashboard" });
   }, [loading, canAccess, navigate]);
@@ -131,7 +146,11 @@ function Page() {
   });
 
   if (isLoading) {
-    return <AppShell title="Onboarding"><div className="p-4 text-sm text-muted-foreground">Loading…</div></AppShell>;
+    return (
+      <AppShell title="Onboarding">
+        <div className="p-4 text-sm text-muted-foreground">Loading…</div>
+      </AppShell>
+    );
   }
 
   const emp = data?.assignment?.employee ?? {};
@@ -144,17 +163,24 @@ function Page() {
       subtitle={`${emp.job_title ?? ""} · Hire date ${emp.hire_date ?? "—"}`}
     >
       <div className="p-4 space-y-4">
-        <CountryMergeBanner assignment={data?.assignment} onAck={() => qc.invalidateQueries({ queryKey: ["control-room", id] })} />
+        <CountryMergeBanner
+          assignment={data?.assignment}
+          onAck={() => qc.invalidateQueries({ queryKey: ["control-room", id] })}
+        />
         <div className="grid gap-3 md:grid-cols-5">
           {LANES.map((lane) => {
             const laneTasks = tasks.filter((t: any) => t.owner_role === lane);
-            const done = laneTasks.filter((t: any) => t.status === "completed" || t.status === "skipped").length;
+            const done = laneTasks.filter(
+              (t: any) => t.status === "completed" || t.status === "skipped",
+            ).length;
             return (
               <Card key={lane} className="flex flex-col">
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm capitalize">{lane}</CardTitle>
-                    <Badge variant="outline">{done}/{laneTasks.length}</Badge>
+                    <Badge variant="outline">
+                      {done}/{laneTasks.length}
+                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 flex-1">
@@ -181,10 +207,7 @@ function Page() {
                         value={t.status}
                         onValueChange={(v) => setStatus.mutate({ id: t.id, status: v })}
                       >
-                        <SelectTrigger
-                          className="h-6 text-xs"
-                          onClick={(e) => e.stopPropagation()}
-                        >
+                        <SelectTrigger className="h-6 text-xs" onClick={(e) => e.stopPropagation()}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -217,7 +240,9 @@ function Page() {
             <CardDescription>Files uploaded by or for this employee</CardDescription>
           </CardHeader>
           <CardContent className="space-y-1">
-            {docs.length === 0 && <p className="text-sm text-muted-foreground">No documents yet.</p>}
+            {docs.length === 0 && (
+              <p className="text-sm text-muted-foreground">No documents yet.</p>
+            )}
             {docs.map((d: any) => (
               <div key={d.id} className="flex items-center justify-between text-sm border-b py-1.5">
                 <span>{d.document_name}</span>
@@ -235,14 +260,25 @@ function Page() {
               <CardTitle className="text-sm">Audit log</CardTitle>
               <CardDescription>Every action recorded for this onboarding case</CardDescription>
             </div>
-            <AuditExportButtons source="onboarding" scopeId={id} scopeLabel={data?.assignment?.employee?.first_name ? `${data.assignment.employee.first_name} ${data.assignment.employee.last_name ?? ""}`.trim() : undefined} />
+            <AuditExportButtons
+              source="onboarding"
+              scopeId={id}
+              scopeLabel={
+                data?.assignment?.employee?.first_name
+                  ? `${data.assignment.employee.first_name} ${data.assignment.employee.last_name ?? ""}`.trim()
+                  : undefined
+              }
+            />
           </CardHeader>
           <CardContent className="space-y-1 max-h-96 overflow-y-auto">
             {(!auditData?.entries || auditData.entries.length === 0) && (
               <p className="text-sm text-muted-foreground">No audit entries yet.</p>
             )}
             {(auditData?.entries ?? []).map((a: any) => (
-              <div key={a.id} className="flex items-start justify-between text-xs border-b py-1.5 gap-3">
+              <div
+                key={a.id}
+                className="flex items-start justify-between text-xs border-b py-1.5 gap-3"
+              >
                 <div className="space-y-0.5">
                   <div className="font-medium">{a.action.replace(/_/g, " ")}</div>
                   {a.details?.title && (
@@ -270,16 +306,28 @@ function Page() {
           <div className="space-y-3">
             <div>
               <Label>Owner</Label>
-              <Select value={form.owner_role} onValueChange={(v) => setForm((f) => ({ ...f, owner_role: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <Select
+                value={form.owner_role}
+                onValueChange={(v) => setForm((f) => ({ ...f, owner_role: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
-                  {LANES.map((l) => <SelectItem key={l} value={l} className="capitalize">{l}</SelectItem>)}
+                  {LANES.map((l) => (
+                    <SelectItem key={l} value={l} className="capitalize">
+                      {l}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <Label>Title</Label>
-              <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+              <Input
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              />
             </div>
             <div>
               <Label>Description</Label>
@@ -297,14 +345,19 @@ function Page() {
               />
             </div>
             {editing && (
-              <AttestationBlock task={editing} onSaved={() => {
-                qc.invalidateQueries({ queryKey: ["control-room", id] });
-                qc.invalidateQueries({ queryKey: ["control-room-audit", id] });
-              }} />
+              <AttestationBlock
+                task={editing}
+                onSaved={() => {
+                  qc.invalidateQueries({ queryKey: ["control-room", id] });
+                  qc.invalidateQueries({ queryKey: ["control-room-audit", id] });
+                }}
+              />
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={() => save.mutate()} disabled={!form.title || save.isPending}>
               {save.isPending ? "Saving…" : "Save"}
             </Button>
@@ -324,15 +377,22 @@ function CountryMergeBanner({ assignment, onAck }: { assignment: any; onAck: () 
       <div>
         <div className="font-medium text-amber-900">Country change detected — checklist merged</div>
         <div className="text-amber-800 text-xs mt-0.5">
-          {meta.from_country ?? "previous country"} → {meta.to_country ?? "new country"}. Newly-added statutory steps are highlighted in the lanes below.
+          {meta.from_country ?? "previous country"} → {meta.to_country ?? "new country"}.
+          Newly-added statutory steps are highlighted in the lanes below.
         </div>
         {Array.isArray(meta.added_steps) && meta.added_steps.length > 0 && (
           <ul className="text-xs text-amber-900 mt-1 list-disc list-inside">
-            {meta.added_steps.slice(0, 8).map((s: string) => <li key={s}>{s}</li>)}
+            {meta.added_steps.slice(0, 8).map((s: string) => (
+              <li key={s}>{s}</li>
+            ))}
           </ul>
         )}
       </div>
-      <Button size="sm" variant="outline" onClick={() => ackFn({ data: { assignment_id: assignment.id } }).then(onAck)}>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => ackFn({ data: { assignment_id: assignment.id } }).then(onAck)}
+      >
         Acknowledge
       </Button>
     </div>
@@ -351,13 +411,23 @@ function AttestationBlock({ task, onSaved }: { task: any; onSaved: () => void })
     <div className="border-t pt-3 space-y-2">
       <div className="flex items-center justify-between">
         <Label className="text-sm">Attestation required</Label>
-        <Switch checked={required} onCheckedChange={(v) => { setRequired(v); toggleFn({ data: { id: task.id, required: v } }).then(onSaved); }} />
+        <Switch
+          checked={required}
+          onCheckedChange={(v) => {
+            setRequired(v);
+            toggleFn({ data: { id: task.id, required: v } }).then(onSaved);
+          }}
+        />
       </div>
       {required && (
         <>
           <div>
             <Label className="text-xs">Evidence URL (screenshot, system log)</Label>
-            <Input value={evidence} onChange={(e) => setEvidence(e.target.value)} placeholder="https://…" />
+            <Input
+              value={evidence}
+              onChange={(e) => setEvidence(e.target.value)}
+              placeholder="https://…"
+            />
           </div>
           <div>
             <Label className="text-xs">Verifier notes</Label>
@@ -365,15 +435,34 @@ function AttestationBlock({ task, onSaved }: { task: any; onSaved: () => void })
           </div>
           <div>
             <Label className="text-xs">Attestation signature (type name + role)</Label>
-            <Input value={signature} onChange={(e) => setSignature(e.target.value)} placeholder="Jane Doe, HR Lead" />
+            <Input
+              value={signature}
+              onChange={(e) => setSignature(e.target.value)}
+              placeholder="Jane Doe, HR Lead"
+            />
           </div>
-          <Button size="sm" disabled={!signature.trim()} onClick={() =>
-            attestFn({ data: { id: task.id, signature: signature.trim(), evidence_url: evidence || null, notes: notes || null } }).then(() => { onSaved(); })
-          }>
+          <Button
+            size="sm"
+            disabled={!signature.trim()}
+            onClick={() =>
+              attestFn({
+                data: {
+                  id: task.id,
+                  signature: signature.trim(),
+                  evidence_url: evidence || null,
+                  notes: notes || null,
+                },
+              }).then(() => {
+                onSaved();
+              })
+            }
+          >
             {task.attested_at ? "Re-attest" : "Submit attestation"}
           </Button>
           {task.attested_at && (
-            <div className="text-xs text-emerald-700">Attested {new Date(task.attested_at).toLocaleString()}</div>
+            <div className="text-xs text-emerald-700">
+              Attested {new Date(task.attested_at).toLocaleString()}
+            </div>
           )}
         </>
       )}

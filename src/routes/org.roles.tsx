@@ -6,10 +6,29 @@ import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
@@ -27,10 +46,30 @@ export const Route = createFileRoute("/org/roles")({
 });
 
 const ASSIGNABLE_ROLES = [
-  { value: "org_admin", label: "Org Admin", scoped: false, description: "Full org access except destructive actions" },
-  { value: "branch_admin", label: "Branch Admin", scoped: true, description: "Manages a specific branch" },
-  { value: "hr", label: "HR", scoped: true, description: "Manages people, leave, training, compliance" },
-  { value: "finance", label: "Finance", scoped: true, description: "Manages payroll, invoices, expenses" },
+  {
+    value: "org_admin",
+    label: "Org Admin",
+    scoped: false,
+    description: "Full org access except destructive actions",
+  },
+  {
+    value: "branch_admin",
+    label: "Branch Admin",
+    scoped: true,
+    description: "Manages a specific branch",
+  },
+  {
+    value: "hr",
+    label: "HR",
+    scoped: true,
+    description: "Manages people, leave, training, compliance",
+  },
+  {
+    value: "finance",
+    label: "Finance",
+    scoped: true,
+    description: "Manages payroll, invoices, expenses",
+  },
   { value: "manager", label: "Manager", scoped: true, description: "Manages direct reports" },
   { value: "employee", label: "Employee", scoped: false, description: "Self-service only" },
 ] as const;
@@ -129,7 +168,9 @@ function OrgRolesPage() {
 
   async function doSaveScope() {
     if (!scopeOpen?.user_id) return;
-    const role = scopeOpen.roles.find((r) => ["branch_admin", "hr", "finance", "manager"].includes(r));
+    const role = scopeOpen.roles.find((r) =>
+      ["branch_admin", "hr", "finance", "manager"].includes(r),
+    );
     if (!role) {
       toast.error("This user has no branch-scoped role");
       return;
@@ -151,10 +192,18 @@ function OrgRolesPage() {
   }
 
   if (loading || (user && !rolesLoaded)) {
-    return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
   }
   if (!user || !canAccess) {
-    return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Forbidden.</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Forbidden.
+      </main>
+    );
   }
 
   return (
@@ -167,15 +216,17 @@ function OrgRolesPage() {
               <CardTitle>Team roles</CardTitle>
             </div>
             <CardDescription>
-              Assign Org Admin, Branch Admin, HR, Finance, Manager or Employee. Branch-scoped roles (Branch Admin, HR,
-              Finance, Manager) require one or more branches.
+              Assign Org Admin, Branch Admin, HR, Finance, Manager or Employee. Branch-scoped roles
+              (Branch Admin, HR, Finance, Manager) require one or more branches.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <div className="text-muted-foreground">Loading members…</div>
             ) : members.length === 0 ? (
-              <div className="text-muted-foreground">No employees yet. Invite staff from Invitations.</div>
+              <div className="text-muted-foreground">
+                No employees yet. Invite staff from Invitations.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <Table>
@@ -277,7 +328,10 @@ function OrgRolesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Grant role to {target ? [target.first_name, target.last_name].filter(Boolean).join(" ") || target.email : ""}
+              Grant role to{" "}
+              {target
+                ? [target.first_name, target.last_name].filter(Boolean).join(" ") || target.email
+                : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -334,7 +388,11 @@ function OrgRolesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Branch access for {scopeOpen ? [scopeOpen.first_name, scopeOpen.last_name].filter(Boolean).join(" ") || scopeOpen.email : ""}
+              Branch access for{" "}
+              {scopeOpen
+                ? [scopeOpen.first_name, scopeOpen.last_name].filter(Boolean).join(" ") ||
+                  scopeOpen.email
+                : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 max-h-80 overflow-y-auto">

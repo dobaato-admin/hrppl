@@ -7,16 +7,47 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { applyDefaultAssignmentsForEmployee } from "@/lib/onboarding.functions";
 import { listOnboardingTemplates, applyOnboardingTemplate } from "@/lib/templates.functions";
 import { getEmployeeTimeline } from "@/lib/hr-extras.functions";
-import { Briefcase, TrendingUp, DollarSign, UserPlus, Clock, FileText, Upload, ShieldAlert, ShieldCheck } from "lucide-react";
+import {
+  Briefcase,
+  TrendingUp,
+  DollarSign,
+  UserPlus,
+  Clock,
+  FileText,
+  Upload,
+  ShieldAlert,
+  ShieldCheck,
+} from "lucide-react";
 import { BulkEmployeeImportDialog } from "@/components/BulkEmployeeImportDialog";
 import { listSuspendedAccounts } from "@/lib/account-suspension.functions";
 import {
@@ -33,7 +64,10 @@ export const Route = createFileRoute("/org/employees")({
 type EmploymentType = "full_time" | "part_time" | "contract" | "intern";
 type EmpStatus = "active" | "on_leave" | "terminated";
 
-interface Department { id: string; name: string }
+interface Department {
+  id: string;
+  name: string;
+}
 interface Employee {
   id: string;
   employee_number: string;
@@ -54,7 +88,12 @@ interface Employee {
   /** Null until the employee has accepted an invite and has a login. */
   user_id: string | null;
 }
-interface Tenant { id: string; name: string; currency_code: string; status: string }
+interface Tenant {
+  id: string;
+  name: string;
+  currency_code: string;
+  status: string;
+}
 
 function EmployeesPage() {
   const { user, roles, loading } = useAuth();
@@ -84,12 +123,24 @@ function EmployeesPage() {
 
   async function loadAll() {
     if (!user) return;
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", user.id).maybeSingle();
+    const { data: prof } = await supabase
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", user.id)
+      .maybeSingle();
     if (!prof?.tenant_id) return;
-    const { data: t } = await supabase.from("tenants").select("*").eq("id", prof.tenant_id).maybeSingle();
+    const { data: t } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("id", prof.tenant_id)
+      .maybeSingle();
     if (t) setTenant(t as Tenant);
     const [{ data: emps }, { data: deps }] = await Promise.all([
-      supabase.from("employees").select("*").eq("tenant_id", prof.tenant_id).order("created_at", { ascending: false }),
+      supabase
+        .from("employees")
+        .select("*")
+        .eq("tenant_id", prof.tenant_id)
+        .order("created_at", { ascending: false }),
       supabase.from("departments").select("id,name").eq("tenant_id", prof.tenant_id).order("name"),
     ]);
     setEmployees((emps ?? []) as Employee[]);
@@ -109,7 +160,9 @@ function EmployeesPage() {
     }
   }
 
-  useEffect(() => { loadAll(); }, [user]);
+  useEffect(() => {
+    loadAll();
+  }, [user]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -142,7 +195,11 @@ function EmployeesPage() {
   }
 
   if (loading || !user) {
-    return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
   }
 
   if (!tenant) {
@@ -156,7 +213,9 @@ function EmployeesPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Link to="/org"><Button variant="outline">Back to organization</Button></Link>
+            <Link to="/org">
+              <Button variant="outline">Back to organization</Button>
+            </Link>
           </CardContent>
         </Card>
       </main>
@@ -172,18 +231,33 @@ function EmployeesPage() {
             <p className="text-xs text-muted-foreground">{tenant.name}</p>
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/org"><Button variant="outline" size="sm">Back</Button></Link>
+            <Link to="/org">
+              <Button variant="outline" size="sm">
+                Back
+              </Button>
+            </Link>
             {canManage && (
               <Link to="/admin/departments">
-                <Button variant="outline" size="sm" data-testid="manage-departments">Manage departments</Button>
+                <Button variant="outline" size="sm" data-testid="manage-departments">
+                  Manage departments
+                </Button>
               </Link>
             )}
             {canManage && (
-              <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)} data-testid="bulk-import-employees">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setBulkOpen(true)}
+                data-testid="bulk-import-employees"
+              >
                 <Upload className="h-4 w-4 mr-1.5" /> Bulk import
               </Button>
             )}
-            {canManage && <Button size="sm" onClick={openCreate} data-testid="add-employee">Add employee</Button>}
+            {canManage && (
+              <Button size="sm" onClick={openCreate} data-testid="add-employee">
+                Add employee
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -196,7 +270,9 @@ function EmployeesPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-md"
           />
-          <Badge variant="outline">{filtered.length} of {employees.length}</Badge>
+          <Badge variant="outline">
+            {filtered.length} of {employees.length}
+          </Badge>
         </div>
 
         <Card>
@@ -217,7 +293,10 @@ function EmployeesPage() {
               <TableBody>
                 {filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={canManage ? 8 : 7} className="text-center text-muted-foreground py-8">
+                    <TableCell
+                      colSpan={canManage ? 8 : 7}
+                      className="text-center text-muted-foreground py-8"
+                    >
                       No employees yet.
                     </TableCell>
                   </TableRow>
@@ -228,15 +307,27 @@ function EmployeesPage() {
                     <TableRow key={e.id}>
                       <TableCell className="font-mono text-xs">{e.employee_number}</TableCell>
                       <TableCell>
-                        <div className="font-medium">{e.first_name} {e.last_name}</div>
+                        <div className="font-medium">
+                          {e.first_name} {e.last_name}
+                        </div>
                         <div className="text-xs text-muted-foreground">{e.email}</div>
                       </TableCell>
                       <TableCell>{e.job_title ?? "—"}</TableCell>
                       <TableCell>{dep}</TableCell>
-                      <TableCell><Badge variant="outline">{e.employment_type.replace("_", " ")}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{e.employment_type.replace("_", " ")}</Badge>
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap items-center gap-1">
-                          <Badge variant={e.status === "active" ? "default" : e.status === "on_leave" ? "secondary" : "destructive"}>
+                          <Badge
+                            variant={
+                              e.status === "active"
+                                ? "default"
+                                : e.status === "on_leave"
+                                  ? "secondary"
+                                  : "destructive"
+                            }
+                          >
                             {e.status.replace("_", " ")}
                           </Badge>
                           {/* Access state is separate from employment state. */}
@@ -255,15 +346,24 @@ function EmployeesPage() {
                               <FileText className="h-4 w-4" />
                             </Link>
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setTimelineFor(e)} title="Timeline">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setTimelineFor(e)}
+                            title="Timeline"
+                          >
                             <Clock className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => openEdit(e)}>Edit</Button>
+                          <Button size="sm" variant="outline" onClick={() => openEdit(e)}>
+                            Edit
+                          </Button>
                           {canSuspend && e.user_id && (
                             <Button
                               size="sm"
                               variant="ghost"
-                              title={e.user_id in suspendedMap ? "Restore access" : "Suspend account"}
+                              title={
+                                e.user_id in suspendedMap ? "Restore access" : "Suspend account"
+                              }
                               onClick={() =>
                                 setSuspendTarget({
                                   userId: e.user_id!,
@@ -280,7 +380,9 @@ function EmployeesPage() {
                               )}
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" onClick={() => handleDelete(e)}>Delete</Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDelete(e)}>
+                            Delete
+                          </Button>
                         </TableCell>
                       )}
                     </TableRow>
@@ -300,7 +402,10 @@ function EmployeesPage() {
         editing={editing}
         busy={busy}
         setBusy={setBusy}
-        onSaved={() => { setOpen(false); loadAll(); }}
+        onSaved={() => {
+          setOpen(false);
+          loadAll();
+        }}
       />
       <TimelineDialog employee={timelineFor} onClose={() => setTimelineFor(null)} />
       {tenant && (
@@ -341,7 +446,9 @@ function TimelineDialog({ employee, onClose }: { employee: Employee | null; onCl
     <Dialog open={!!employee} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{employee?.first_name} {employee?.last_name} — Career timeline</DialogTitle>
+          <DialogTitle>
+            {employee?.first_name} {employee?.last_name} — Career timeline
+          </DialogTitle>
           <DialogDescription>Designations, promotions, and pay-rate history.</DialogDescription>
         </DialogHeader>
         {isLoading ? (
@@ -360,16 +467,36 @@ function TimelineDialog({ employee, onClose }: { employee: Employee | null; onCl
                     <div className="font-medium text-sm">{ev.title}</div>
                     {ev.detail && <div className="text-xs text-muted-foreground">{ev.detail}</div>}
                     <div className="text-xs text-muted-foreground pt-1 space-x-2">
-                      {ev.proposed_by?.name && <span>Proposed by <span className="text-foreground">{ev.proposed_by.name}</span></span>}
+                      {ev.proposed_by?.name && (
+                        <span>
+                          Proposed by <span className="text-foreground">{ev.proposed_by.name}</span>
+                        </span>
+                      )}
                       {ev.decided_by?.name && (
-                        <span>· Approved by <span className="text-foreground">{ev.decided_by.name}</span>{ev.decided_at ? ` on ${new Date(ev.decided_at).toLocaleDateString()}` : ""}</span>
+                        <span>
+                          · Approved by{" "}
+                          <span className="text-foreground">{ev.decided_by.name}</span>
+                          {ev.decided_at
+                            ? ` on ${new Date(ev.decided_at).toLocaleDateString()}`
+                            : ""}
+                        </span>
                       )}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <span className="text-xs font-mono text-muted-foreground">{ev.date}</span>
                     {ev.status && (
-                      <Badge variant={ev.status === "applied" ? "default" : ev.status === "approved" ? "secondary" : ev.status === "rejected" ? "destructive" : "outline"}>
+                      <Badge
+                        variant={
+                          ev.status === "applied"
+                            ? "default"
+                            : ev.status === "approved"
+                              ? "secondary"
+                              : ev.status === "rejected"
+                                ? "destructive"
+                                : "outline"
+                        }
+                      >
                         {ev.status}
                       </Badge>
                     )}
@@ -385,7 +512,14 @@ function TimelineDialog({ employee, onClose }: { employee: Employee | null; onCl
 }
 
 function EmployeeDialog({
-  open, onOpenChange, tenant, departments, editing, busy, setBusy, onSaved,
+  open,
+  onOpenChange,
+  tenant,
+  departments,
+  editing,
+  busy,
+  setBusy,
+  onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -411,13 +545,16 @@ function EmployeeDialog({
 
   useEffect(() => {
     if (editing) setForm(editing);
-    else setForm({
-      employment_type: "full_time",
-      status: "active",
-      hire_date: new Date().toISOString().slice(0, 10),
-      currency_code: tenant.currency_code,
-    });
-    setStep("form"); setNewEmpId(null); setChosenTpl("");
+    else
+      setForm({
+        employment_type: "full_time",
+        status: "active",
+        hire_date: new Date().toISOString().slice(0, 10),
+        currency_code: tenant.currency_code,
+      });
+    setStep("form");
+    setNewEmpId(null);
+    setChosenTpl("");
   }, [editing, open, tenant.currency_code]);
 
   function update<K extends keyof Employee>(key: K, value: Employee[K] | null) {
@@ -427,7 +564,13 @@ function EmployeeDialog({
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    if (!form.employee_number || !form.first_name || !form.last_name || !form.email || !form.hire_date) {
+    if (
+      !form.employee_number ||
+      !form.first_name ||
+      !form.last_name ||
+      !form.email ||
+      !form.hire_date
+    ) {
       setBusy(false);
       return toast.error("Please fill in all required fields");
     }
@@ -444,8 +587,14 @@ function EmployeeDialog({
       status: form.status ?? "active",
       hire_date: form.hire_date,
       termination_date: form.termination_date || null,
-      base_salary: form.base_salary != null && (form.base_salary as unknown as string) !== "" ? Number(form.base_salary) : null,
-      hourly_rate: form.hourly_rate != null && (form.hourly_rate as unknown as string) !== "" ? Number(form.hourly_rate) : null,
+      base_salary:
+        form.base_salary != null && (form.base_salary as unknown as string) !== ""
+          ? Number(form.base_salary)
+          : null,
+      hourly_rate:
+        form.hourly_rate != null && (form.hourly_rate as unknown as string) !== ""
+          ? Number(form.hourly_rate)
+          : null,
       pay_frequency: form.pay_frequency || null,
       currency_code: form.currency_code || tenant.currency_code,
     };
@@ -455,7 +604,11 @@ function EmployeeDialog({
     setBusy(false);
     if (result.error) return toast.error(result.error.message);
     if (!editing && result.data?.id) {
-      try { await fnApplyDefaults({ data: { employeeId: result.data.id } }); } catch { /* ignore */ }
+      try {
+        await fnApplyDefaults({ data: { employeeId: result.data.id } });
+      } catch {
+        /* ignore */
+      }
       setNewEmpId(result.data.id);
       setStartDate(payload.hire_date);
       try {
@@ -479,13 +632,17 @@ function EmployeeDialog({
     if (!newEmpId || !chosenTpl) return;
     setApplying(true);
     try {
-      const r = await fnApplyTemplate({ data: { template_id: chosenTpl, employee_id: newEmpId, start_date: startDate } });
+      const r = await fnApplyTemplate({
+        data: { template_id: chosenTpl, employee_id: newEmpId, start_date: startDate },
+      });
       toast.success(`Onboarding started — ${r.enrolled ?? 0} course(s) enrolled`);
       onSaved();
       navigate({ to: "/org/onboarding" });
     } catch (e: any) {
       toast.error(e.message ?? "Couldn't start onboarding");
-    } finally { setApplying(false); }
+    } finally {
+      setApplying(false);
+    }
   }
 
   if (step === "onboard" && newEmpId) {
@@ -495,19 +652,32 @@ function EmployeeDialog({
           <DialogHeader>
             <DialogTitle>Start onboarding now?</DialogTitle>
             <DialogDescription>
-              Pick an onboarding template to auto-assign the checklist, training and document requests.
+              Pick an onboarding template to auto-assign the checklist, training and document
+              requests.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Template</Label>
               {templates.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No active templates. Create one in <Link to="/admin/templates" className="underline">Templates Hub</Link>.</p>
+                <p className="text-xs text-muted-foreground">
+                  No active templates. Create one in{" "}
+                  <Link to="/admin/templates" className="underline">
+                    Templates Hub
+                  </Link>
+                  .
+                </p>
               ) : (
                 <Select value={chosenTpl} onValueChange={setChosenTpl}>
-                  <SelectTrigger><SelectValue placeholder="Choose template" /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose template" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    {templates.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
@@ -518,7 +688,15 @@ function EmployeeDialog({
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { toast.success("Employee added"); onSaved(); }}>Skip</Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                toast.success("Employee added");
+                onSaved();
+              }}
+            >
+              Skip
+            </Button>
             <Button onClick={applyTpl} disabled={!chosenTpl || applying}>
               {applying ? "Starting…" : "Apply & open onboarding"}
             </Button>
@@ -533,41 +711,73 @@ function EmployeeDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit employee" : "Add employee"}</DialogTitle>
-          <DialogDescription>
-            Employee records are scoped to {tenant.name}.
-          </DialogDescription>
+          <DialogDescription>Employee records are scoped to {tenant.name}.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} className="grid grid-cols-2 gap-4">
           <Field label="Employee #" required>
-            <Input value={form.employee_number ?? ""} onChange={(e) => update("employee_number", e.target.value)} required />
+            <Input
+              value={form.employee_number ?? ""}
+              onChange={(e) => update("employee_number", e.target.value)}
+              required
+            />
           </Field>
           <Field label="Email" required>
-            <Input type="email" value={form.email ?? ""} onChange={(e) => update("email", e.target.value)} required />
+            <Input
+              type="email"
+              value={form.email ?? ""}
+              onChange={(e) => update("email", e.target.value)}
+              required
+            />
           </Field>
           <Field label="First name" required>
-            <Input value={form.first_name ?? ""} onChange={(e) => update("first_name", e.target.value)} required />
+            <Input
+              value={form.first_name ?? ""}
+              onChange={(e) => update("first_name", e.target.value)}
+              required
+            />
           </Field>
           <Field label="Last name" required>
-            <Input value={form.last_name ?? ""} onChange={(e) => update("last_name", e.target.value)} required />
+            <Input
+              value={form.last_name ?? ""}
+              onChange={(e) => update("last_name", e.target.value)}
+              required
+            />
           </Field>
           <Field label="Phone">
             <Input value={form.phone ?? ""} onChange={(e) => update("phone", e.target.value)} />
           </Field>
           <Field label="Job title">
-            <Input value={form.job_title ?? ""} onChange={(e) => update("job_title", e.target.value)} />
+            <Input
+              value={form.job_title ?? ""}
+              onChange={(e) => update("job_title", e.target.value)}
+            />
           </Field>
           <Field label="Department">
-            <Select value={form.department_id ?? "none"} onValueChange={(v) => update("department_id", v === "none" ? null : v)}>
-              <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+            <Select
+              value={form.department_id ?? "none"}
+              onValueChange={(v) => update("department_id", v === "none" ? null : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">— None —</SelectItem>
-                {departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                {departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </Field>
           <Field label="Employment type">
-            <Select value={form.employment_type ?? "full_time"} onValueChange={(v) => update("employment_type", v as EmploymentType)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={form.employment_type ?? "full_time"}
+              onValueChange={(v) => update("employment_type", v as EmploymentType)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="full_time">Full time</SelectItem>
                 <SelectItem value="part_time">Part time</SelectItem>
@@ -577,8 +787,13 @@ function EmployeeDialog({
             </Select>
           </Field>
           <Field label="Status">
-            <Select value={form.status ?? "active"} onValueChange={(v) => update("status", v as EmpStatus)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <Select
+              value={form.status ?? "active"}
+              onValueChange={(v) => update("status", v as EmpStatus)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="on_leave">On leave</SelectItem>
@@ -587,26 +802,63 @@ function EmployeeDialog({
             </Select>
           </Field>
           <Field label="Hire date" required>
-            <Input type="date" value={form.hire_date ?? ""} onChange={(e) => update("hire_date", e.target.value)} required />
+            <Input
+              type="date"
+              value={form.hire_date ?? ""}
+              onChange={(e) => update("hire_date", e.target.value)}
+              required
+            />
           </Field>
           <Field label="Termination date">
-            <Input type="date" value={form.termination_date ?? ""} onChange={(e) => update("termination_date", e.target.value || null)} />
+            <Input
+              type="date"
+              value={form.termination_date ?? ""}
+              onChange={(e) => update("termination_date", e.target.value || null)}
+            />
           </Field>
           <div className="col-span-2 mt-2 rounded-lg border bg-muted/30 p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
               <span>💰 Compensation</span>
-              <span className="text-xs font-normal text-muted-foreground">— set the pay rate for this new joinee</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                — set the pay rate for this new joinee
+              </span>
             </div>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
               <Field label={`Base salary (${form.currency_code ?? tenant.currency_code})`}>
-                <Input type="number" step="0.01" placeholder="e.g. 75000" value={form.base_salary ?? ""} onChange={(e) => update("base_salary", e.target.value === "" ? null : Number(e.target.value))} />
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g. 75000"
+                  value={form.base_salary ?? ""}
+                  onChange={(e) =>
+                    update("base_salary", e.target.value === "" ? null : Number(e.target.value))
+                  }
+                />
               </Field>
               <Field label={`Hourly rate (${form.currency_code ?? tenant.currency_code})`}>
-                <Input type="number" step="0.0001" placeholder="e.g. 38.50" value={form.hourly_rate ?? ""} onChange={(e) => update("hourly_rate", e.target.value === "" ? null : Number(e.target.value) as unknown as Employee["hourly_rate"])} />
+                <Input
+                  type="number"
+                  step="0.0001"
+                  placeholder="e.g. 38.50"
+                  value={form.hourly_rate ?? ""}
+                  onChange={(e) =>
+                    update(
+                      "hourly_rate",
+                      e.target.value === ""
+                        ? null
+                        : (Number(e.target.value) as unknown as Employee["hourly_rate"]),
+                    )
+                  }
+                />
               </Field>
               <Field label="Pay frequency">
-                <Select value={form.pay_frequency ?? "none"} onValueChange={(v) => update("pay_frequency", v === "none" ? null : v)}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                <Select
+                  value={form.pay_frequency ?? "none"}
+                  onValueChange={(v) => update("pay_frequency", v === "none" ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">— Not set —</SelectItem>
                     <SelectItem value="hourly">Hourly</SelectItem>
@@ -620,8 +872,12 @@ function EmployeeDialog({
             </div>
           </div>
           <DialogFooter className="col-span-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={busy}>{busy ? "Saving…" : editing ? "Save changes" : "Add employee"}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Saving…" : editing ? "Save changes" : "Add employee"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -629,10 +885,21 @@ function EmployeeDialog({
   );
 }
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">{label}{required && <span className="text-destructive"> *</span>}</Label>
+      <Label className="text-xs">
+        {label}
+        {required && <span className="text-destructive"> *</span>}
+      </Label>
       {children}
     </div>
   );
