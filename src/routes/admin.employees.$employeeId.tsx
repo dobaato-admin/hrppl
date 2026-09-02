@@ -1,14 +1,35 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Plus } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listEmployeeTimeline } from "@/lib/timeline.functions";
-import { listEventAccessLog } from "@/lib/audit.functions";
+import { listEmployeeTimeline, recordCustomEvent } from "@/lib/timeline.functions";
+import { listEventAccessLog, accessLogSummary, logEventAccess } from "@/lib/audit.functions";
 import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/admin/employees/$employeeId")({
@@ -73,6 +94,73 @@ function EmployeeRecordPage() {
   const [view, setView] = useState<"timeline" | "audit">("timeline");
   const fetchTimeline = useServerFn(listEmployeeTimeline);
   const fetchAudit = useServerFn(listEventAccessLog);
+  const fetchAuditSummary = useServerFn(accessLogSummary);
+  const logAccess = useServerFn(logEventAccess);
+  const addEvent = useServerFn(recordCustomEvent);
+  const qc = useQueryClient();
+
+  // W5 P3 · recordCustomEvent had no caller, so the employment timeline could
+  // only ever contain events the system generated. Anything that happened off
+  // -system — a conversation, a commitment made in a review, an informal
+  // warning — had nowhere to live, and the record was incomplete in exactly
+  // the cases where completeness matters.
+  //
+  // Deliberately NOT offered on /me/timeline: the server fn is assertHrOrAdmin
+  // gated, and an employment record its own subject can write to is not a
+  // record.
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteBody, setNoteBody] = useState("");
+  const [noteVisibility, setNoteVisibility] = useState<
+    "employee" | "manager" | "hr" | "confidential"
+  >("hr");
+  const [savingNote, setSavingNote] = useState(false);
+
+  async function saveNote() {
+    if (!noteTitle.trim()) return;
+    setSavingNote(true);
+    try {
+      await addEvent({
+        data: {
+          employeeId,
+          category: "note",
+          eventType: "manual_note",
+          title: noteTitle.trim(),
+          summary: noteBody.trim() || undefined,
+          visibility: noteVisibility,
+        },
+      });
+      toast.success("Note added to the record");
+      setNoteOpen(false);
+      setNoteTitle("");
+      setNoteBody("");
+      await qc.invalidateQueries({ queryKey: ["employee-timeline", employeeId] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add the note");
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  // W5 P3 · logEventAccess and accessLogSummary both had zero callers, so the
+  // event_access_log table this page already READS from was never being
+  // WRITTEN to by the very page that opens an employee's record. Viewing
+  // someone's employment history is exactly the access an audit trail exists to
+  // capture, and it was the one access nobody recorded.
+  //
+  // Fire-and-forget: an audit write must never be the reason a record fails to
+  // open, the same rule clockIn follows for geofence_audit_log.
+  useEffect(() => {
+    void logAccess({
+      data: { resourceType: "employee_timeline", employeeId, action: "view" },
+    }).catch(() => {});
+  }, [employeeId, logAccess]);
+
+  const { data: auditSummary } = useQuery({
+    queryKey: ["employee-audit-summary", employeeId],
+    queryFn: () => fetchAuditSummary({ data: { employeeId } }),
+    enabled: view === "audit",
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["employee-timeline", employeeId, filter],
@@ -118,6 +206,12 @@ function EmployeeRecordPage() {
                 {cat.replace("_", " ")} · {count}
               </Badge>
             ))}
+            {auditSummary && (
+              <Badge variant="outline" className="ml-auto font-normal">
+                {auditSummary.total} view{auditSummary.total === 1 ? "" : "s"} of this record
+                {auditSummary.confidential > 0 && ` · ${auditSummary.confidential} confidential`}
+              </Badge>
+            )}
           </CardContent>
         </Card>
 
@@ -136,7 +230,65 @@ function EmployeeRecordPage() {
           >
             Access audit
           </Button>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={() => setNoteOpen(true)}>
+            <Plus className="mr-1 h-4 w-4" /> Add note
+          </Button>
         </div>
+
+        <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add a note to this record</DialogTitle>
+              <DialogDescription>
+                Recorded permanently against the employee&rsquo;s timeline, attributed to you.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Title</Label>
+                <Input
+                  value={noteTitle}
+                  onChange={(e) => setNoteTitle(e.target.value)}
+                  placeholder="e.g. Agreed revised start time"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Detail</Label>
+                <Textarea
+                  rows={4}
+                  value={noteBody}
+                  onChange={(e) => setNoteBody(e.target.value)}
+                  placeholder="What was discussed or decided."
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Who can see this</Label>
+                <Select
+                  value={noteVisibility}
+                  onValueChange={(v) => setNoteVisibility(v as typeof noteVisibility)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="employee">Employee and above</SelectItem>
+                    <SelectItem value="manager">Manager and above</SelectItem>
+                    <SelectItem value="hr">HR and admins</SelectItem>
+                    <SelectItem value="confidential">Confidential</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setNoteOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveNote} disabled={!noteTitle.trim() || savingNote}>
+                {savingNote ? "Saving…" : "Add note"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {view === "audit" ? (
           <Card>
