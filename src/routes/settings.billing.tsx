@@ -17,6 +17,7 @@ import {
   cancelMyPlan,
   resumeMyPlan,
 } from "@/lib/billing.functions";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/settings/billing")({
   head: () => ({
@@ -25,7 +26,11 @@ export const Route = createFileRoute("/settings/billing")({
       { name: "description", content: "Manage your hrppl plan, billing period, and payment history." },
     ],
   }),
-  component: BillingPage,
+  component: () => (
+    <AdminGate feature="settings.billing">
+      <BillingPage />
+    </AdminGate>
+  ),
 });
 
 type Plan = {

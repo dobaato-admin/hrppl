@@ -38,6 +38,7 @@ import { TimeEntryAllocationDialog } from "@/components/timesheets/TimeEntryAllo
 import { listMyTimesheets, submitMyTimesheet } from "@/lib/timesheet-workflow.functions";
 import { toast } from "sonner";
 import { Trash2, Layers, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { AdminGate } from "@/components/AdminGate";
 
 function startOfWeek(d: Date) {
   const dt = new Date(d);
@@ -78,7 +79,11 @@ function statusBadge(s: string) {
 
 export const Route = createFileRoute("/practice/time")({
   head: () => ({ meta: [{ title: "Time entries — WorldPay HRMS" }] }),
-  component: TimePage,
+  component: () => (
+    <AdminGate feature="practice.console">
+      <TimePage />
+    </AdminGate>
+  ),
 });
 
 function TimePage() {

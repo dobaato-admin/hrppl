@@ -46,10 +46,15 @@ import {
 } from "@/lib/hr-extras.functions";
 import { CURRENCIES } from "@/lib/currencies";
 import { useMyTenantId } from "@/hooks/use-tenant";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/pay-rates")({
   head: () => ({ meta: [{ title: "Pay rates — hrppl" }] }),
-  component: PayRatesPage,
+  component: () => (
+    <AdminGate feature="org.payRates">
+      <PayRatesPage />
+    </AdminGate>
+  ),
 });
 
 function PayRatesPage() {

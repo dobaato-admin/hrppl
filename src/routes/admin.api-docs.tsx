@@ -5,10 +5,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/admin/api-docs")({
   head: () => ({ meta: [{ title: "API reference — hrppl" }] }),
-  component: ApiDocsPage,
+  component: () => (
+    <AdminGate feature="platform.admin">
+      <ApiDocsPage />
+    </AdminGate>
+  ),
 });
 
 function ApiDocsPage() {

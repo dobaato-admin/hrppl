@@ -45,10 +45,15 @@ import {
   EXPENSE_CATEGORY_PRESETS,
   type ExpenseCategoryPreset,
 } from "@/lib/expense-category-presets";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/expenses")({
   head: () => ({ meta: [{ title: "Expenses — hrppl" }] }),
-  component: OrgExpensesPage,
+  component: () => (
+    <AdminGate feature="org.expenses">
+      <OrgExpensesPage />
+    </AdminGate>
+  ),
 });
 
 const STATUS_TONE: Record<string, string> = {

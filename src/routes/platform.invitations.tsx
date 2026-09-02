@@ -25,10 +25,15 @@ import {
   resendOrgTrialInvitation,
 } from "@/lib/super-invitations.functions";
 import { toast } from "sonner";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/platform/invitations")({
   head: () => ({ meta: [{ title: "Org trial invitations — Platform" }] }),
-  component: PlatformInvitationsPage,
+  component: () => (
+    <AdminGate feature="platform.admin">
+      <PlatformInvitationsPage />
+    </AdminGate>
+  ),
 });
 
 const STATUS_TONE: Record<string, string> = {

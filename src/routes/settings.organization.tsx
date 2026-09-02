@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getOrgSettings, updateOrgSettings } from "@/lib/org-settings.functions";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/settings/organization")({
   head: () => ({
@@ -20,7 +21,11 @@ export const Route = createFileRoute("/settings/organization")({
       { name: "description", content: "Configure your organization's country, currency, and payroll defaults." },
     ],
   }),
-  component: OrgSettingsPage,
+  component: () => (
+    <AdminGate feature="settings.organization">
+      <OrgSettingsPage />
+    </AdminGate>
+  ),
 });
 
 function OrgSettingsPage() {

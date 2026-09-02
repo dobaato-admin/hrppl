@@ -38,10 +38,15 @@ import {
   rotateWebhookSecret,
 } from "@/lib/blog.functions";
 import { SuperAdminGuard } from "@/components/SuperAdminGuard";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/admin/blog-integrations")({
   head: () => ({ meta: [{ title: "Blog API & Webhooks — hrppl" }] }),
-  component: BlogIntegrationsPage,
+  component: () => (
+    <AdminGate feature="platform.admin">
+      <BlogIntegrationsPage />
+    </AdminGate>
+  ),
 });
 
 function BlogIntegrationsPage() {

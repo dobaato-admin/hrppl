@@ -42,10 +42,15 @@ import {
   listCategories,
 } from "@/lib/blog.functions";
 import { SuperAdminGuard } from "@/components/SuperAdminGuard";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/admin/blog")({
   head: () => ({ meta: [{ title: "Blog CMS — hrppl" }] }),
-  component: BlogAdmin,
+  component: () => (
+    <AdminGate feature="platform.admin">
+      <BlogAdmin />
+    </AdminGate>
+  ),
 });
 
 type PostForm = {

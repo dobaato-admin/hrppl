@@ -18,10 +18,15 @@ import { listClients, listInvoices, upsertInvoice, markInvoicePaid, getInvoice }
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
 import { toast } from "sonner";
 import { Check, Plus, Trash2, Download } from "lucide-react";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/practice/invoices")({
   head: () => ({ meta: [{ title: "Invoices — WorldPay HRMS" }] }),
-  component: InvoicesPage,
+  component: () => (
+    <AdminGate feature="practice.console">
+      <InvoicesPage />
+    </AdminGate>
+  ),
 });
 
 const STATUS_TONE: Record<string, string> = {

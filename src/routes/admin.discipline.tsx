@@ -76,10 +76,15 @@ import {
   deleteGrievanceAttachment,
   listHrUsers,
 } from "@/lib/discipline.functions";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/admin/discipline")({
   head: () => ({ meta: [{ title: "Discipline & grievances — hrppl" }] }),
-  component: DisciplinePage,
+  component: () => (
+    <AdminGate feature="org.discipline">
+      <DisciplinePage />
+    </AdminGate>
+  ),
 });
 
 const CATEGORIES = [

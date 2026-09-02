@@ -12,10 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { listClients, listProjects, upsertProject } from "@/lib/practice.functions";
 import { toast } from "sonner";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/practice/projects")({
   head: () => ({ meta: [{ title: "Projects — WorldPay HRMS" }] }),
-  component: ProjectsPage,
+  component: () => (
+    <AdminGate feature="practice.console">
+      <ProjectsPage />
+    </AdminGate>
+  ),
 });
 
 function ProjectsPage() {

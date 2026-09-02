@@ -40,12 +40,17 @@ import {
 } from "@/lib/security-findings.functions";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
+import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/admin/security")({
   head: () => ({
     meta: [{ title: "Security Findings — hrppl" }, { name: "robots", content: "noindex,nofollow" }],
   }),
-  component: SecurityFindingsPage,
+  component: () => (
+    <AdminGate feature="platform.admin">
+      <SecurityFindingsPage />
+    </AdminGate>
+  ),
 });
 
 type Finding = {
