@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/use-auth";
@@ -34,6 +35,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   listSecurityFindings,
   updateSecurityFindingStatus,
+  recordSecurityFinding,
+  countOpenHighSeverityFindings,
 } from "@/lib/security-findings.functions";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
@@ -160,6 +163,56 @@ function SecurityFindingsPage() {
     }
   }
 
+  // W5 P3 · Both had zero callers. countOpenHighSeverityFindings is the one
+  // number a security page should lead with, and recordSecurityFinding meant
+  // findings could only ever arrive from an automated scan — anything spotted
+  // by a person (a pen-test result, a report from a customer) had no way in.
+  const highCountFn = useServerFn(countOpenHighSeverityFindings);
+  const { data: highCount } = useQuery({
+    queryKey: ["security-high-count"],
+    queryFn: () => highCountFn(),
+    staleTime: 60_000,
+  });
+
+  const recordFn = useServerFn(recordSecurityFinding);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manual, setManual] = useState({
+    scanner_name: "manual",
+    internal_id: "",
+    title: "",
+    severity: "warn" as "error" | "warn" | "info",
+    description: "",
+  });
+
+  async function saveManual() {
+    if (!manual.title.trim() || !manual.internal_id.trim()) return;
+    try {
+      await recordFn({
+        data: {
+          scanner_name: manual.scanner_name.trim() || "manual",
+          internal_id: manual.internal_id.trim(),
+          title: manual.title.trim(),
+          severity: manual.severity,
+          description: manual.description.trim() || undefined,
+          status: "open",
+        },
+      });
+      const r = await list();
+      setRows((r.findings ?? []) as Finding[]);
+      toast.success("Finding recorded");
+      setManualOpen(false);
+      setManual({
+        scanner_name: "manual",
+        internal_id: "",
+        title: "",
+        severity: "warn",
+        description: "",
+      });
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not record the finding");
+    }
+  }
+
   if (!rolesLoaded || loading) {
     return <main className="p-6 text-muted-foreground">Loading security findings…</main>;
   }
@@ -172,7 +225,12 @@ function SecurityFindingsPage() {
     <AppShell>
       <main className="container mx-auto max-w-7xl space-y-6 p-6">
         <header className="space-y-2">
-          <h1 className="text-3xl font-semibold tracking-tight">Security findings</h1>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight">Security findings</h1>
+            <Button size="sm" variant="outline" onClick={() => setManualOpen(true)}>
+              Record a finding
+            </Button>
+          </div>
           <p className="text-sm text-muted-foreground">
             Audit log of every scan finding, its current status, and the exact remediation applied.
             Findings are seeded from each security scan and curated here by super admins.
@@ -180,10 +238,18 @@ function SecurityFindingsPage() {
         </header>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Card>
+          <Card
+            className={
+              highCount && highCount.open_high_critical > 0 ? "border-destructive" : undefined
+            }
+          >
             <CardHeader className="pb-2">
-              <CardDescription>Open</CardDescription>
-              <CardTitle className="text-2xl">{counts.open}</CardTitle>
+              <CardDescription>Open · high severity</CardDescription>
+              <CardTitle
+                className={`text-2xl ${highCount && highCount.open_high_critical > 0 ? "text-destructive" : ""}`}
+              >
+                {highCount?.open_high_critical ?? counts.open}
+              </CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -282,6 +348,84 @@ function SecurityFindingsPage() {
             </Table>
           </CardContent>
         </Card>
+
+        <Dialog open={manualOpen} onOpenChange={setManualOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Record a finding</DialogTitle>
+              <DialogDescription>
+                For anything a scanner did not produce — a pen-test result, a report from a
+                customer, something spotted in review.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Source</label>
+                  <Input
+                    value={manual.scanner_name}
+                    onChange={(e) => setManual((m) => ({ ...m, scanner_name: e.target.value }))}
+                    placeholder="manual, pentest, customer-report…"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Reference</label>
+                  <Input
+                    value={manual.internal_id}
+                    onChange={(e) => setManual((m) => ({ ...m, internal_id: e.target.value }))}
+                    placeholder="Unique id for this finding"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Title</label>
+                <Input
+                  value={manual.title}
+                  onChange={(e) => setManual((m) => ({ ...m, title: e.target.value }))}
+                  placeholder="Short description of the issue"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Severity</label>
+                <Select
+                  value={manual.severity}
+                  onValueChange={(v) =>
+                    setManual((m) => ({ ...m, severity: v as typeof m.severity }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="error">Error</SelectItem>
+                    <SelectItem value="warn">Warning</SelectItem>
+                    <SelectItem value="info">Info</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Description</label>
+                <Textarea
+                  rows={4}
+                  value={manual.description}
+                  onChange={(e) => setManual((m) => ({ ...m, description: e.target.value }))}
+                  placeholder="What is wrong, and how it was found."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setManualOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={saveManual}
+                disabled={!manual.title.trim() || !manual.internal_id.trim()}
+              >
+                Record
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
           <DialogContent className="max-w-2xl">

@@ -10,9 +10,28 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
 import {
   listVariations,
@@ -20,6 +39,7 @@ import {
   approveVariation,
   rejectVariation,
   applyVariation,
+  listVariationAudit,
 } from "@/lib/employment-variations.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -93,7 +113,6 @@ function Page() {
     rejected: allRows.filter((r) => r.status === "rejected").length,
   };
 
-
   const [open, setOpen] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [type, setType] = useState<(typeof TYPES)[number]>("transfer");
@@ -147,6 +166,13 @@ function Page() {
   });
 
   const [rejectFor, setRejectFor] = useState<string | null>(null);
+  const [auditFor, setAuditFor] = useState<string | null>(null);
+  const auditFn = useServerFn(listVariationAudit);
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ["variation-audit", auditFor],
+    queryFn: () => auditFn({ data: { variation_id: auditFor! } }),
+    enabled: !!auditFor,
+  });
   const [rejectReason, setRejectReason] = useState("");
 
   const approve = useMutation({
@@ -175,13 +201,36 @@ function Page() {
   });
 
   return (
-    <AppShell title="Employment variations" subtitle="Promotions, transfers, pay and contract changes">
+    <AppShell
+      title="Employment variations"
+      subtitle="Promotions, transfers, pay and contract changes"
+    >
       <div className="p-4 space-y-4">
         <div className="grid gap-3 sm:grid-cols-4">
-          <StatTile label="Pending approval" value={counts.pending} accent="text-amber-600" onClick={() => setStatus("pending_approval")} />
-          <StatTile label="Approved" value={counts.approved} accent="text-emerald-600" onClick={() => setStatus("approved")} />
-          <StatTile label="Applied" value={counts.applied} accent="text-primary" onClick={() => setStatus("applied")} />
-          <StatTile label="Rejected" value={counts.rejected} accent="text-destructive" onClick={() => setStatus("rejected")} />
+          <StatTile
+            label="Pending approval"
+            value={counts.pending}
+            accent="text-amber-600"
+            onClick={() => setStatus("pending_approval")}
+          />
+          <StatTile
+            label="Approved"
+            value={counts.approved}
+            accent="text-emerald-600"
+            onClick={() => setStatus("approved")}
+          />
+          <StatTile
+            label="Applied"
+            value={counts.applied}
+            accent="text-primary"
+            onClick={() => setStatus("applied")}
+          />
+          <StatTile
+            label="Rejected"
+            value={counts.rejected}
+            accent="text-destructive"
+            onClick={() => setStatus("rejected")}
+          />
         </div>
 
         <Card>
@@ -190,7 +239,9 @@ function Page() {
               <CardTitle className="text-base">All variations</CardTitle>
               <div className="flex items-center gap-2">
                 <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All</SelectItem>
                     <SelectItem value="draft">Draft</SelectItem>
@@ -216,65 +267,94 @@ function Page() {
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Effective</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Proposed</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRows.map((r: any) => (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        {r.employee?.first_name} {r.employee?.last_name}
-                      </TableCell>
-                      <TableCell className="text-xs capitalize">{r.variation_type.replace("_", " ")}</TableCell>
-                      <TableCell className="text-xs">{r.effective_date}</TableCell>
-                      <TableCell>
-                        <Badge variant={(STATUS_COLOR[r.status] as any) ?? "outline"}>
-                          {r.status.replace("_", " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs max-w-xs">
-                        <ProposedChips proposed={r.proposed_changes} />
-                      </TableCell>
-                      <TableCell className="text-right space-x-1">
-                        {r.status === "pending_approval" && (
-                          <>
-                            <Button size="sm" variant="default" onClick={() => approve.mutate(r.id)}>
-                              Approve
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => setRejectFor(r.id)}>
-                              Reject
-                            </Button>
-                          </>
-                        )}
-                        {r.status === "approved" && (
-                          <Button size="sm" onClick={() => apply.mutate(r.id)}>Apply</Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredRows.length === 0 && (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-6">
-                        {allRows.length === 0 ? "No variations yet." : "No matches for that search."}
-                      </TableCell>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Effective</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Proposed</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRows.map((r: any) => (
+                      <TableRow key={r.id}>
+                        <TableCell>
+                          {r.employee?.first_name} {r.employee?.last_name}
+                        </TableCell>
+                        <TableCell className="text-xs capitalize">
+                          {r.variation_type.replace("_", " ")}
+                        </TableCell>
+                        <TableCell className="text-xs">{r.effective_date}</TableCell>
+                        <TableCell>
+                          <Badge variant={(STATUS_COLOR[r.status] as any) ?? "outline"}>
+                            {r.status.replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs max-w-xs">
+                          <ProposedChips proposed={r.proposed_changes} />
+                        </TableCell>
+                        <TableCell className="text-right space-x-1">
+                          {/* W5 P3 · The page writes an approvals log on every
+                            submit, approve, reject and apply, and had no way to
+                            read it back. On a record that changes someone's pay
+                            or reporting line, "who decided this, and when" is
+                            the question the log exists to answer. */}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setAuditFor(r.id)}
+                            title="Who decided this, and when"
+                          >
+                            History
+                          </Button>
+                          {r.status === "pending_approval" && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => approve.mutate(r.id)}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRejectFor(r.id)}
+                              >
+                                Reject
+                              </Button>
+                            </>
+                          )}
+                          {r.status === "approved" && (
+                            <Button size="sm" onClick={() => apply.mutate(r.id)}>
+                              Apply
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredRows.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className="text-center text-muted-foreground text-sm py-6"
+                        >
+                          {allRows.length === 0
+                            ? "No variations yet."
+                            : "No matches for that search."}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
-
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
@@ -285,11 +365,14 @@ function Page() {
             <div>
               <Label>Employee</Label>
               <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger><SelectValue placeholder="Pick employee" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick employee" />
+                </SelectTrigger>
                 <SelectContent>
                   {employees.map((e) => (
                     <SelectItem key={e.id} value={e.id}>
-                      {e.first_name} {e.last_name} {e.employee_number ? `(#${e.employee_number})` : ""}
+                      {e.first_name} {e.last_name}{" "}
+                      {e.employee_number ? `(#${e.employee_number})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -299,15 +382,25 @@ function Page() {
               <div>
                 <Label>Type</Label>
                 <Select value={type} onValueChange={(v) => setType(v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {TYPES.map((t) => <SelectItem key={t} value={t} className="capitalize">{t.replace("_", " ")}</SelectItem>)}
+                    {TYPES.map((t) => (
+                      <SelectItem key={t} value={t} className="capitalize">
+                        {t.replace("_", " ")}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Effective date</Label>
-                <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+                <Input
+                  type="date"
+                  value={effectiveDate}
+                  onChange={(e) => setEffectiveDate(e.target.value)}
+                />
               </div>
             </div>
             <div>
@@ -328,9 +421,47 @@ function Page() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={() => create.mutate()} disabled={!employeeId || create.isPending}>
               {create.isPending ? "Submitting…" : "Submit for approval"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!auditFor} onOpenChange={(o) => !o && setAuditFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Decision history</DialogTitle>
+          </DialogHeader>
+          {auditLoading ? (
+            <div className="py-6 text-sm text-muted-foreground">Loading…</div>
+          ) : (auditData?.entries ?? []).length === 0 ? (
+            <div className="py-6 text-sm text-muted-foreground">
+              Nothing recorded against this variation yet.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {(auditData?.entries ?? []).map((e: any) => (
+                <li key={e.id} className="flex items-start justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium capitalize">
+                      {String(e.action).replace("_", " ")}
+                    </div>
+                    {e.comment && <div className="text-xs text-muted-foreground">{e.comment}</div>}
+                  </div>
+                  <div className="shrink-0 text-xs text-muted-foreground">
+                    {e.created_at ? new Date(e.created_at).toLocaleString() : "—"}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAuditFor(null)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -347,8 +478,14 @@ function Page() {
             onChange={(e) => setRejectReason(e.target.value)}
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectFor(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => reject.mutate()} disabled={rejectReason.length < 3}>
+            <Button variant="outline" onClick={() => setRejectFor(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => reject.mutate()}
+              disabled={rejectReason.length < 3}
+            >
               Reject
             </Button>
           </DialogFooter>
@@ -359,8 +496,16 @@ function Page() {
 }
 
 function StatTile({
-  label, value, accent, onClick,
-}: { label: string; value: number; accent?: string; onClick?: () => void }) {
+  label,
+  value,
+  accent,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  accent?: string;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
@@ -377,7 +522,9 @@ function ProposedChips({ proposed }: { proposed: any }) {
   if (!proposed || typeof proposed !== "object") {
     return <span className="text-muted-foreground">—</span>;
   }
-  const entries = Object.entries(proposed).filter(([, v]) => v !== null && v !== "" && v !== undefined);
+  const entries = Object.entries(proposed).filter(
+    ([, v]) => v !== null && v !== "" && v !== undefined,
+  );
   if (entries.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
@@ -390,4 +537,3 @@ function ProposedChips({ proposed }: { proposed: any }) {
     </div>
   );
 }
-

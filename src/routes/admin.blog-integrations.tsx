@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -34,6 +35,7 @@ import {
   listWebhooks,
   upsertWebhook,
   deleteWebhook,
+  rotateWebhookSecret,
 } from "@/lib/blog.functions";
 import { SuperAdminGuard } from "@/components/SuperAdminGuard";
 
@@ -54,6 +56,24 @@ function BlogIntegrationsPage() {
   const listHooksFn = useServerFn(listWebhooks);
   const saveHookFn = useServerFn(upsertWebhook);
   const delHookFn = useServerFn(deleteWebhook);
+  const rotateHookFn = useServerFn(rotateWebhookSecret);
+
+  // W5 P3 · rotateWebhookSecret had no caller, so a leaked signing secret could
+  // only be dealt with by deleting the webhook and recreating it elsewhere —
+  // which changes its id and silently breaks whatever consumes it. The secret
+  // is returned once and never again, so it is surfaced in a dialog rather
+  // than a toast that can be dismissed before it is copied.
+  const [rotated, setRotated] = useState<{ name: string; secret: string } | null>(null);
+
+  async function rotateHook(id: string, name: string) {
+    try {
+      const res = await rotateHookFn({ data: { id } });
+      setRotated({ name, secret: res.secret });
+      qc.invalidateQueries({ queryKey: ["blog-webhooks"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not rotate the secret");
+    }
+  }
 
   const [newKeyName, setNewKeyName] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
@@ -249,6 +269,33 @@ function BlogIntegrationsPage() {
           </CardContent>
         </Card>
 
+        <Dialog open={!!rotated} onOpenChange={(o) => !o && setRotated(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>New signing secret for {rotated?.name}</DialogTitle>
+              <DialogDescription>
+                Copy this now — it is shown once and cannot be retrieved again. The previous secret
+                stopped working the moment this was issued.
+              </DialogDescription>
+            </DialogHeader>
+            <code className="block break-all rounded-md bg-muted p-3 font-mono text-xs">
+              {rotated?.secret}
+            </code>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (rotated) navigator.clipboard?.writeText(rotated.secret);
+                  toast.success("Copied");
+                }}
+              >
+                Copy
+              </Button>
+              <Button onClick={() => setRotated(null)}>Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <Card>
           <CardHeader className="flex flex-row items-start justify-between">
             <div>
@@ -304,6 +351,14 @@ function BlogIntegrationsPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => rotateHook(h.id, h.name)}
+                          title="Issue a new signing secret"
+                        >
+                          Rotate secret
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => delHook(h.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
