@@ -13,6 +13,7 @@
  *   - other     — throws "not implemented" until a real adapter lands.
  */
 import { createServerFn } from "@tanstack/react-start";
+import { requireTenantId } from "@/lib/tenant-scope";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 
@@ -44,10 +45,7 @@ export const upsertSuperFund = createServerFn({ method: "POST" })
   .inputValidator((d) => FundInput.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: prof } = await supabase
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    const tenant_id = (prof as any)?.tenant_id;
-    if (!tenant_id) throw new Error("No tenant");
+    const tenant_id = await requireTenantId(supabase, userId);
     const row = { ...data, tenant_id };
     const q = data.id
       ? supabase.from("super_funds").update(row).eq("id", data.id).select("*").maybeSingle()
@@ -61,8 +59,7 @@ export const listSuperFunds = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase } = context;
-    const { data, error } = await supabase
-      .from("super_funds").select("*").order("name");
+    const { data, error } = await supabase.from("super_funds").select("*").order("name");
     if (error) throw new Error(error.message);
     return { funds: data ?? [] };
   });
@@ -81,13 +78,21 @@ export const setEmployeeSuperChoice = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     const { data: emp } = await supabase
-      .from("employees").select("tenant_id").eq("id", data.employee_id).maybeSingle();
+      .from("employees")
+      .select("tenant_id")
+      .eq("id", data.employee_id)
+      .maybeSingle();
     const tenant_id = (emp as any)?.tenant_id;
     if (!tenant_id) throw new Error("Employee not found");
     const { data: row, error } = await supabase
       .from("employee_super_choices")
-      .insert({ ...data, tenant_id, effective_from: data.effective_from ?? new Date().toISOString().slice(0, 10) })
-      .select("*").maybeSingle();
+      .insert({
+        ...data,
+        tenant_id,
+        effective_from: data.effective_from ?? new Date().toISOString().slice(0, 10),
+      })
+      .select("*")
+      .maybeSingle();
     if (error) throw new Error(error.message);
     return row;
   });
@@ -104,7 +109,8 @@ export const generateSuperContributionsForRun = createServerFn({ method: "POST" 
     const { data: run } = await supabase
       .from("payroll_runs")
       .select("id,tenant_id,country_code,status,pay_date,period_start,period_end")
-      .eq("id", data.runId).maybeSingle();
+      .eq("id", data.runId)
+      .maybeSingle();
     if (!run) throw new Error("Run not found");
     if ((run as any).country_code !== "AU") throw new Error("Run is not AU");
     if ((run as any).status !== "approved") throw new Error("Run is not approved");
@@ -179,21 +185,21 @@ export const buildSuperBatch = createServerFn({ method: "POST" })
   .inputValidator((d) => BatchInput.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: prof } = await supabase
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    const tenant_id = (prof as any)?.tenant_id;
-    if (!tenant_id) throw new Error("No tenant");
+    const tenant_id = await requireTenantId(supabase, userId);
 
     // Tenant settings for clearing-house gateway.
     const { data: settings } = await supabase
       .from("tenant_payroll_settings")
       .select("stp_gateway,stp_gateway_config")
-      .eq("tenant_id", tenant_id).maybeSingle();
+      .eq("tenant_id", tenant_id)
+      .maybeSingle();
     const gateway = ((settings as any)?.stp_gateway as string) ?? "manual";
 
     let q = supabase
       .from("super_contributions")
-      .select("id,amount,pay_date,payment_due_date,super_fund_id,employee_id,member_number,contribution_type,ote_base,status")
+      .select(
+        "id,amount,pay_date,payment_due_date,super_fund_id,employee_id,member_number,contribution_type,ote_base,status",
+      )
       .eq("tenant_id", tenant_id)
       .eq("status", "pending")
       .gte("pay_date", data.periodStart)
@@ -204,9 +210,11 @@ export const buildSuperBatch = createServerFn({ method: "POST" })
     if (!contribs || contribs.length === 0) throw new Error("No pending contributions in period");
 
     const total = contribs.reduce((a: number, r: any) => a + Number(r.amount), 0);
-    const dueDate = contribs.reduce((min: string, r: any) =>
-      r.payment_due_date && r.payment_due_date < min ? r.payment_due_date : min,
-      contribs[0].payment_due_date ?? data.periodEnd);
+    const dueDate = contribs.reduce(
+      (min: string, r: any) =>
+        r.payment_due_date && r.payment_due_date < min ? r.payment_due_date : min,
+      contribs[0].payment_due_date ?? data.periodEnd,
+    );
 
     // Build SuperStream-shaped payload (simplified; real adapter expands to SAFF).
     const payload = {
@@ -240,7 +248,8 @@ export const buildSuperBatch = createServerFn({ method: "POST" })
         payload,
         created_by: userId,
       })
-      .select("*").maybeSingle();
+      .select("*")
+      .maybeSingle();
     if (berr) throw new Error(berr.message);
 
     const ids = contribs.map((c: any) => c.id);
@@ -260,14 +269,21 @@ export const submitSuperBatch = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     const { data: batch } = await supabase
-      .from("super_batches").select("*").eq("id", data.batchId).maybeSingle();
+      .from("super_batches")
+      .select("*")
+      .eq("id", data.batchId)
+      .maybeSingle();
     if (!batch) throw new Error("Batch not found");
     if ((batch as any).status !== "draft") throw new Error(`Batch is ${(batch as any).status}`);
 
     const gw = (batch as any).gateway as string;
     let update: Record<string, any>;
     if (gw === "manual") {
-      update = { status: "submitted", submitted_at: new Date().toISOString(), response: { mode: "manual_export" } };
+      update = {
+        status: "submitted",
+        submitted_at: new Date().toISOString(),
+        response: { mode: "manual_export" },
+      };
     } else if (gw === "sandbox") {
       update = {
         status: "submitted",
@@ -280,7 +296,11 @@ export const submitSuperBatch = createServerFn({ method: "POST" })
     }
 
     const { data: updated, error } = await supabase
-      .from("super_batches").update(update as any).eq("id", data.batchId).select("*").maybeSingle();
+      .from("super_batches")
+      .update(update as any)
+      .eq("id", data.batchId)
+      .select("*")
+      .maybeSingle();
     if (error) throw new Error(error.message);
 
     await supabase
@@ -309,7 +329,8 @@ export const markSuperBatchPaid = createServerFn({ method: "POST" })
         response: { paymentReference: data.paymentReference ?? null },
       })
       .eq("id", data.batchId)
-      .select("*").maybeSingle();
+      .select("*")
+      .maybeSingle();
     if (error) throw new Error(error.message);
     await supabase
       .from("super_contributions")
@@ -323,7 +344,10 @@ export const listSuperBatches = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase } = context;
     const { data, error } = await supabase
-      .from("super_batches").select("*").order("period_end", { ascending: false }).limit(200);
+      .from("super_batches")
+      .select("*")
+      .order("period_end", { ascending: false })
+      .limit(200);
     if (error) throw new Error(error.message);
     return { batches: data ?? [] };
   });
