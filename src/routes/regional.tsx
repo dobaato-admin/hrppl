@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,10 +7,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
 
@@ -18,8 +40,21 @@ export const Route = createFileRoute("/regional")({
   component: RegionalPage,
 });
 
-interface Country { code: string; name: string; currency_code: string }
-interface Tenant { id: string; name: string; slug: string; country_code: string; currency_code: string; status: string; contact_email: string; plan: string }
+interface Country {
+  code: string;
+  name: string;
+  currency_code: string;
+}
+interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  country_code: string;
+  currency_code: string;
+  status: string;
+  contact_email: string;
+  plan: string;
+}
 
 function RegionalPage() {
   const { user, roles, loading } = useAuth();
@@ -28,13 +63,25 @@ function RegionalPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [working, setWorking] = useState(false);
 
-  const [form, setForm] = useState({ name: "", slug: "", country_code: "", contact_email: "", plan: "starter" });
+  const [form, setForm] = useState({
+    name: "",
+    slug: "",
+    country_code: "",
+    contact_email: "",
+    plan: "starter",
+  });
 
-  const canAccess = roles.includes("regional_admin") || roles.includes("super_admin");
+  // W5 · Derived from this page's nav feature key rather than a
+  // hand-rolled list, so the sidebar and the page cannot give different
+  // answers to "who may be here".
+  const canAccess = can("regional.console", roles);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
-    else if (!loading && user && !canAccess) { toast.error("Regional Admin access required"); navigate({ to: "/dashboard" }); }
+    else if (!loading && user && !canAccess) {
+      toast.error("Regional Admin access required");
+      navigate({ to: "/dashboard" });
+    }
   }, [loading, user, canAccess, navigate]);
 
   async function refresh() {
@@ -44,7 +91,10 @@ function RegionalPage() {
 
     const cq = roles.includes("super_admin")
       ? supabase.from("countries").select("code,name,currency_code").order("name")
-      : supabase.from("countries").select("code,name,currency_code").in("code", codes.length ? codes : ["__none__"]);
+      : supabase
+          .from("countries")
+          .select("code,name,currency_code")
+          .in("code", codes.length ? codes : ["__none__"]);
 
     const tq = supabase.from("tenants").select("*").order("created_at", { ascending: false });
 
@@ -52,13 +102,18 @@ function RegionalPage() {
     if (c.data) setCountries(c.data as Country[]);
     if (t.data) setTenants(t.data as Tenant[]);
   }
-  useEffect(() => { if (canAccess) refresh(); }, [canAccess, user]);
+  useEffect(() => {
+    if (canAccess) refresh();
+  }, [canAccess, user]);
 
   async function createTenant(e: React.FormEvent) {
     e.preventDefault();
     setWorking(true);
     const country = countries.find((c) => c.code === form.country_code);
-    if (!country) { setWorking(false); return toast.error("Pick a country in your scope"); }
+    if (!country) {
+      setWorking(false);
+      return toast.error("Pick a country in your scope");
+    }
     const { error } = await supabase.from("tenants").insert({
       name: form.name,
       slug: form.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
@@ -77,7 +132,11 @@ function RegionalPage() {
   }
 
   if (loading || !canAccess) {
-    return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
   }
 
   return (
@@ -86,8 +145,16 @@ function RegionalPage() {
       subtitle="Onboard organizations and confirm payments"
       actions={
         <div className="hidden md:flex items-center gap-2">
-          <Link to="/admin/holidays"><Button size="sm" variant="outline">Holidays</Button></Link>
-          <Link to="/admin/overtime-rates"><Button size="sm" variant="outline">Overtime / Penalty</Button></Link>
+          <Link to="/admin/holidays">
+            <Button size="sm" variant="outline">
+              Holidays
+            </Button>
+          </Link>
+          <Link to="/admin/overtime-rates">
+            <Button size="sm" variant="outline">
+              Overtime / Penalty
+            </Button>
+          </Link>
         </div>
       }
     >
@@ -103,29 +170,54 @@ function RegionalPage() {
             <form onSubmit={createTenant} className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>Organization name</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label>URL slug</Label>
-                <Input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} required placeholder="acme-corp" />
+                <Input
+                  value={form.slug}
+                  onChange={(e) => setForm({ ...form, slug: e.target.value })}
+                  required
+                  placeholder="acme-corp"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Country</Label>
-                <Select value={form.country_code} onValueChange={(v) => setForm({ ...form, country_code: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+                <Select
+                  value={form.country_code}
+                  onValueChange={(v) => setForm({ ...form, country_code: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select…" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {countries.map((c) => <SelectItem key={c.code} value={c.code}>{c.name} ({c.currency_code})</SelectItem>)}
+                    {countries.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>
+                        {c.name} ({c.currency_code})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Contact email</Label>
-                <Input type="email" value={form.contact_email} onChange={(e) => setForm({ ...form, contact_email: e.target.value })} required />
+                <Input
+                  type="email"
+                  value={form.contact_email}
+                  onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label>Plan</Label>
                 <Select value={form.plan} onValueChange={(v) => setForm({ ...form, plan: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="starter">Starter</SelectItem>
                     <SelectItem value="growth">Growth</SelectItem>
@@ -134,35 +226,58 @@ function RegionalPage() {
                 </Select>
               </div>
               <div className="flex items-end">
-                <Button type="submit" disabled={working} className="w-full md:w-auto">Create Tenant</Button>
+                <Button type="submit" disabled={working} className="w-full md:w-auto">
+                  Create Tenant
+                </Button>
               </div>
             </form>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Tenants in your scope ({tenants.length})</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Tenants in your scope ({tenants.length})</CardTitle>
+          </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead><TableHead>Country</TableHead>
-                  <TableHead>Plan</TableHead><TableHead>Status</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Country</TableHead>
+                  <TableHead>Plan</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {tenants.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-muted-foreground">No tenants yet.</TableCell></TableRow>
-                ) : tenants.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-medium">{t.name}<div className="text-xs text-muted-foreground">{t.contact_email}</div></TableCell>
-                    <TableCell>{t.country_code} · {t.currency_code}</TableCell>
-                    <TableCell>{t.plan}</TableCell>
-                    <TableCell><Badge variant={t.status === "active" ? "default" : "secondary"}>{t.status}</Badge></TableCell>
-                    <TableCell className="text-right"><ConfirmPaymentDialog tenant={t} onDone={refresh} /></TableCell>
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-muted-foreground">
+                      No tenants yet.
+                    </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  tenants.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="font-medium">
+                        {t.name}
+                        <div className="text-xs text-muted-foreground">{t.contact_email}</div>
+                      </TableCell>
+                      <TableCell>
+                        {t.country_code} · {t.currency_code}
+                      </TableCell>
+                      <TableCell>{t.plan}</TableCell>
+                      <TableCell>
+                        <Badge variant={t.status === "active" ? "default" : "secondary"}>
+                          {t.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <ConfirmPaymentDialog tenant={t} onDone={refresh} />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -196,8 +311,12 @@ function ConfirmPaymentDialog({ tenant, onDone }: { tenant: Tenant; onDone: () =
       confirmed_by: user.id,
       notes,
     });
-    if (insErr) { setBusy(false); return toast.error(insErr.message); }
-    const { error: upErr } = await supabase.from("tenants")
+    if (insErr) {
+      setBusy(false);
+      return toast.error(insErr.message);
+    }
+    const { error: upErr } = await supabase
+      .from("tenants")
       .update({ status: "active", approved_by: user.id, approved_at: new Date().toISOString() })
       .eq("id", tenant.id);
     setBusy(false);
@@ -217,17 +336,49 @@ function ConfirmPaymentDialog({ tenant, onDone }: { tenant: Tenant; onDone: () =
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Confirm payment — {tenant.name}</DialogTitle>
-          <DialogDescription>Manually record bank transfer. Activates pending tenants.</DialogDescription>
+          <DialogDescription>
+            Manually record bank transfer. Activates pending tenants.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2"><Label>Amount ({tenant.currency_code})</Label><Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Bank reference</Label><Input value={ref} onChange={(e) => setRef(e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Period start</Label><Input type="date" value={start} onChange={(e) => setStart(e.target.value)} required /></div>
-            <div className="space-y-2"><Label>Period end</Label><Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} required /></div>
+            <div className="space-y-2">
+              <Label>Amount ({tenant.currency_code})</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Bank reference</Label>
+              <Input value={ref} onChange={(e) => setRef(e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Period start</Label>
+              <Input
+                type="date"
+                value={start}
+                onChange={(e) => setStart(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Period end</Label>
+              <Input type="date" value={end} onChange={(e) => setEnd(e.target.value)} required />
+            </div>
           </div>
-          <div className="space-y-2"><Label>Notes</Label><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></div>
-          <DialogFooter><Button type="submit" disabled={busy}>{busy ? "Saving…" : "Confirm"}</Button></DialogFooter>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Saving…" : "Confirm"}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

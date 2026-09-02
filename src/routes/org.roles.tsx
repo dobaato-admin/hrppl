@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -96,7 +97,10 @@ function OrgRolesPage() {
   const grantFn = useServerFn(grantRole);
   const revokeFn = useServerFn(revokeRole);
   const scopeFn = useServerFn(setBranchScope);
-  const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Derived from this page's nav feature key rather than a
+  // hand-rolled list, so the sidebar and the page cannot give different
+  // answers to "who may be here".
+  const canAccess = can("org.roles", roles);
 
   const [grantOpen, setGrantOpen] = useState(false);
   const [scopeOpen, setScopeOpen] = useState<Member | null>(null);

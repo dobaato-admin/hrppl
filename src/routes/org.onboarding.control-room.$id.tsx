@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -53,11 +54,10 @@ function Page() {
   const { id } = Route.useParams();
   const { roles, loading } = useAuth();
   const navigate = useNavigate();
-  const canAccess =
-    roles.includes("hr") ||
-    roles.includes("org_admin") ||
-    roles.includes("super_admin") ||
-    roles.includes("manager");
+  // W5 · Derived from this page's nav feature key rather than a
+  // hand-rolled list, so the sidebar and the page cannot give different
+  // answers to "who may be here".
+  const canAccess = can("org.onboardingAdmin", roles);
   useEffect(() => {
     if (!loading && !canAccess) navigate({ to: "/dashboard" });
   }, [loading, canAccess, navigate]);

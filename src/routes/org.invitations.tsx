@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -63,7 +64,10 @@ function OrgInvitationsPage() {
   const resendFn = useServerFn(resendInvitation);
   const revokeFn = useServerFn(revokeInvitation);
   const isElevated = roles.includes("org_admin") || roles.includes("super_admin");
-  const canAccess = isElevated || roles.includes("hr") || roles.includes("branch_admin");
+  // W5 · Derived from this page's nav feature key rather than a
+  // hand-rolled list, so the sidebar and the page cannot give different
+  // answers to "who may be here".
+  const canAccess = can("org.invitations", roles);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [departments, setDepartments] = useState<Department[]>([]);

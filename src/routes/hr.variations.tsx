@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { can } from "@/lib/rbac";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -79,8 +80,10 @@ function Page() {
   const { roles, loading } = useAuth();
   const { tenantId } = useMyTenantId();
   const navigate = useNavigate();
-  const canAccess =
-    roles.includes("hr") || roles.includes("org_admin") || roles.includes("super_admin");
+  // W5 · Was a hand-rolled role list that happened to match this page's nav
+  // row. Deriving it from the feature key keeps them matching by construction
+  // rather than by coincidence.
+  const canAccess = can("org.employmentVariations", roles);
   useEffect(() => {
     if (!loading && !canAccess) navigate({ to: "/dashboard" });
   }, [loading, canAccess, navigate]);

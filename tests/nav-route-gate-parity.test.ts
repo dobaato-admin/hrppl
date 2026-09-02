@@ -113,24 +113,72 @@ function routeFileFor(url: string): string | null {
   return null;
 }
 
-/** The allow-set a route file declares, or null if it has no <AdminGate>. */
-function routeGate(file: string): { kind: "named"; name: string } | { kind: "none" } {
+/**
+ * The EFFECTIVE client-side gate for a route, in whatever form it takes.
+ *
+ * W5 · This originally understood only <AdminGate>. That was the hole that let
+ * a real bug through: /org/payroll carries no AdminGate at all — just an inline
+ * `canAccess` and a "Forbidden" render — so the parity check skipped it
+ * entirely, and `finance` saw "Run payroll" in the sidebar and was refused by
+ * the page. Ten more destinations were in the same state, including
+ * /org/white-label, which locked out org_admin, and /org/analytics and
+ * /org/reports, which each refused three roles the nav offered them to.
+ *
+ * A page states who may be here in one of four ways. All four are resolved
+ * here, because the user does not care which one a page happens to use.
+ */
+function routeGate(
+  file: string,
+): { kind: "gate"; roles: Set<AppRole>; how: string } | { kind: "none" } {
   const src = readFileSync(join(routesDir, file), "utf8");
-  const m = src.match(/<AdminGate\s+allow=\{([A-Z_]+)\}/);
-  if (m) return { kind: "named", name: m[1] };
-  const f = src.match(/<AdminGate\s+feature="([^"]+)"/);
-  if (f) return { kind: "named", name: `feature:${f[1]}` };
-  return { kind: "none" };
-}
 
-/** Roles a gate admits. */
-function gateRoles(gate: { kind: "named"; name: string }): Set<AppRole> | null {
-  if (gate.name.startsWith("feature:")) {
-    const feature = gate.name.slice("feature:".length);
-    return new Set(ALL_ROLES.filter((r) => can(feature as never, [r])));
+  const byFeature = src.match(/<AdminGate\s+feature="([^"]+)"/);
+  if (byFeature) {
+    return {
+      kind: "gate",
+      roles: new Set(ALL_ROLES.filter((r) => can(byFeature[1] as never, [r]))),
+      how: `AdminGate feature="${byFeature[1]}"`,
+    };
   }
-  const set = NAMED[gate.name];
-  return set ? new Set(set) : null;
+
+  const byAllow = src.match(/<AdminGate\s+allow=\{([A-Z_]+)\}/);
+  if (byAllow) {
+    const set = NAMED[byAllow[1]];
+    if (set) return { kind: "gate", roles: new Set(set), how: `AdminGate allow={${byAllow[1]}}` };
+  }
+
+  // Inline: a `canX` variable plus a refusal (redirect or a Forbidden render).
+  const gatingVar = src.match(/const (can[A-Z]\w*)\s*=\s*([\s\S]*?);/);
+  const refuses = /navigate\(\{\s*to:\s*"\/dashboard"/.test(src) || /Forbidden/.test(src);
+  if (gatingVar && refuses) {
+    // Inline the `isX` helper booleans these pages define above the gate.
+    let expr = gatingVar[2];
+    for (let i = 0; i < 6; i++) {
+      const helper = expr.match(/\b(is[A-Z]\w*)\b/);
+      if (!helper) break;
+      const decl = src.match(new RegExp("const " + helper[1] + "\\s*=\\s*([^;]*);"));
+      expr = expr.replace(
+        new RegExp("\\b" + helper[1] + "\\b", "g"),
+        decl ? `(${decl[1]})` : "false",
+      );
+    }
+    const viaFeature = expr.match(/can\("([^"]+)"/);
+    if (viaFeature) {
+      return {
+        kind: "gate",
+        roles: new Set(ALL_ROLES.filter((r) => can(viaFeature[1] as never, [r]))),
+        how: `inline ${gatingVar[1]} = can("${viaFeature[1]}")`,
+      };
+    }
+    const listed = [...expr.matchAll(/roles\.includes\((["'`])(\w+)\1\)/g)].map(
+      (m) => m[2] as AppRole,
+    );
+    if (listed.length) {
+      return { kind: "gate", roles: new Set(listed), how: `inline ${gatingVar[1]} (hand-rolled)` };
+    }
+  }
+
+  return { kind: "none" };
 }
 
 type Drift = {
@@ -150,18 +198,16 @@ function findDrift(): Drift[] {
     if (!file || !existsSync(join(routesDir, file))) continue;
 
     const gate = routeGate(file);
-    // No route-level gate is a different finding (the page relies entirely on
-    // server-fn and RLS enforcement); it is not a parity failure.
+    // Genuinely ungated pages lean entirely on server-fn and RLS enforcement.
+    // That is a different finding, not a parity failure.
     if (gate.kind === "none") continue;
-
-    const routeRoles = gateRoles(gate);
-    if (!routeRoles) continue;
+    const routeRoles = gate.roles;
 
     const navRoles = ALL_ROLES.filter((r) => can(d.feature!, [r]));
     const deadFor = navRoles.filter((r) => !routeRoles.has(r));
     const hiddenFrom = [...routeRoles].filter((r) => !navRoles.includes(r));
     if (deadFor.length || hiddenFrom.length) {
-      out.push({ url: d.to, navFeature: d.feature, gate: gate.name, deadFor, hiddenFrom });
+      out.push({ url: d.to, navFeature: d.feature, gate: gate.how, deadFor, hiddenFrom });
     }
   }
   return out;
@@ -211,11 +257,11 @@ describe("the exemption list stays small and justified", () => {
       const file = routeFileFor(url);
       expect(file, `${url} has no route file`).toBeTruthy();
       const gate = routeGate(file!);
-      expect(gate.kind, `${url} has no AdminGate`).toBe("named");
+      expect(gate.kind, `${url} has no AdminGate`).toBe("gate");
       expect(
-        (gate as { name: string }).name.startsWith("feature:"),
-        `${url} is exempt but gates by feature — remove the exemption`,
-      ).toBe(false);
+        (gate as { how: string }).how.includes("allow={"),
+        `${url} is exempt to mirror an RLS policy, so it must still use an explicit allow-set`,
+      ).toBe(true);
     }
   });
 });
@@ -262,6 +308,50 @@ describe("a feature-gated page does not gate itself a second time", () => {
       offenders.length
         ? `These gate twice and disagree with themselves:\n  ${offenders.join("\n  ")}\n` +
             `Derive the page's own check from can(<its AdminGate feature>, roles).`
+        : "",
+    ).toEqual([]);
+  });
+});
+
+describe("the resolver actually sees every gate form", () => {
+  it("resolves the inline-only pages, not just the AdminGate ones", () => {
+    /**
+     * Guard against this test quietly becoming vacuous.
+     *
+     * The original version understood only <AdminGate>, so every page that
+     * gated inline was skipped — and eleven of them were offering the sidebar
+     * a role the page then refused. /org/payroll was the one a person found by
+     * clicking Organization -> Run payroll as `finance` and being told
+     * "Forbidden". If a refactor breaks the inline branch of the resolver,
+     * these go back to being invisible rather than failing.
+     */
+    const inlineOnly = [
+      "org.payroll.tsx",
+      "org.analytics.tsx",
+      "org.white-label.tsx",
+      "org.leave.tsx",
+    ];
+    for (const file of inlineOnly) {
+      const src = readFileSync(join(routesDir, file), "utf8");
+      expect(/<AdminGate/.test(src), `${file} now has an AdminGate — update this list`).toBe(false);
+      const gate = routeGate(file);
+      expect(gate.kind, `${file}: resolver failed to see the inline gate`).toBe("gate");
+      expect((gate as { how: string }).how).toContain("inline");
+    }
+  });
+
+  it("no page gates by a hand-rolled role list", () => {
+    // Every gate must resolve through a feature key or a named policy-mirroring
+    // set. A hand-rolled list is a second opinion about who may be here.
+    const handRolled: string[] = [];
+    for (const file of readdirSync(routesDir).filter((f) => f.endsWith(".tsx"))) {
+      const gate = routeGate(file);
+      if (gate.kind === "gate" && gate.how.includes("hand-rolled")) handRolled.push(file);
+    }
+    expect(
+      handRolled,
+      handRolled.length
+        ? `These decide access with their own role list instead of a feature key:\n  ${handRolled.join("\n  ")}`
         : "",
     ).toEqual([]);
   });
