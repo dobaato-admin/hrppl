@@ -20,13 +20,20 @@ export function validateEvidenceUrl(url: string | null | undefined): void {
   if (!url) return;
   if (url.length > 1000) throw new Error("Evidence URL too long (max 1000 chars).");
   let u: URL;
-  try { u = new URL(url); } catch { throw new Error("Evidence URL is not a valid URL."); }
+  try {
+    u = new URL(url);
+  } catch {
+    throw new Error("Evidence URL is not a valid URL.");
+  }
   if (!/^https?:$/.test(u.protocol)) throw new Error("Evidence URL must use http(s).");
   const path = u.pathname.toLowerCase();
   const looksLikeFile = /\.[a-z0-9]{2,5}$/.test(path);
   if (looksLikeFile) {
     const ok = EVIDENCE_ALLOWED_EXTENSIONS.some((ext) => path.endsWith(ext));
-    if (!ok) throw new Error(`Evidence file type not allowed. Allowed: ${EVIDENCE_ALLOWED_EXTENSIONS.join(", ")}`);
+    if (!ok)
+      throw new Error(
+        `Evidence file type not allowed. Allowed: ${EVIDENCE_ALLOWED_EXTENSIONS.join(", ")}`,
+      );
   }
 }
 
@@ -90,18 +97,47 @@ export async function enforceRateLimit(
  * Until `20260903120000_public_rate_limit.sql` is applied the RPC does not
  * exist, this warns once per call and passes through — correct but inert.
  */
+
+/**
+ * The best available identity for an anonymous caller.
+ *
+ * `getRequestIP({ xForwardedFor: true })` alone is not enough. On a local dev
+ * server there is no proxy header and no meaningful socket address, so it
+ * returns null and the limiter silently does nothing — which is correct
+ * behaviour but makes the whole path untestable outside production, and
+ * "untestable outside production" is how a decorative security control ships.
+ *
+ * So: the forwarded-for chain first (Vercel, and every other reverse proxy),
+ * then the vendor headers, then the raw socket address. Returns null only when
+ * genuinely nothing is available, which is the documented fail-open case.
+ *
+ * Takes the FIRST entry of x-forwarded-for — the original client. The last
+ * entry is the nearest proxy and would bucket every visitor together.
+ */
+async function resolveClientKey(): Promise<string | null> {
+  try {
+    const { getRequestIP, getRequestHeader } = await import("@tanstack/react-start/server");
+    const forwarded = getRequestHeader("x-forwarded-for");
+    if (forwarded) {
+      const first = forwarded.split(",")[0]?.trim();
+      if (first) return first;
+    }
+    for (const h of ["cf-connecting-ip", "x-real-ip", "true-client-ip"]) {
+      const v = getRequestHeader(h);
+      if (v) return v.trim();
+    }
+    return getRequestIP() ?? null;
+  } catch {
+    return null; // not in a request scope (tests, SSR prerender)
+  }
+}
+
 export async function enforcePublicRateLimit(
   bucket: string,
   maxRequests: number,
   windowSeconds: number,
 ): Promise<void> {
-  let clientKey: string | null = null;
-  try {
-    const { getRequestIP } = await import("@tanstack/react-start/server");
-    clientKey = getRequestIP({ xForwardedFor: true }) ?? null;
-  } catch {
-    return; // not in a request scope (tests, SSR prerender)
-  }
+  const clientKey = await resolveClientKey();
   if (!clientKey) return; // nothing to key on — see "fails open" above
 
   try {
