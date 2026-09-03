@@ -16,6 +16,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireTenantId } from "@/lib/tenant-scope";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { assertAuPayroll, assertAuPayrollOrHr } from "@/lib/au-guard";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -46,6 +47,7 @@ export const upsertSuperFund = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const tenant_id = await requireTenantId(supabase, userId);
+    await assertAuPayrollOrHr(supabase, userId, tenant_id);
     const row = { ...data, tenant_id };
     const q = data.id
       ? supabase.from("super_funds").update(row).eq("id", data.id).select("*").maybeSingle()
@@ -58,8 +60,18 @@ export const upsertSuperFund = createServerFn({ method: "POST" })
 export const listSuperFunds = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase } = context;
-    const { data, error } = await supabase.from("super_funds").select("*").order("name");
+    const { supabase, userId } = context;
+    const tenant_id = await requireTenantId(supabase, userId);
+    await assertAuPayrollOrHr(supabase, userId, tenant_id);
+    // The tenant filter is this query's own responsibility, not RLS's:
+    // "super_funds tenant read" also passes for any super_admin with no tenant
+    // predicate at all, so trusting the policy would return every tenant's
+    // funds to that caller. See the Tenant scoping section in CLAUDE.md.
+    const { data, error } = await supabase
+      .from("super_funds")
+      .select("*")
+      .eq("tenant_id", tenant_id)
+      .order("name");
     if (error) throw new Error(error.message);
     return { funds: data ?? [] };
   });
@@ -76,7 +88,7 @@ export const setEmployeeSuperChoice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => ChoiceInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
     const { data: emp } = await supabase
       .from("employees")
       .select("tenant_id")
@@ -84,6 +96,9 @@ export const setEmployeeSuperChoice = createServerFn({ method: "POST" })
       .maybeSingle();
     const tenant_id = (emp as any)?.tenant_id;
     if (!tenant_id) throw new Error("Employee not found");
+    // Derived from the employee, then checked — so a caller cannot nominate a
+    // fund for someone in another tenant by passing that employee's id.
+    await assertAuPayrollOrHr(supabase, userId, tenant_id);
     const { data: row, error } = await supabase
       .from("employee_super_choices")
       .insert({
@@ -104,7 +119,7 @@ export const generateSuperContributionsForRun = createServerFn({ method: "POST" 
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => GenInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
 
     const { data: run } = await supabase
       .from("payroll_runs")
@@ -116,6 +131,7 @@ export const generateSuperContributionsForRun = createServerFn({ method: "POST" 
     if ((run as any).status !== "approved") throw new Error("Run is not approved");
 
     const tenant_id = (run as any).tenant_id;
+    await assertAuPayrollOrHr(supabase, userId, tenant_id);
     const pay_date = (run as any).pay_date as string;
     // Payday Super: payment due within 7 days of pay date (from 1 Jul 2026).
     const payment_due_date = addDays(pay_date, 7);
@@ -186,6 +202,7 @@ export const buildSuperBatch = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const tenant_id = await requireTenantId(supabase, userId);
+    await assertAuPayroll(supabase, userId, tenant_id);
 
     // Tenant settings for clearing-house gateway.
     const { data: settings } = await supabase
@@ -267,13 +284,14 @@ export const submitSuperBatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => SubmitInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
     const { data: batch } = await supabase
       .from("super_batches")
       .select("*")
       .eq("id", data.batchId)
       .maybeSingle();
     if (!batch) throw new Error("Batch not found");
+    await assertAuPayroll(supabase, userId, (batch as any).tenant_id);
     if ((batch as any).status !== "draft") throw new Error(`Batch is ${(batch as any).status}`);
 
     const gw = (batch as any).gateway as string;
@@ -320,7 +338,23 @@ export const markSuperBatchPaid = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => MarkPaidInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
+    const { data: existing } = await supabase
+      .from("super_batches")
+      .select("tenant_id,status")
+      .eq("id", data.batchId)
+      .maybeSingle();
+    if (!existing) throw new Error("Batch not found");
+    await assertAuPayroll(supabase, userId, (existing as any).tenant_id);
+    // A batch has to have been lodged before it can be reconciled as paid.
+    // Without this a draft could be marked paid directly, which would mark its
+    // contributions "paid" while nothing was ever sent to the clearing house —
+    // the one state that makes the SLA sweep report a false all-clear.
+    if ((existing as any).status !== "submitted") {
+      throw new Error(
+        `Batch is ${(existing as any).status}; only a submitted batch can be marked paid`,
+      );
+    }
     const { data: batch, error } = await supabase
       .from("super_batches")
       .update({
@@ -342,10 +376,15 @@ export const markSuperBatchPaid = createServerFn({ method: "POST" })
 export const listSuperBatches = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
+    const tenant_id = await requireTenantId(supabase, userId);
+    await assertAuPayroll(supabase, userId, tenant_id);
+    // Scoped here for the same reason as listSuperFunds: "super_batches tenant
+    // read" passes unconditionally for super_admin.
     const { data, error } = await supabase
       .from("super_batches")
       .select("*")
+      .eq("tenant_id", tenant_id)
       .order("period_end", { ascending: false })
       .limit(200);
     if (error) throw new Error(error.message);

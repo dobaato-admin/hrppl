@@ -13,23 +13,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { createHash } from "crypto";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { assertAuOrgAdmin } from "@/lib/au-guard";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
 
-async function assertAuOrgAdmin(supabase: any, userId: string, tenantId: string) {
-  const { data: isAdmin } = await supabase.rpc("is_org_admin", {
-    _user_id: userId, _tenant_id: tenantId,
-  } as any);
-  if (!isAdmin) throw new Error("Forbidden: org admin required");
-  const { data: tenant } = await supabase.from("tenants")
-    .select("country_code").eq("id", tenantId).maybeSingle();
-  if (!tenant || (tenant as any).country_code !== "AU") {
-    throw new Error("Tenant is not configured for Australia");
-  }
-}
 
 function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");

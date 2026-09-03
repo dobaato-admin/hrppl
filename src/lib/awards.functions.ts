@@ -12,6 +12,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { assertAuOrgAdmin } from "@/lib/au-guard";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -34,12 +35,6 @@ async function assertCatalogueAdmin(supabase: any, userId: string, countryCode: 
   }
 }
 
-async function assertOrgAdmin(supabase: any, userId: string, tenantId: string) {
-  const { data: isAdmin } = await supabase.rpc("is_org_admin", {
-    _user_id: userId, _tenant_id: tenantId,
-  } as any);
-  if (!isAdmin) throw new Error("Forbidden: org admin required");
-}
 
 export const listAwards = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -165,7 +160,7 @@ export const assignEmployeeAward = createServerFn({ method: "POST" })
     notes: z.string().max(2000).optional().nullable(),
   }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertOrgAdmin(context.supabase, context.userId, data.tenantId);
+    await assertAuOrgAdmin(context.supabase, context.userId, data.tenantId);
     const admin = await loadAdmin();
     const { data: row, error } = await admin.from("employee_award_assignments").insert({
       tenant_id: data.tenantId,
