@@ -33,6 +33,12 @@ export type Feature =
   | "org.console"
   | "org.onboardingAdmin"
   | "org.auStpAudit"
+  // Australian compliance (P4). One key per RLS tier — see the MATRIX note.
+  | "org.auSuperFunds"
+  | "org.auSuperBatches"
+  | "org.auStpEvents"
+  | "org.auAwards"
+  | "org.auUnderpayment"
   | "org.setup"
   | "org.branches"
   | "org.whiteLabel"
@@ -141,6 +147,45 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   // branch_admin, hr, finance and manager. Not caught by the parity test
   // because the page gates inline rather than with <AdminGate>.
   "org.auStpAudit": SET("super_admin", "org_admin", "finance"),
+
+  // ── Australian compliance ────────────────────────────────────────────────
+  //
+  // Five keys, not one. The obvious design was a single `org.auCompliance`
+  // admitting super_admin/org_admin/finance for the whole subgroup — and it
+  // would have been wrong in both directions at once, because the DATABASE
+  // does not treat this domain uniformly:
+  //
+  //   super_funds / employee_super_choices   org_admin | finance | hr
+  //   super_batches                          org_admin | finance
+  //   stp_pay_events / finalisation events    org_admin
+  //   payroll_underpayment_findings          org_admin | hr
+  //   employee_award_assignments             org_admin
+  //
+  // One key would have locked finance out of Payday Super (which RLS grants
+  // them) while offering finance STP lodgement (which RLS refuses). That is
+  // the nav-vs-RLS drift axis — the one that fails latest and hardest, because
+  // the page loads and Postgres refuses the write. Each key below mirrors the
+  // policy on the table its page writes, and the matching server guard in
+  // src/lib/au-guard.ts mirrors the same one.
+  //
+  // The subgroup also carries `country: ["AU"]` in nav-tree.ts. Both must pass:
+  // an org_admin in the Nepali tenant sees none of this.
+
+  /** Fund register and member choices. Mirrors `super_funds admin write`. */
+  "org.auSuperFunds": SET("super_admin", "org_admin", "finance", "hr"),
+  /** Remittance batches — moving money. Mirrors `super_batches finance write`. */
+  "org.auSuperBatches": SET("super_admin", "org_admin", "finance"),
+  /**
+   * STP pay events and EOFY finalisation. Narrowest in the domain, on purpose:
+   * lodging is a legal declaration by the employer, and `stp_pay_events
+   * org_admin write` admits nobody else. Finance is deliberately absent.
+   */
+  "org.auStpEvents": SET("super_admin", "org_admin"),
+  /** Award assignment. Mirrors `eaa org admin manage`; hr reads but cannot assign. */
+  "org.auAwards": SET("super_admin", "org_admin"),
+  /** Underpayment remediation. Mirrors "Org admins and HR can manage ...". */
+  "org.auUnderpayment": SET("super_admin", "org_admin", "hr"),
+
   "org.setup": SET("super_admin", "org_admin"),
   "org.branches": SET("super_admin", "org_admin"),
   "org.whiteLabel": SET("super_admin", "org_admin"),

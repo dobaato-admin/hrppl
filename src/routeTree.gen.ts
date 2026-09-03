@@ -107,11 +107,15 @@ import { Route as DownloadsSplatRouteImport } from './routes/downloads.$'
 import { Route as CareersSlugRouteImport } from './routes/careers.$slug'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AdminWfhRouteImport } from './routes/admin.wfh'
+import { Route as AdminUnderpaymentAuditRouteImport } from './routes/admin.underpayment-audit'
 import { Route as AdminTrainingRouteImport } from './routes/admin.training'
 import { Route as AdminToilRouteImport } from './routes/admin.toil'
 import { Route as AdminTemplatesRouteImport } from './routes/admin.templates'
 import { Route as AdminTeamsRouteImport } from './routes/admin.teams'
 import { Route as AdminTeamAssignmentsRouteImport } from './routes/admin.team-assignments'
+import { Route as AdminSuperFundsRouteImport } from './routes/admin.super-funds'
+import { Route as AdminSuperBatchesRouteImport } from './routes/admin.super-batches'
+import { Route as AdminStpEventsRouteImport } from './routes/admin.stp-events'
 import { Route as AdminSecurityFindingsRouteImport } from './routes/admin.security-findings'
 import { Route as AdminSecurityRouteImport } from './routes/admin.security'
 import { Route as AdminReviewTemplatesRouteImport } from './routes/admin.review-templates'
@@ -151,6 +155,7 @@ import { Route as AdminBlogRouteImport } from './routes/admin.blog'
 import { Route as AdminBiometricRouteImport } from './routes/admin.biometric'
 import { Route as AdminBillingOpsRouteImport } from './routes/admin.billing-ops'
 import { Route as AdminBillingRouteImport } from './routes/admin.billing'
+import { Route as AdminAwardsRouteImport } from './routes/admin.awards'
 import { Route as AdminAuditHistoryRouteImport } from './routes/admin.audit-history'
 import { Route as AdminAuStpAuditRouteImport } from './routes/admin.au-stp-audit'
 import { Route as AdminAssetsRouteImport } from './routes/admin.assets'
@@ -696,6 +701,11 @@ const AdminWfhRoute = AdminWfhRouteImport.update({
   path: '/wfh',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminUnderpaymentAuditRoute = AdminUnderpaymentAuditRouteImport.update({
+  id: '/underpayment-audit',
+  path: '/underpayment-audit',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminTrainingRoute = AdminTrainingRouteImport.update({
   id: '/training',
   path: '/training',
@@ -719,6 +729,21 @@ const AdminTeamsRoute = AdminTeamsRouteImport.update({
 const AdminTeamAssignmentsRoute = AdminTeamAssignmentsRouteImport.update({
   id: '/team-assignments',
   path: '/team-assignments',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSuperFundsRoute = AdminSuperFundsRouteImport.update({
+  id: '/super-funds',
+  path: '/super-funds',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSuperBatchesRoute = AdminSuperBatchesRouteImport.update({
+  id: '/super-batches',
+  path: '/super-batches',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminStpEventsRoute = AdminStpEventsRouteImport.update({
+  id: '/stp-events',
+  path: '/stp-events',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminSecurityFindingsRoute = AdminSecurityFindingsRouteImport.update({
@@ -915,6 +940,11 @@ const AdminBillingOpsRoute = AdminBillingOpsRouteImport.update({
 const AdminBillingRoute = AdminBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAwardsRoute = AdminAwardsRouteImport.update({
+  id: '/awards',
+  path: '/awards',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminAuditHistoryRoute = AdminAuditHistoryRouteImport.update({
@@ -1254,6 +1284,7 @@ export interface FileRoutesByFullPath {
   '/admin/assets': typeof AdminAssetsRoute
   '/admin/au-stp-audit': typeof AdminAuStpAuditRoute
   '/admin/audit-history': typeof AdminAuditHistoryRoute
+  '/admin/awards': typeof AdminAwardsRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/billing-ops': typeof AdminBillingOpsRoute
   '/admin/biometric': typeof AdminBiometricRoute
@@ -1293,11 +1324,15 @@ export interface FileRoutesByFullPath {
   '/admin/review-templates': typeof AdminReviewTemplatesRoute
   '/admin/security': typeof AdminSecurityRoute
   '/admin/security-findings': typeof AdminSecurityFindingsRoute
+  '/admin/stp-events': typeof AdminStpEventsRoute
+  '/admin/super-batches': typeof AdminSuperBatchesRoute
+  '/admin/super-funds': typeof AdminSuperFundsRoute
   '/admin/team-assignments': typeof AdminTeamAssignmentsRoute
   '/admin/teams': typeof AdminTeamsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
   '/admin/training': typeof AdminTrainingRoute
+  '/admin/underpayment-audit': typeof AdminUnderpaymentAuditRoute
   '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/careers/$slug': typeof CareersSlugRoute
@@ -1449,6 +1484,7 @@ export interface FileRoutesByTo {
   '/admin/assets': typeof AdminAssetsRoute
   '/admin/au-stp-audit': typeof AdminAuStpAuditRoute
   '/admin/audit-history': typeof AdminAuditHistoryRoute
+  '/admin/awards': typeof AdminAwardsRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/billing-ops': typeof AdminBillingOpsRoute
   '/admin/biometric': typeof AdminBiometricRoute
@@ -1488,11 +1524,15 @@ export interface FileRoutesByTo {
   '/admin/review-templates': typeof AdminReviewTemplatesRoute
   '/admin/security': typeof AdminSecurityRoute
   '/admin/security-findings': typeof AdminSecurityFindingsRoute
+  '/admin/stp-events': typeof AdminStpEventsRoute
+  '/admin/super-batches': typeof AdminSuperBatchesRoute
+  '/admin/super-funds': typeof AdminSuperFundsRoute
   '/admin/team-assignments': typeof AdminTeamAssignmentsRoute
   '/admin/teams': typeof AdminTeamsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
   '/admin/training': typeof AdminTrainingRoute
+  '/admin/underpayment-audit': typeof AdminUnderpaymentAuditRoute
   '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/careers/$slug': typeof CareersSlugRoute
@@ -1646,6 +1686,7 @@ export interface FileRoutesById {
   '/admin/assets': typeof AdminAssetsRoute
   '/admin/au-stp-audit': typeof AdminAuStpAuditRoute
   '/admin/audit-history': typeof AdminAuditHistoryRoute
+  '/admin/awards': typeof AdminAwardsRoute
   '/admin/billing': typeof AdminBillingRoute
   '/admin/billing-ops': typeof AdminBillingOpsRoute
   '/admin/biometric': typeof AdminBiometricRoute
@@ -1685,11 +1726,15 @@ export interface FileRoutesById {
   '/admin/review-templates': typeof AdminReviewTemplatesRoute
   '/admin/security': typeof AdminSecurityRoute
   '/admin/security-findings': typeof AdminSecurityFindingsRoute
+  '/admin/stp-events': typeof AdminStpEventsRoute
+  '/admin/super-batches': typeof AdminSuperBatchesRoute
+  '/admin/super-funds': typeof AdminSuperFundsRoute
   '/admin/team-assignments': typeof AdminTeamAssignmentsRoute
   '/admin/teams': typeof AdminTeamsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
   '/admin/training': typeof AdminTrainingRoute
+  '/admin/underpayment-audit': typeof AdminUnderpaymentAuditRoute
   '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/careers/$slug': typeof CareersSlugRoute
@@ -1846,6 +1891,7 @@ export interface FileRouteTypes {
     | '/admin/assets'
     | '/admin/au-stp-audit'
     | '/admin/audit-history'
+    | '/admin/awards'
     | '/admin/billing'
     | '/admin/billing-ops'
     | '/admin/biometric'
@@ -1885,11 +1931,15 @@ export interface FileRouteTypes {
     | '/admin/review-templates'
     | '/admin/security'
     | '/admin/security-findings'
+    | '/admin/stp-events'
+    | '/admin/super-batches'
+    | '/admin/super-funds'
     | '/admin/team-assignments'
     | '/admin/teams'
     | '/admin/templates'
     | '/admin/toil'
     | '/admin/training'
+    | '/admin/underpayment-audit'
     | '/admin/wfh'
     | '/blog/$slug'
     | '/careers/$slug'
@@ -2041,6 +2091,7 @@ export interface FileRouteTypes {
     | '/admin/assets'
     | '/admin/au-stp-audit'
     | '/admin/audit-history'
+    | '/admin/awards'
     | '/admin/billing'
     | '/admin/billing-ops'
     | '/admin/biometric'
@@ -2080,11 +2131,15 @@ export interface FileRouteTypes {
     | '/admin/review-templates'
     | '/admin/security'
     | '/admin/security-findings'
+    | '/admin/stp-events'
+    | '/admin/super-batches'
+    | '/admin/super-funds'
     | '/admin/team-assignments'
     | '/admin/teams'
     | '/admin/templates'
     | '/admin/toil'
     | '/admin/training'
+    | '/admin/underpayment-audit'
     | '/admin/wfh'
     | '/blog/$slug'
     | '/careers/$slug'
@@ -2237,6 +2292,7 @@ export interface FileRouteTypes {
     | '/admin/assets'
     | '/admin/au-stp-audit'
     | '/admin/audit-history'
+    | '/admin/awards'
     | '/admin/billing'
     | '/admin/billing-ops'
     | '/admin/biometric'
@@ -2276,11 +2332,15 @@ export interface FileRouteTypes {
     | '/admin/review-templates'
     | '/admin/security'
     | '/admin/security-findings'
+    | '/admin/stp-events'
+    | '/admin/super-batches'
+    | '/admin/super-funds'
     | '/admin/team-assignments'
     | '/admin/teams'
     | '/admin/templates'
     | '/admin/toil'
     | '/admin/training'
+    | '/admin/underpayment-audit'
     | '/admin/wfh'
     | '/blog/$slug'
     | '/careers/$slug'
@@ -3183,6 +3243,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminWfhRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/underpayment-audit': {
+      id: '/admin/underpayment-audit'
+      path: '/underpayment-audit'
+      fullPath: '/admin/underpayment-audit'
+      preLoaderRoute: typeof AdminUnderpaymentAuditRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/training': {
       id: '/admin/training'
       path: '/training'
@@ -3216,6 +3283,27 @@ declare module '@tanstack/react-router' {
       path: '/team-assignments'
       fullPath: '/admin/team-assignments'
       preLoaderRoute: typeof AdminTeamAssignmentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/super-funds': {
+      id: '/admin/super-funds'
+      path: '/super-funds'
+      fullPath: '/admin/super-funds'
+      preLoaderRoute: typeof AdminSuperFundsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/super-batches': {
+      id: '/admin/super-batches'
+      path: '/super-batches'
+      fullPath: '/admin/super-batches'
+      preLoaderRoute: typeof AdminSuperBatchesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/stp-events': {
+      id: '/admin/stp-events'
+      path: '/stp-events'
+      fullPath: '/admin/stp-events'
+      preLoaderRoute: typeof AdminStpEventsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/security-findings': {
@@ -3489,6 +3577,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/admin/billing'
       preLoaderRoute: typeof AdminBillingRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/awards': {
+      id: '/admin/awards'
+      path: '/awards'
+      fullPath: '/admin/awards'
+      preLoaderRoute: typeof AdminAwardsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/audit-history': {
@@ -3877,6 +3972,7 @@ interface AdminRouteChildren {
   AdminAssetsRoute: typeof AdminAssetsRoute
   AdminAuStpAuditRoute: typeof AdminAuStpAuditRoute
   AdminAuditHistoryRoute: typeof AdminAuditHistoryRoute
+  AdminAwardsRoute: typeof AdminAwardsRoute
   AdminBillingRoute: typeof AdminBillingRoute
   AdminBillingOpsRoute: typeof AdminBillingOpsRoute
   AdminBiometricRoute: typeof AdminBiometricRoute
@@ -3916,11 +4012,15 @@ interface AdminRouteChildren {
   AdminReviewTemplatesRoute: typeof AdminReviewTemplatesRoute
   AdminSecurityRoute: typeof AdminSecurityRoute
   AdminSecurityFindingsRoute: typeof AdminSecurityFindingsRoute
+  AdminStpEventsRoute: typeof AdminStpEventsRoute
+  AdminSuperBatchesRoute: typeof AdminSuperBatchesRoute
+  AdminSuperFundsRoute: typeof AdminSuperFundsRoute
   AdminTeamAssignmentsRoute: typeof AdminTeamAssignmentsRoute
   AdminTeamsRoute: typeof AdminTeamsRoute
   AdminTemplatesRoute: typeof AdminTemplatesRoute
   AdminToilRoute: typeof AdminToilRoute
   AdminTrainingRoute: typeof AdminTrainingRoute
+  AdminUnderpaymentAuditRoute: typeof AdminUnderpaymentAuditRoute
   AdminWfhRoute: typeof AdminWfhRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminEmployeesEmployeeIdRoute: typeof AdminEmployeesEmployeeIdRoute
@@ -3931,6 +4031,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAssetsRoute: AdminAssetsRoute,
   AdminAuStpAuditRoute: AdminAuStpAuditRoute,
   AdminAuditHistoryRoute: AdminAuditHistoryRoute,
+  AdminAwardsRoute: AdminAwardsRoute,
   AdminBillingRoute: AdminBillingRoute,
   AdminBillingOpsRoute: AdminBillingOpsRoute,
   AdminBiometricRoute: AdminBiometricRoute,
@@ -3970,11 +4071,15 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminReviewTemplatesRoute: AdminReviewTemplatesRoute,
   AdminSecurityRoute: AdminSecurityRoute,
   AdminSecurityFindingsRoute: AdminSecurityFindingsRoute,
+  AdminStpEventsRoute: AdminStpEventsRoute,
+  AdminSuperBatchesRoute: AdminSuperBatchesRoute,
+  AdminSuperFundsRoute: AdminSuperFundsRoute,
   AdminTeamAssignmentsRoute: AdminTeamAssignmentsRoute,
   AdminTeamsRoute: AdminTeamsRoute,
   AdminTemplatesRoute: AdminTemplatesRoute,
   AdminToilRoute: AdminToilRoute,
   AdminTrainingRoute: AdminTrainingRoute,
+  AdminUnderpaymentAuditRoute: AdminUnderpaymentAuditRoute,
   AdminWfhRoute: AdminWfhRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminEmployeesEmployeeIdRoute: AdminEmployeesEmployeeIdRoute,

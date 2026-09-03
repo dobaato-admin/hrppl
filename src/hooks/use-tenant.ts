@@ -51,3 +51,47 @@ export function useMyTenantId(): { tenantId: string | null | undefined; isLoadin
   });
   return { tenantId: user ? data : null, isLoading: isLoading && !!user };
 }
+
+/**
+ * The signed-in user's tenant country code (`"AU"`, `"NP"`, …).
+ *
+ * Only the navigation needs this today: country-specific compliance surfaces
+ * (Australian STP2, Payday Super, modern awards) must be absent for tenants
+ * elsewhere rather than present-and-empty. A `country` field on the nav entry
+ * means the next country is a data change instead of another hardcoded
+ * `country_code === "AU"` branch in the shell.
+ *
+ * Built on the same tenant id as `useMyTenantId`, so a platform account acting
+ * as a tenant correctly sees that tenant's country — the AU subgroup appears
+ * when a super_admin acts as an AU tenant and disappears when they switch to
+ * the Nepali one, which is the behaviour a tenant switcher has to have.
+ *
+ * Returns `undefined` while loading and `null` when there is no tenant. The
+ * nav treats both as "not this country": a country-gated row must not flash
+ * into view before the answer arrives, and must not appear at all for an
+ * account with no tenant. That is the safe direction — a briefly missing row
+ * corrects itself on load, whereas a briefly present one is a link that
+ * answers "Forbidden" if clicked in that window.
+ */
+export function useMyTenantCountry(): {
+  country: string | null | undefined;
+  isLoading: boolean;
+} {
+  const { tenantId, isLoading: tenantLoading } = useMyTenantId();
+  const { data, isLoading } = useQuery({
+    queryKey: ["my-tenant-country", tenantId],
+    enabled: !!tenantId,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("country_code")
+        .eq("id", tenantId!)
+        .maybeSingle();
+      return (tenant?.country_code as string | undefined) ?? null;
+    },
+  });
+  if (tenantLoading) return { country: undefined, isLoading: true };
+  if (!tenantId) return { country: null, isLoading: false };
+  return { country: data, isLoading };
+}
