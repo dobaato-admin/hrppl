@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { validateInvitationDetails } from "@/lib/payroll-validation";
+import { enforcePublicRateLimit } from "@/lib/rate-limit.functions";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -241,6 +242,8 @@ export const getInvitationByToken = createServerFn({ method: "GET" })
     z.object({ token: z.string().min(20).max(128).regex(/^[a-f0-9]+$/i) }).parse(data),
   )
   .handler(async ({ data }) => {
+    // Reads by token; the limit is what makes brute-force enumeration impractical.
+    await enforcePublicRateLimit("public_invite_lookup", 30, 3600);
     const admin = await loadAdmin();
     const { data: inv } = await admin
       .from("staff_invitations")

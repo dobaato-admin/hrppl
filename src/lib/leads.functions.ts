@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { enforcePublicRateLimit } from "@/lib/rate-limit.functions";
 
 const leadSchema = z.object({
   full_name: z.string().trim().min(1).max(120),
@@ -24,6 +25,8 @@ export type LeadInput = z.infer<typeof leadSchema>;
 export const submitLead = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => leadSchema.parse(data))
   .handler(async ({ data }) => {
+    // Marketing lead capture; a real prospect submits once.
+    await enforcePublicRateLimit("public_lead", 5, 3600);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("leads").insert({
       ...data,

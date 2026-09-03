@@ -142,6 +142,34 @@ export const generateSuperContributionsForRun = createServerFn({ method: "POST" 
       .select("id,employee_id,components")
       .eq("run_id", data.runId);
 
+    // Fund choices for everyone in this run, in ONE query.
+    //
+    // This used to run a `.limit(1).maybeSingle()` lookup per payslip, inside
+    // the loop below. A 500-employee run therefore made 500 sequential round
+    // trips to resolve 500 rows that one `.in()` returns at once — and payroll
+    // is the hottest path in the product, so it was the worst place for it.
+    //
+    // Ordered newest-first and reduced to the first row per employee, which
+    // reproduces the per-employee `order by effective_from desc limit 1`
+    // exactly: the choice in force on the pay date.
+    const employeeIds = [
+      ...new Set((payslips ?? []).map((p: any) => p.employee_id).filter(Boolean)),
+    ];
+    const choiceByEmployee = new Map<string, any>();
+    if (employeeIds.length) {
+      const { data: choices } = await supabase
+        .from("employee_super_choices")
+        .select("employee_id,super_fund_id,member_number,effective_from,effective_to")
+        .in("employee_id", employeeIds)
+        .lte("effective_from", pay_date)
+        .order("effective_from", { ascending: false });
+      for (const c of choices ?? []) {
+        if (!choiceByEmployee.has((c as any).employee_id)) {
+          choiceByEmployee.set((c as any).employee_id, c);
+        }
+      }
+    }
+
     const rows: any[] = [];
     for (const p of payslips ?? []) {
       const components = ((p as any).components ?? {}) as Record<string, any>;
@@ -151,16 +179,7 @@ export const generateSuperContributionsForRun = createServerFn({ method: "POST" 
       const sgBase = Number(sg?.base ?? sg?.ote ?? 0);
       if (!sgAmount) continue;
 
-      // Resolve current fund choice.
-      const { data: choice } = await supabase
-        .from("employee_super_choices")
-        .select("super_fund_id,member_number,effective_from,effective_to")
-        .eq("employee_id", (p as any).employee_id)
-        .lte("effective_from", pay_date)
-        .order("effective_from", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
+      const choice = choiceByEmployee.get((p as any).employee_id);
       if (!choice) {
         // No nominated fund — caller must set default before remittance.
         continue;

@@ -109,10 +109,31 @@ export const updateSecurityFindingStatus = createServerFn({ method: "POST" })
  * Public gate used by CI: returns count of OPEN ERROR-level findings
  * across all scanners. CI workflow fails the build when this is > 0.
  */
+/**
+ * How many open high/critical security findings the platform is carrying.
+ *
+ * SECURITY (2026-09-03 audit): this shipped with **no `.middleware()` at all**
+ * and read through the service-role client, so it authenticated nobody and
+ * bypassed RLS. Every other function in this module gates on `assertSuperAdmin`;
+ * this one did not, and the page that renders it (/admin/security) is gated —
+ * which is exactly why the hole was invisible from the app.
+ *
+ * A TanStack server fn is a public HTTP endpoint. Anyone who could reach the
+ * site could call it and read back a live count of the platform's open critical
+ * security findings — a reconnaissance signal that says "this deployment has
+ * seven unfixed criticals right now", with no login required. It leaked a
+ * number rather than the findings themselves, which is why it rates as
+ * information disclosure rather than data exposure, but the number is the part
+ * an attacker wants first.
+ *
+ * Now gated exactly like its siblings, and reading through the CALLER's client
+ * so RLS applies as a second layer rather than being bypassed.
+ */
 export const countOpenHighSeverityFindings = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { count, error } = await supabaseAdmin
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertSuperAdmin(context.supabase, context.userId);
+    const { count, error } = await context.supabase
       .from("security_findings_log")
       .select("id", { count: "exact", head: true })
       .eq("status", "open")

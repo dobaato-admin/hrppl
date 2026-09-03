@@ -1,7 +1,17 @@
-# RBAC — Role × Feature Matrix (Proposed)
+# RBAC — Role × Feature Matrix
 
-> **Status:** Draft for review. Nothing in this document is implemented yet.
-> Once you approve, I'll migrate the `app_role` enum, rewrite RLS policies, and align frontend guards in a single pass.
+> **Status: implemented.** The `app_role` enum, the RLS policies and the frontend guards all
+> exist. §3 below is **generated from `src/lib/rbac.ts`** by
+> `node scripts/gen-rbac-matrix.mjs` and is pinned by `tests/rbac-doc-sync.test.ts`, so it cannot
+> drift from the code again. §1, §2 and §4 are hand-written and still current.
+>
+> **§5 and §6 are historical** — the implementation plan was carried out and the open questions
+> were answered. They are kept as a record of why the roles are shaped the way they are.
+>
+> `can(feature, roles)` is a **UI** control. RLS plus server-fn role checks are the enforcement.
+> Where a key deliberately mirrors one specific RLS policy, the comment beside it in `rbac.ts`
+> names that policy — widening the key without widening the policy in the same change moves the
+> failure from "link hidden" to "new row violates row-level security policy".
 
 ---
 
@@ -34,120 +44,152 @@ Roles are **additive** — a user can hold multiple (e.g. `hr` + `finance`). `br
 
 ## 3. Feature matrix
 
-Legend: **F** = full CRUD · **R** = read only · **A** = approve/act on own scope · **S** = self only · **—** = no access
+<!-- BEGIN GENERATED MATRIX -->
 
-### 3.1 Platform (super_admin surface)
+> **Generated** by `node scripts/gen-rbac-matrix.mjs` from `src/lib/rbac.ts`.
+> Do not edit between the markers — regenerate instead. 83 feature keys across 8 groups.
 
-| Feature | super_admin | regional_admin | org_admin | branch_admin | hr | finance | manager | employee |
+`can(feature, roles)` controls **UI only**. RLS policies plus server-fn role checks are the actual enforcement; where a key mirrors a specific policy, the comment beside it in `rbac.ts` names that policy.
+
+Legend: **●** = admitted · blank = no access
+
+### platform
+
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
 |---|---|---|---|---|---|---|---|---|
-| `/admin` console | F | R (country) | — | — | — | — | — | — |
-| Tenants list & billing | F | — | — | — | — | — | — | — |
-| Platform security scans | F | — | — | — | — | — | — | — |
-| Blog / careers (marketing) | F | — | — | — | — | — | — | — |
-| Payslip templates (country) | F | F (country) | — | — | — | — | — | — |
-| Tax brackets / contribution rules | F | F (country) | R | R | R | R | — | — |
-| Public holidays / categories | F | F (country) | R | R | R | — | R | R |
-| Overtime penalty rates | F | F (country) | R | R | — | R | — | — |
-| Feedback / review templates (global) | F | F | F (override per org) | — | — | — | — | — |
-| API docs / developers | F | R | R | — | — | — | — | — |
+| `platform.admin` | ● |  |  |  |  |  |  |  |
+| `platform.apiDocs` | ● | ● | ● |  |  |  |  |  |
+| `platform.billingDirectDebit` | ● |  |  |  |  |  |  |  |
+| `platform.billingOps` | ● |  |  |  |  |  |  |  |
+| `platform.blog` | ● |  |  |  |  |  |  |  |
+| `platform.blogIntegrations` | ● |  |  |  |  |  |  |  |
+| `platform.fx` | ● |  |  |  |  |  |  |  |
+| `platform.leads` | ● |  |  |  |  |  |  |  |
+| `platform.tenants` | ● |  |  |  |  |  |  |  |
 
-### 3.2 Organization setup & governance
+### regional
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/org` dashboard | F | F | R (own branch) | R | R | R | — |
-| `/org/setup` (org bootstrap) | F | F | — | — | — | — | — |
-| `/org/branches` (create/edit branches) | F | F | R (own) | R | — | — | — |
-| `/org/white-label` (logo, colors) | F | F | — | — | — | — | — |
-| `/org/invitations` (staff invites) | F | F | F (own branch) | F (own scope) | — | — | — |
-| Org settings (`/settings/organization`) | F | F | — | — | — | — | — |
-| Org billing (`/settings/billing`) | F | F | — | — | — | — | — |
-| Tenant governance (audit log, data export) | F | F | R (own branch) | R | R | — | — |
-| Delete organization | F | **see §4** | — | — | — | — | — |
-| Transfer ownership | F | **see §4** | — | — | — | — | — |
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
+|---|---|---|---|---|---|---|---|---|
+| `regional.console` | ● | ● |  |  |  |  |  |  |
 
-### 3.3 People
+### org
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/org/employees` (list) | F | F | F (own branch) | F (own scope) | R | R (team) | — |
-| Employee profile (PII, banking, tax) | F | F | F (own branch) | F | R (pay only) | R (team, no banking) | S |
-| `/admin/departments` | F | F | F (own branch) | F | — | — | — |
-| `/admin/designations` | F | F | F (own branch) | F | — | — | — |
-| `/admin/teams` & `/admin/team-assignments` | F | F | F (own branch) | F | — | R (team) | — |
-| Promotions (`/org/promotions`) | F | F | F (own branch) | F | R | R (team) | S (read own) |
-| Pay rate changes (`/org/pay-rates`) | F | F | F (own branch) | R | F | — | S (read own) |
-| Bulk-delete employees | F | **see §4** | — | — | — | — | — |
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
+|---|---|---|---|---|---|---|---|---|
+| `org.analytics` | ● |  | ● | ● | ● | ● |  |  |
+| `org.assets` | ● |  | ● | ● | ● | ● |  |  |
+| `org.auAwards` | ● |  | ● |  |  |  |  |  |
+| `org.auditHistory` | ● |  | ● |  |  |  |  |  |
+| `org.auStpAudit` | ● |  | ● |  |  | ● |  |  |
+| `org.auStpEvents` | ● |  | ● |  |  |  |  |  |
+| `org.auSuperBatches` | ● |  | ● |  |  | ● |  |  |
+| `org.auSuperFunds` | ● |  | ● |  | ● | ● |  |  |
+| `org.auUnderpayment` | ● |  | ● |  | ● |  |  |  |
+| `org.biometric` | ● |  | ● | ● | ● |  |  |  |
+| `org.branches` | ● |  | ● |  |  |  |  |  |
+| `org.console` | ● |  | ● | ● | ● | ● | ● |  |
+| `org.danger` | ● |  | ● |  |  |  |  |  |
+| `org.departments` | ● |  | ● |  | ● |  |  |  |
+| `org.designations` | ● |  | ● |  | ● |  |  |  |
+| `org.discipline` | ● |  | ● |  | ● |  |  |  |
+| `org.documents` | ● |  | ● | ● | ● | ● | ● |  |
+| `org.documentTemplates` | ● |  | ● | ● | ● | ● | ● |  |
+| `org.dutyReviews` | ● |  | ● |  | ● |  | ● |  |
+| `org.employeeDuties` | ● |  | ● |  | ● |  | ● |  |
+| `org.employeeHolidays` | ● |  | ● |  |  |  | ● |  |
+| `org.employees` | ● |  | ● | ● | ● | ● | ● |  |
+| `org.employmentVariations` | ● |  | ● |  | ● |  |  |  |
+| `org.expenses` | ● |  | ● | ● |  | ● | ● |  |
+| `org.expenseSettings` | ● |  | ● |  |  | ● |  |  |
+| `org.feedbackTemplates` | ● |  | ● |  | ● |  |  |  |
+| `org.geofences` | ● |  | ● | ● | ● |  |  |  |
+| `org.holidayCalendars` | ● |  | ● |  | ● |  |  |  |
+| `org.idRequests` | ● |  | ● | ● | ● |  |  |  |
+| `org.invitations` | ● |  | ● | ● | ● |  |  |  |
+| `org.kpiLibrary` | ● |  | ● |  | ● |  |  |  |
+| `org.leaveManagement` | ● |  | ● | ● | ● |  |  |  |
+| `org.leaveTypes` | ● |  | ● |  | ● |  |  |  |
+| `org.medical` | ● |  | ● |  | ● |  |  |  |
+| `org.offboarding` | ● |  | ● |  | ● |  | ● |  |
+| `org.onboardingAdmin` | ● |  | ● | ● | ● |  |  |  |
+| `org.onboardingPacks` | ● |  | ● |  |  |  |  |  |
+| `org.overtimeRates` | ● | ● | ● |  |  | ● |  |  |
+| `org.payRates` | ● |  | ● | ● |  | ● | ● |  |
+| `org.payroll` | ● |  | ● | ● |  | ● |  |  |
+| `org.payrollSettings` | ● |  | ● |  |  | ● |  |  |
+| `org.payrollSetup` | ● |  | ● |  |  | ● |  |  |
+| `org.payslipTemplates` | ● |  | ● |  |  | ● |  |  |
+| `org.performance` | ● |  | ● | ● | ● |  | ● |  |
+| `org.promotions` | ● |  | ● | ● | ● | ● | ● |  |
+| `org.publicHolidays` | ● | ● | ● | ● | ● |  | ● | ● |
+| `org.recruitment` | ● |  | ● | ● | ● |  |  |  |
+| `org.reports` | ● |  | ● | ● | ● | ● |  |  |
+| `org.requests` | ● |  | ● | ● | ● |  | ● |  |
+| `org.reviewAnalytics` | ● |  | ● |  | ● |  | ● |  |
+| `org.reviewCycles` | ● |  | ● |  | ● |  | ● |  |
+| `org.reviewTemplates` | ● |  | ● |  | ● |  |  |  |
+| `org.roles` | ● |  | ● |  |  |  |  |  |
+| `org.security` | ● |  | ● |  |  |  |  |  |
+| `org.setup` | ● |  | ● |  |  |  |  |  |
+| `org.teamAssignments` | ● |  | ● |  | ● |  |  |  |
+| `org.teams` | ● |  | ● | ● | ● |  | ● |  |
+| `org.templatesHub` | ● |  | ● |  | ● |  |  |  |
+| `org.ticketInternalNotes` | ● | ● | ● |  |  |  | ● |  |
+| `org.timesheetReview` | ● |  | ● | ● |  | ● | ● |  |
+| `org.toilAdmin` | ● |  | ● | ● | ● |  |  |  |
+| `org.training` | ● |  | ● | ● | ● |  | ● |  |
+| `org.trainingCatalog` | ● |  | ● |  | ● |  | ● |  |
+| `org.wfhApprovals` | ● |  | ● |  | ● |  | ● |  |
+| `org.whiteLabel` | ● |  | ● |  |  |  |  |  |
 
-### 3.4 Onboarding / offboarding
+### manager
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/org/onboarding` (checklists) | F | F | F (own branch) | F | — | R (team) | S |
-| `/admin/offboarding` (cases) | F | F | F (own branch) | F | R | R (team) | S |
-| Onboarding default assignments | F | F | F (own branch) | F | — | — | — |
-| ID document requests | F | F | F (own branch) | F | — | R (team) | S |
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
+|---|---|---|---|---|---|---|---|---|
+| `manager.compensation` | ● |  | ● | ● |  | ● | ● |  |
+| `manager.requestsInbox` | ● |  | ● | ● | ● |  | ● |  |
+| `manager.team` | ● |  | ● | ● | ● |  | ● |  |
 
-### 3.5 Time, leave, attendance
+### settings
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/leave` (own) | F | F | F | F | F | F | S |
-| `/org/leave` (approve all) | F | F | A (own branch) | A | — | A (team) | — |
-| `/admin/leave-types` | F | F | F (own branch) | F | — | — | — |
-| `/admin/employee-holidays` (per-employee overrides) | F | F | — | — | — | F | — |
-| `/attendance` (own punches) | F | F | F | F | F | F | S |
-| `/org/timesheets` | F | F | A (own branch) | A | R | A (team) | S |
-| `/admin/biometric` & `/admin/geofences` | F | F | F (own branch) | F | — | — | — |
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
+|---|---|---|---|---|---|---|---|---|
+| `settings.billing` | ● |  | ● |  |  |  |  |  |
+| `settings.organization` | ● |  | ● |  |  |  |  |  |
 
-### 3.6 Payroll & finance
+### practice
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/org/payroll` (runs) | F | F | F (own branch) | R | F | — | — |
-| `/admin/payroll-settings` / `payroll-setup` | F | F | F (own branch) | R | F | — | — |
-| `/admin/payslip-templates` (org overrides) | F | F | — | — | F | — | — |
-| `/admin/overtime-rates` (org) | F | F | F (own branch) | R | F | — | — |
-| Approve payroll run | F | F | — | — | A | — | — |
-| `/my-payslips` | F | F | F | F | F | F | S |
-| `/org/expenses` (approve) | F | F | A (own branch) | R | A | A (team) | — |
-| `/me/expenses` (submit) | F | F | F | F | F | F | S |
-| Invoices / clients / projects / jobs | F | F | F (own branch) | — | F | — | — |
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
+|---|---|---|---|---|---|---|---|---|
+| `practice.console` | ● |  | ● |  |  | ● |  |  |
 
-### 3.7 Performance & growth
+### compliance
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/org/performance` (cycles, calibration) | F | F | F (own branch) | F | — | A (team) | S |
-| `/admin/review-templates` | F | F | F (own branch) | F | — | — | — |
-| `/admin/feedback-templates` | F | F | F (own branch) | F | — | — | — |
-| 360 feedback requests | F | F | F (own branch) | F | — | F (team) | S |
-| `/org/training` & `/admin/training` | F | F | F (own branch) | F | — | R (team) | S |
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
+|---|---|---|---|---|---|---|---|---|
+| `compliance.confidential` | ● |  | ● |  | ● |  |  |  |
 
-### 3.8 Compliance, discipline, documents
+### account
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/admin/discipline` (cases) | F | F | F (own branch) | F | — | R (team, non-confidential) | S (own non-confidential) |
-| `/admin/medical` (incidents) | F | F | F (own branch) | F | — | — | S (own non-confidential) |
-| `/org/documents` (envelopes, templates) | F | F | F (own branch) | F | R | R (team) | S |
-| `/me/grievances` | F | F | F (own branch) | F | — | — | S |
-| `/admin/requests` (support tickets) | F | F | F (own branch) | F | — | A (team) | S |
-| `/admin/security` (org audit log) | F | F | R (own branch) | R | R | — | — |
-| `/admin/api-docs` & `/admin/blog-integrations` | F | F | — | — | — | — | — |
+| Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
+|---|---|---|---|---|---|---|---|---|
+| `account.suspend` | ● |  | ● |  |  |  |  |  |
 
-### 3.9 Assets
+### Surface size per role
 
-| Feature | super_admin | org_admin | branch_admin | hr | finance | manager | employee |
-|---|---|---|---|---|---|---|---|
-| `/admin/assets` (catalog, assignments) | F | F | F (own branch) | F | R | R (team) | — |
-| `/me/assets` (acknowledge, return) | F | F | F | F | F | F | S |
+| Role | Feature keys admitted |
+|---|---|
+| `super_admin` | 83 of 83 |
+| `regional_admin` | 5 of 83 |
+| `org_admin` | 74 of 83 |
+| `branch_admin` | 28 of 83 |
+| `hr` | 45 of 83 |
+| `finance` | 22 of 83 |
+| `manager` | 25 of 83 |
+| `employee` | 1 of 83 |
 
-### 3.10 Self-service (`/me/*`)
-
-All authenticated users get **S** on every `/me/*` route. `org_admin` and above can also view any employee's data via the org routes.
-
----
+<!-- END GENERATED MATRIX -->
 
 ## 4. Destructive actions (org_admin protections)
 

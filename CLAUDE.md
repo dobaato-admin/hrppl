@@ -509,75 +509,130 @@ Cron: Hobby allows 2 jobs/day, wired in `vercel.json` to `leave-accrual` and
 `audit-retention-run`. **Vercel Cron issues GET**, so those two hooks have GET handlers; the
 other 18 remain POST-only and unscheduled (use Supabase `pg_cron` — recipe in the runbook).
 
+## Which document answers what
+
+Read the one you need; they do not repeat each other.
+
+| Question | Document |
+| --- | --- |
+| What is left to build, and how do I finish it? | **`docs/remaining-work.md`** — start here |
+| Where are the trust boundaries, and what is public? | **`docs/security-model.md`** |
+| Who may do what? | `docs/rbac.md` §3 — **generated** from `rbac.ts`, pinned by a test |
+| What exists, and how do I verify it as each role? | `docs/product-state-and-feature-checklist.md` |
+| Why is the product shaped this way? | `docs/plan-waves.md` (W1–W5 + audit A1) |
+| Why is the navigation shaped this way? | `docs/w4-information-architecture-design.md` (+ its W5 addendum) |
+| How do I sign in as each role? | `docs/demo-accounts.md` |
+| How do I deploy? | `docs/deploy-vercel.md` |
+| Known modelling debt | `docs/schema-audit.md` — **a proposal, not committed state** |
+
 ## Current status
 
-The project now runs against a **fresh Supabase dev project** (`xnrjfrxzahmfdrqfsnnq`), with all
-~197 migrations replayed. The blockers the previous version of this section described — the
-unapplied suspension migration, the missing service-role key — are resolved.
+**Last full pass: 2026-09-03 (Wave 5 + security audit). Read this section and the Tenant
+scoping section before doing anything else; the rest of this file is stable reference.**
+
+Runs against Supabase dev project `xnrjfrxzahmfdrqfsnnq`, 208 migrations applied.
+Scale: 166 routes, 97 `*.functions.ts` modules, 591 server fns, 119 nav destinations,
+60 unit-test files, 37 Playwright specs.
 
 **Demo data:** `bun --env-file=.env run scripts/demo-seed.ts` builds two tenants (Acme Global AU,
-Globex Nepal NP), 16 accounts covering all 8 roles, and the tenant lookup tables every dropdown
-reads (expense categories, payroll components, recruitment stages, award types, training courses,
-feedback and review templates, TOIL settings). Credentials land in `docs/demo-accounts.md`.
+Globex Nepal NP) and 16 accounts covering all 8 roles. Credentials in `docs/demo-accounts.md`;
+password `DemoPassw0rd!23`. The wipe selects tenants **by creator, not by slug** — the setup
+wizard names orgs whatever the user typed, and `tenants.created_by` is `ON DELETE NO ACTION`, so
+a stray tenant makes its founder permanently undeletable and wedges every later seed run.
 
-The wipe selects tenants **by creator, not by slug** — demo accounts create orgs through the
-setup wizard and the wizard names them whatever the user typed, so a slug pattern misses them.
-That matters beyond tidiness: `tenants.created_by` is `ON DELETE NO ACTION`, so a stray tenant
-makes its founder permanently undeletable and wedges every later seed run.
+### Wave 5 — reachability (complete, merged)
 
-**Landed since:** tenant scoping across ~25 query sites (see the Tenant scoping section, which is
-the single most important thing to read before adding a query); the offboarding RLS failure;
-chrome restored on 20 orphaned routes; the always-on loading bar; the `listNotifications` storm
-(once per navigation → once per session); route-parent `<Outlet />` fixes that had made
-`/onboarding/profile` and three other routes unreachable.
+Every authorization surface now resolves **one feature key** from `src/lib/rbac.ts`. The wave
+existed because a page's permission could be written in four places that were free to disagree,
+and three of them had no test:
 
-**Two live bugs found and fixed that were invisible from the app:**
+| Axis | Was | Now |
+| --- | --- | --- |
+| nav row vs route gate | 36 dead links | one key each |
+| nav row vs **inline page check** | 11 more, incl. `/org/white-label` locking out `org_admin` | converged |
+| nav row vs **no gate at all** | 23 destinations rendered for anyone with the URL | gated |
+| nav row vs **RLS policy** | — | the one axis still open, see X-07 below |
 
-- `tg_block_modify_audit`'s `service_role` escape read the *legacy* `request.jwt.claim.role` GUC,
-  which current PostgREST does not set. So it never passed: **audit retention had never worked**
-  (`audit-retention.functions.ts` archives exactly those tables), and because
-  `offboarding_comms_removal_audit.actor_id` is `ON DELETE SET NULL` — an UPDATE, which the
-  trigger blocks — any user who touched an offboarding case became undeletable. Fixed in
-  `20260821093000`.
-- The MCP `list_employees` tool selected and ordered by `full_name`, a column that does not
-  exist, so every call returned PostgREST 42703.
+Also landed: `src/lib/nav-tree.ts` (nav is data, not markup — sidebar, GlobalSearch and tests all
+read it); the per-role **"Your work"** shortcut group; the AU compliance domain given a UI
+(5 pages, 5 feature keys, country-gated); ticket conversations; variation drafts; timeline event
+links. **Orphan server functions: 48 → 0**, held there by `tests/no-orphan-server-fns.test.ts`.
 
-**Known gaps, in priority order:**
+Four functions are recorded as deliberately uncalled, each naming the surface it waits on:
+`upsertAward` / `upsertAwardClassification` / `upsertAwardRate` (platform-level catalogue editing,
+parked with D-8) and `previewAuPeriod` (a preview panel on `/org/payroll`).
 
-1. **No tenant switcher.** `super_admin` / `regional_admin` have `profiles.tenant_id = NULL`, so
-   every tenant-scoped surface is legitimately empty for them. Before scoping they saw all
-   tenants merged, which was the leak. Until a switcher exists these accounts cannot demo tenant
-   features.
-2. **Three unconnected review systems** share `review_templates` but never reconcile:
-   `performance_reviews` (whole-tenant fan-out on cycle activate), `review_instances`
-   (schedule-generated scorecards), and `duty_review_scores` (duty-based KPI). There is **no
-   assignment table and no targeting UI** — `generateReviewInstances` accepts `employeeIds` but
-   its only caller never passes it, so every "Schedule" blasts the entire tenant.
-   `reviewReviewInstance` (the approve/reject fn) has **zero callers**. The templates page points
-   at "Performance → Cycles", which does not exist under that name; the real control is
-   `/org/performance`.
-3. **Leave trusts a client-computed `days`** (`leave.functions.ts:77`) with no balance check and
-   no weekend/holiday exclusion, and `leave_approval_routes` is authored but never consumed.
-4. **Attendance time/geo/WFH — fixed**, see the two sections above. What is left:
-   `clockOut` records position but does not validate it; WFH decisions notify
-   in-app only; the 24h reconciliation cron does not know the new WFH mismatch
-   types; there is no tenant-level "remote work allowed" switch.
+### The tests that encode all of this
+
+Run these before believing a gating change is safe. Each exists because the defect it catches was
+invisible in review, in the browser, or both:
+
+| Test | Catches |
+| --- | --- |
+| `nav-route-gate-parity` | a nav row and its page disagreeing, in any of four gate forms |
+| `nav-render-filter` | the sidebar computing a filtered list and rendering the unfiltered one |
+| `nav-integrity` | duplicate/dead nav destinations, role shortcuts a role cannot open |
+| `no-orphan-server-fns` | a server fn nothing calls; also pins one product name |
+| `public-endpoint-security` | an endpoint without auth middleware; an unlimited public write |
+| `au-guard-coverage` | an AU server fn with no role guard; unscoped AU list reads |
+| `route-parent-outlet` | a page with no `AppShell`; a parent with no `<Outlet />` |
+| `tenant-scoping` | an `employees` list read with no `tenant_id` filter |
+
+### Security audit — 2026-09-03
+
+Two real findings, both invisible from inside the app because the *pages* were gated correctly:
+
+- **`countOpenHighSeverityFindings` had no `.middleware()` at all** and read through the
+  service-role client. A TanStack server fn is a public HTTP endpoint, so anyone could read back
+  a live count of the platform's open critical findings. Now gated like its siblings.
+- **No public endpoint could be rate limited.** `check_rate_limit` opens with
+  `IF v_user IS NULL THEN RETURN true`, and `rate_limit_buckets.user_id` is
+  `REFERENCES auth.users(id)` — so anonymous callers were waved through by construction. Five
+  server fns take no session; four write. `createResumeUploadUrl` is an unauthenticated mint of a
+  storage upload credential. Fixed by `20260903120000_public_rate_limit.sql` +
+  `enforcePublicRateLimit()`, keyed on a **salted hash** of the IP, **failing open** on every
+  error path (a limiter that fails closed on a careers page takes it offline for real applicants).
+
+Verified clean in the same pass: RLS enabled on all 207 tables; no unscoped `employees` read; no
+secret behind a `VITE_` prefix; all 20 public hooks use `hookFailure()`; `renderMarkdown` escapes
+before converting.
+
+### Known gaps, in priority order
+
+1. **Acting-tenant coverage: 13 of 97 modules.** `TenantSwitcher` and `platform_acting_tenant`
+   exist and work, but only the modules using `requireTenantId()` / `getTenantId()` honour them.
+   The rest read `profiles.tenant_id` directly, which is `NULL` for a platform account — so a
+   `super_admin` acting as a tenant gets a working page from one module and "No tenant" from the
+   next. **This is the single biggest architectural inconsistency left.**
+2. **Three unconnected review systems** share `review_templates` and never reconcile:
+   `performance_reviews` (whole-tenant fan-out), `review_instances` (schedule-generated), and
+   `duty_review_scores`. There is no assignment table. Both fns now have callers and targeting
+   works, so this is a modelling gap rather than a dead feature.
+3. **X-07 — the nav can still disagree with RLS.** `/org/training` admits `hr` and `branch_admin`
+   by nav and route; every RLS policy on `training_courses` / `training_enrollments` /
+   `certifications` admits only `org_admin`, `super_admin`, `manager`. HR opens the page, clicks
+   Assign, and **Postgres refuses**. Closing it needs a migration, not a component. This is P6.
+4. **Attendance leftovers:** `clockOut` records position but does not validate it; WFH decisions
+   notify in-app only; the 24h reconciliation cron does not know the new WFH mismatch types;
+   there is no tenant-level "remote work allowed" switch.
+5. **Performance, measured not guessed:** 36 loop-with-query sites remain (`payroll.functions.ts`
+   has 8, the hottest path); 194 `useQuery` sites but only 19 declare `staleTime`, so most refetch
+   on every mount. Neither is urgent at demo scale; both are the next real perf work.
+
+Fixed in the audit: the N+1 in `generateSuperContributionsForRun`, which resolved a fund choice
+per payslip — 500 sequential round trips on a 500-employee run, now one `.in()`.
+
+**Not started: P6 / LMS.** Training is upload-a-certificate only. The plan is a tenant-scoped
+content layer (lessons, ordering, progress, a course player) with managers and below as the
+audience; the regional/cross-tenant course library is **parked with D-8**. Fixing X-07 belongs
+here. See `docs/plan-waves.md`.
 
 `scripts/qa-sweep.mjs` walks every nav destination as each seeded role and writes
-`docs/qa-sweep-report.md` — chrome, console errors, status, repeated server-fn calls. Re-run it
-after structural changes.
+`docs/qa-sweep-report.md`. Re-run it after structural changes.
 
-**Local sign-in:** Google OAuth is configured only for deployed origins. `/dev-session`
-(dev-only, guarded by `import.meta.env.DEV`) imports a session copied from the deployed app —
-both point at the same Supabase project. See `tests/dev-session-guard.test.ts`.
-
-**Chrome coverage: resolved.** The old note here said "13 of 50 admin routes render no
-`AppShell`". The real count was **20** — 12 admin pages plus 8 under `/org`, because `org.tsx`
-was also a bare `<Outlet />`. All 20 now render inside the shell, verified per role in a browser,
-and `tests/route-parent-outlet.test.ts` stops it regressing. Some pages still render their own
-`<header>` beneath the shell's top bar; that is cosmetic, not a loss of navigation.
+**Local sign-in:** Google OAuth is configured only for deployed origins. Sign in with email +
+password at `/auth`, or use `/dev-session` (dev-only, guarded by `import.meta.env.DEV`).
 
 **Do not run two dev servers at once.** Vite silently falls back to :8081 when :8080 is taken, so
-you end up testing stale code against a second process — and both regenerate `routeTree.gen.ts`
-into the same file, which has corrupted it (a parent route naming a file that no longer existed).
-Check with `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` before starting one.
+you test stale code against a second process — and both regenerate `routeTree.gen.ts` into the
+same file, which has corrupted it before. Check with `lsof -nP -iTCP:8080 -sTCP:LISTEN`.

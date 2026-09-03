@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import DOMPurify from "isomorphic-dompurify";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { enforcePublicRateLimit } from "@/lib/rate-limit.functions";
 
 const JOB_HTML_SANITIZE_CONFIG = {
   ALLOWED_TAGS: ["h1","h2","h3","h4","h5","h6","p","span","strong","em","b","i","u","br","hr","ul","ol","li","blockquote","a","code","pre"],
@@ -370,6 +371,8 @@ export const createResumeUploadUrl = createServerFn({ method: "POST" })
     filename: z.string().min(1).max(200),
   }).parse(d))
   .handler(async ({ data }) => {
+    // Mints a signed upload credential with no session. The tightest limit here.
+    await enforcePublicRateLimit("public_resume_upload", 10, 3600);
     const safe = data.filename.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 200);
     if (!SAFE_NAME_RE.test(safe)) throw new Error("Invalid filename");
     const admin = await loadAdmin();
@@ -407,6 +410,8 @@ const ApplySchema = z.object({
 export const applyToJob = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => ApplySchema.parse(d))
   .handler(async ({ data }) => {
+    // A person applies to a handful of roles, not a hundred.
+    await enforcePublicRateLimit("public_job_apply", 10, 3600);
     const admin = await loadAdmin();
     const { data: job } = await admin.from("recruitment_jobs").select("id,tenant_id,status").eq("id", data.job_id).single();
     if (!job || job.status !== "open") throw new Error("This role is no longer accepting applications");
