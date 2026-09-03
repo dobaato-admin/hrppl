@@ -151,6 +151,9 @@ describe("every authenticated page renders inside the app chrome", () => {
    */
   const LAYOUT_PROVIDERS = ["me", "org", "org.documents", "org.recruitment"];
 
+  /** Components that render an AppShell themselves, on every return path. */
+  const CHROME_WRAPPERS = ["AuComplianceShell"];
+
   /** Public, pre-auth, or gate destinations — chrome would be wrong on these. */
   const EXEMPT_EXACT = new Set([
     "__root", "index", "auth", "signup", "forgot-password", "reset-password",
@@ -179,6 +182,12 @@ describe("every authenticated page renders inside the app chrome", () => {
 
     const own = readFileSync(join(ROOT, "src/routes", `${name}.tsx`), "utf8");
     if (own.includes("<AppShell")) continue;
+    // A component that wraps AppShell in every branch counts. AuComplianceShell
+    // is the only one: the five Australian pages share it because they all need
+    // the same tenant / country / loading answers before they can render, and
+    // writing that out five times is five chances to get one subtly different.
+    // The suite below pins that it really does provide chrome on every path.
+    if (CHROME_WRAPPERS.some((w) => own.includes(`<${w}`))) continue;
     // A redirect-only route renders nothing at all, so it cannot render
     // chrome-less. It has no component; the user is sent elsewhere before
     // anything paints. Retired duplicates are kept in this form rather than
@@ -238,5 +247,34 @@ describe("the completion redirect fires once, not on every visit", () => {
     // HR rejecting an item reopens the checklist; completing it again should
     // redirect again.
     expect(SRC).toMatch(/sessionStorage\.removeItem\(/);
+  });
+});
+
+describe("AuComplianceShell really is a chrome provider", () => {
+  /**
+   * The chrome scan above accepts this component in place of a literal
+   * <AppShell>. That is only safe while every one of its return paths renders
+   * one — it has four (loading, no tenant, wrong country, content), and an
+   * early return that forgot the shell would put a page on screen with no
+   * sidebar and nothing would error to say so.
+   */
+  const SRC = readFileSync(join(ROOT, "src/components/AuComplianceShell.tsx"), "utf8");
+
+  it("renders an AppShell on every return path", () => {
+    const returns = SRC.match(/return \(/g) ?? [];
+    const shells = SRC.match(/<AppShell/g) ?? [];
+    expect(returns.length).toBeGreaterThanOrEqual(4);
+    expect(
+      shells.length,
+      "Every return in AuComplianceShell must render an <AppShell>; the chrome " +
+        "scan trusts it in place of one.",
+    ).toBe(returns.length);
+  });
+
+  it("does not gate — that belongs at the route", () => {
+    // Authorization lives in <AdminGate feature="…"> on the route so the page
+    // never mounts for the wrong role and the parity test can read the gate.
+    // A second gate in here would double-gate every AU page.
+    expect(SRC).not.toMatch(/<AdminGate/);
   });
 });

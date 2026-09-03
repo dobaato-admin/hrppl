@@ -11,6 +11,7 @@ import {
 import { HelpMenu } from "@/components/HelpMenu";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { useAuth } from "@/hooks/use-auth";
+import { useMyTenantCountry } from "@/hooks/use-tenant";
 import { ClockWidget } from "@/components/ClockWidget";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -98,16 +99,39 @@ function NavLinkButton({ item, onNavigate }: { item: NavItem; onNavigate?: () =>
  * could see it. Every row now states its own key and the group hides itself
  * when none of them is visible, which is what FlyoutNavGroup already did.
  */
+/**
+ * Does this row apply to the tenant the user is in?
+ *
+ * A row with no `country` applies everywhere. A row that names countries
+ * applies only to those — and while the answer is still loading (`undefined`)
+ * or there is no tenant (`null`), it does NOT apply.
+ *
+ * That default is deliberate. The two ways to be wrong here are not
+ * symmetrical: a country-gated row that is briefly missing corrects itself
+ * when the query lands, whereas one that is briefly present is a link that
+ * answers "Forbidden" if the user is quick enough to click it. Hiding until
+ * certain is the only direction that cannot produce a dead link.
+ */
+function appliesToCountry(country: string[] | undefined, tenantCountry: string | null | undefined) {
+  if (!country) return true;
+  if (!tenantCountry) return false;
+  return country.includes(tenantCountry);
+}
+
 function PlainNavGroup({
   label,
   items,
   roles,
+  tenantCountry,
 }: {
   label: string;
   items: NavItem[];
   roles: import("@/lib/rbac").AppRole[];
+  tenantCountry?: string | null;
 }) {
-  const visible = items.filter((i) => !i.feature || can(i.feature, roles));
+  const visible = items.filter(
+    (i) => (!i.feature || can(i.feature, roles)) && appliesToCountry(i.country, tenantCountry),
+  );
   if (visible.length === 0) return null;
   return (
     <SidebarGroup>
@@ -158,6 +182,7 @@ function FlyoutNavGroup({
   sections,
   roles,
   hidden,
+  tenantCountry,
 }: {
   label: string;
   icon: typeof LayoutDashboard;
@@ -166,17 +191,32 @@ function FlyoutNavGroup({
   sections?: NavSection[];
   roles: import("@/lib/rbac").AppRole[];
   hidden?: Record<string, boolean>;
+  tenantCountry?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  // Two independent filters: `feature` is role visibility, `hideWhen` is
-  // completion state. An item must pass both.
+  // Three independent filters: `feature` is role visibility, `hideWhen` is
+  // completion state, `country` is where the tenant operates. An item must
+  // pass all three.
   const isVisible = (i: NavItem) =>
-    (!i.feature || can(i.feature, roles)) && !(i.hideWhen && hidden?.[i.hideWhen]);
+    (!i.feature || can(i.feature, roles)) &&
+    !(i.hideWhen && hidden?.[i.hideWhen]) &&
+    appliesToCountry(i.country, tenantCountry);
 
+  // These two are what the popover renders. They used to be computed and then
+  // used only for "should this group appear at all" and the active highlight,
+  // while the popover body mapped over the RAW `items` and `sections` props —
+  // so every row in every flyout was offered to every role, whatever its
+  // feature key said. The gate on the page then refused. That is the dead-link
+  // shape W5 spent two waves removing, hiding one level below the nav DATA the
+  // tests read. tests/nav-render-filter.test.ts pins it now.
   const visibleItems = items.filter(isVisible);
   const visibleSections = (sections ?? [])
+    // A subgroup can be country-scoped as a whole, which is how "Australian
+    // compliance" is absent rather than empty for a Nepali tenant. Checked
+    // before the items so the heading disappears with its contents.
+    .filter((s) => appliesToCountry(s.country, tenantCountry))
     .map((s) => ({ ...s, items: s.items.filter(isVisible) }))
     .filter((s) => s.items.length > 0);
 
@@ -218,7 +258,7 @@ function FlyoutNavGroup({
                 </div>
                 <div className="max-h-[75vh] space-y-1 overflow-y-auto pr-1">
                   <div className="flex flex-col gap-0.5">
-                    {items.map((item) => {
+                    {visibleItems.map((item) => {
                       const Icon = item.icon;
                       const itemActive = pathname === item.to || pathname.startsWith(item.to + "/");
                       return (
@@ -241,10 +281,10 @@ function FlyoutNavGroup({
                     })}
                   </div>
 
-                  {sections?.length ? (
+                  {visibleSections.length ? (
                     <Accordion
                       type="multiple"
-                      defaultValue={sections
+                      defaultValue={visibleSections
                         .filter((section) =>
                           section.items.some(
                             (item) => pathname === item.to || pathname.startsWith(item.to + "/"),
@@ -253,7 +293,7 @@ function FlyoutNavGroup({
                         .map((section) => section.title)}
                       className="rounded-md border bg-background"
                     >
-                      {sections.map((section) => {
+                      {visibleSections.map((section) => {
                         const SectionIcon = section.icon;
                         const sectionActive = section.items.some(
                           (item) => pathname === item.to || pathname.startsWith(item.to + "/"),
@@ -396,6 +436,10 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
     staleTime: 5 * 60_000,
   });
   const hiddenNavItems = { onboardingComplete: !!onboarding?.complete };
+  // Drives `country` on nav items and sections. Follows the acting tenant for
+  // platform accounts, so switching tenant switches which compliance domain
+  // the sidebar offers.
+  const { country: tenantCountry } = useMyTenantCountry();
   const navigate = useNavigate();
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -451,6 +495,7 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             items={MY_ITEMS}
             sections={MY_SECTIONS}
             hidden={hiddenNavItems}
+            tenantCountry={tenantCountry}
           />
 
           <FlyoutNavGroup
@@ -459,6 +504,7 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             accent="bg-status-working"
             roles={roles}
             items={PRACTICE_ITEMS}
+            tenantCountry={tenantCountry}
           />
 
           {/* W5 · Was a hardcoded "Manager" group serving exactly one role.
@@ -484,12 +530,33 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             roles={roles}
             items={ORG_ITEMS}
             sections={ORG_SECTIONS}
+            tenantCountry={tenantCountry}
           />
 
-          <PlainNavGroup label="Regional" items={REGIONAL_ITEMS} roles={roles} />
-          <PlainNavGroup label="Super admin" items={SUPER_ADMIN_ITEMS} roles={roles} />
-          <PlainNavGroup label="Account" items={ACCOUNT_ITEMS} roles={roles} />
-          <PlainNavGroup label="Help" items={HELP_ITEMS} roles={roles} />
+          <PlainNavGroup
+            label="Regional"
+            items={REGIONAL_ITEMS}
+            roles={roles}
+            tenantCountry={tenantCountry}
+          />
+          <PlainNavGroup
+            label="Super admin"
+            items={SUPER_ADMIN_ITEMS}
+            roles={roles}
+            tenantCountry={tenantCountry}
+          />
+          <PlainNavGroup
+            label="Account"
+            items={ACCOUNT_ITEMS}
+            roles={roles}
+            tenantCountry={tenantCountry}
+          />
+          <PlainNavGroup
+            label="Help"
+            items={HELP_ITEMS}
+            roles={roles}
+            tenantCountry={tenantCountry}
+          />
         </SidebarContent>
 
         <SidebarFooter className="border-t border-sidebar-border">

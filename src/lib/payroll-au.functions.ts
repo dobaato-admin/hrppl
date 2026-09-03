@@ -10,6 +10,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { assertAuPayroll } from "@/lib/au-guard";
 import {
   computeAuPeriod,
   type AuPeriodResult,
@@ -38,14 +39,13 @@ export const previewAuPeriod = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => Input.parse(d))
   .handler(async ({ data, context }): Promise<AuPeriodResult> => {
-    const { supabase } = context;
+    const { supabase, userId } = context;
 
-    // Tenant must be AU.
-    const { data: tenant } = await supabase
-      .from("tenants").select("country_code").eq("id", data.tenantId).maybeSingle();
-    if (!tenant || (tenant as any).country_code !== "AU") {
-      throw new Error("Tenant is not configured for Australia");
-    }
+    // Was an AU-tenant check with no role check at all: any authenticated user
+    // could run the PAYG-W/SG calculator against another tenant's brackets by
+    // passing its id. The shared guard does both, and mirrors who may run
+    // payroll (org_admin or finance).
+    await assertAuPayroll(supabase, userId, data.tenantId);
 
     // Resolve PAYG-W coefficient.
     const taxable = data.lines.reduce(

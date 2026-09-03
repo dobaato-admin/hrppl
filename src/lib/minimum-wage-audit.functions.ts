@@ -11,26 +11,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { assertAuOrgAdminOrHr } from "@/lib/au-guard";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   return supabaseAdmin;
 }
 
-async function assertAuOrgAdminOrHr(supabase: any, userId: string, tenantId: string) {
-  const { data: isAdmin } = await supabase.rpc("is_org_admin", {
-    _user_id: userId, _tenant_id: tenantId,
-  } as any);
-  const { data: isHr } = await supabase.rpc("is_hr", {
-    _user_id: userId, _tenant_id: tenantId,
-  } as any);
-  if (!isAdmin && !isHr) throw new Error("Forbidden: org admin or HR required");
-  const { data: tenant } = await supabase.from("tenants")
-    .select("country_code").eq("id", tenantId).maybeSingle();
-  if (!tenant || (tenant as any).country_code !== "AU") {
-    throw new Error("Tenant is not configured for Australia");
-  }
-}
 
 function sumLines(lines: any[] | null | undefined, pred: (l: any) => boolean): number {
   return (lines ?? []).filter(pred).reduce((a, l) => a + Number(l.amount ?? 0), 0);

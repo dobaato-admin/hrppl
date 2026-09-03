@@ -21,6 +21,8 @@ import {
   HelpCircle,
   House,
   Inbox,
+  Landmark,
+  type LucideIcon,
   LayoutDashboard,
   ListChecks,
   MapPin,
@@ -28,6 +30,8 @@ import {
   Palette,
   PlugZap,
   Receipt,
+  Scale,
+  Send,
   Settings,
   ShieldAlert,
   ShieldCheck,
@@ -40,7 +44,6 @@ import {
   UserSearch,
   Users,
   Wallet,
-  type LucideIcon,
 } from "lucide-react";
 import type { AppRole, Feature } from "@/lib/rbac";
 
@@ -114,6 +117,14 @@ export type NavSection = {
   icon: LucideIcon;
   accent: string;
   items: NavItem[];
+  /**
+   * Render the whole subgroup only for tenants in these ISO country codes.
+   * Same field as `NavItem.country` but applied to the heading, so a
+   * country-specific domain is ABSENT elsewhere rather than present-and-empty
+   * — an empty "Australian compliance" heading in a Nepali tenant reads as a
+   * broken page, not as an inapplicable feature.
+   */
+  country?: string[];
 };
 
 // ---------------------------------------------------------------------------
@@ -575,6 +586,81 @@ export const ORG_SECTIONS: NavSection[] = [
     ],
   },
   {
+    /**
+     * Australian compliance — the country-gated subgroup.
+     *
+     * A new subgroup rather than five more rows under Payroll: that section is
+     * already at the nine-item cap the W4 regroup bought, and these five are a
+     * coherent domain rather than five more payroll settings.
+     *
+     * `country: ["AU"]` is the first consumer of that field. For Globex Nepal
+     * the whole group is absent — not empty, absent. The alternative, a
+     * hardcoded `country_code === "AU"` in AppShell, would need writing again
+     * for the next country; a field makes that a data change.
+     *
+     * The five keys are deliberately different from one another. See the
+     * Australian compliance block in rbac.ts: each mirrors the RLS policy on
+     * the table its page writes, because the database does not treat this
+     * domain uniformly. finance runs Payday Super and does not lodge with the
+     * ATO; hr remediates underpayment and does not assign awards.
+     */
+    title: "Australian compliance",
+    icon: ShieldAlert,
+    accent: "bg-status-stuck",
+    country: ["AU"],
+    items: [
+      {
+        title: "Super funds",
+        to: "/admin/super-funds",
+        icon: Landmark,
+        accent: "bg-primary",
+        feature: "org.auSuperFunds",
+        keywords: "superannuation smsf apra usi member choice",
+      },
+      {
+        title: "Payday Super",
+        to: "/admin/super-batches",
+        icon: Send,
+        accent: "bg-status-working",
+        feature: "org.auSuperBatches",
+        keywords: "superstream remittance batch clearing house sg contribution",
+      },
+      {
+        title: "STP pay events",
+        to: "/admin/stp-events",
+        icon: FileText,
+        accent: "bg-status-info",
+        feature: "org.auStpEvents",
+        keywords: "single touch payroll ato lodgement eofy finalisation phase 2",
+      },
+      {
+        title: "Award library",
+        to: "/admin/awards",
+        icon: Scale,
+        accent: "bg-status-done",
+        feature: "org.auAwards",
+        keywords: "modern award classification pay guide fair work",
+      },
+      {
+        title: "Underpayment audit",
+        to: "/admin/underpayment-audit",
+        icon: AlertTriangle,
+        accent: "bg-status-stuck",
+        feature: "org.auUnderpayment",
+        keywords: "minimum wage remediation back pay finding",
+      },
+      {
+        // Moved here from Records. It reports what the five pages above
+        // fix, so it belongs beside them rather than filed as paperwork.
+        title: "STP2 readiness audit",
+        to: "/admin/au-stp-audit",
+        icon: ShieldAlert,
+        accent: "bg-status-stuck",
+        feature: "org.auStpAudit",
+      },
+    ],
+  },
+  {
     title: "Onboarding",
     icon: GraduationCap,
     accent: "bg-status-info",
@@ -724,16 +810,6 @@ export const ORG_SECTIONS: NavSection[] = [
         icon: FileSignature,
         accent: "bg-status-pending",
         feature: "org.documentTemplates",
-      },
-      {
-        // Moved in from the old flat Operations list — a
-        // regulatory audit reads as records/paperwork, not an
-        // operation.
-        title: "AU STP2 & Payday Super audit",
-        to: "/admin/au-stp-audit",
-        icon: ShieldAlert,
-        accent: "bg-status-stuck",
-        feature: "org.auStpAudit",
       },
       {
         // W5 P2 · 74 lines, and the only orphan that also rendered with no
@@ -1095,14 +1171,23 @@ export type NavDestination = {
   keywords?: string;
 };
 
-function flatten(group: string, items: NavItem[], section?: string): NavDestination[] {
+function flatten(
+  group: string,
+  items: NavItem[],
+  section?: string,
+  sectionCountry?: string[],
+): NavDestination[] {
   return items.map((i) => ({
     title: i.title,
     to: i.to,
     feature: i.feature,
     group,
     section,
-    country: i.country,
+    // A row inherits its subgroup's country restriction unless it states its
+    // own. Without this the registry would report the AU pages as globally
+    // available while the sidebar hid them, and GlobalSearch would offer a
+    // Nepali tenant a link to a page it has no business seeing.
+    country: i.country ?? sectionCountry,
     readOnlyFor: i.readOnlyFor,
     keywords: i.keywords,
   }));
@@ -1118,11 +1203,11 @@ function flatten(group: string, items: NavItem[], section?: string): NavDestinat
  */
 export const NAV_DESTINATIONS: NavDestination[] = [
   ...flatten("My workspace", MY_ITEMS),
-  ...MY_SECTIONS.flatMap((s) => flatten("My workspace", s.items, s.title)),
+  ...MY_SECTIONS.flatMap((s) => flatten("My workspace", s.items, s.title, s.country)),
   ...flatten("Practice", PRACTICE_ITEMS),
   ...flatten("Manager", MANAGER_ITEMS),
   ...flatten("Organization", ORG_ITEMS),
-  ...ORG_SECTIONS.flatMap((s) => flatten("Organization", s.items, s.title)),
+  ...ORG_SECTIONS.flatMap((s) => flatten("Organization", s.items, s.title, s.country)),
   ...flatten("Regional", REGIONAL_ITEMS),
   ...flatten("Super admin", SUPER_ADMIN_ITEMS),
   ...flatten("Account", ACCOUNT_ITEMS),
