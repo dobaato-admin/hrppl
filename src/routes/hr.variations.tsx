@@ -40,6 +40,7 @@ import {
   approveVariation,
   rejectVariation,
   applyVariation,
+  submitVariation,
   listVariationAudit,
 } from "@/lib/employment-variations.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -72,7 +73,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export const Route = createFileRoute("/hr/variations")({
-  head: () => ({ meta: [{ title: "Employment variations — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Employment variations — hrppl" }] }),
   component: Page,
 });
 
@@ -94,6 +95,7 @@ function Page() {
   const approveFn = useServerFn(approveVariation);
   const rejectFn = useServerFn(rejectVariation);
   const applyFn = useServerFn(applyVariation);
+  const submitFn = useServerFn(submitVariation);
 
   const [status, setStatus] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -139,7 +141,7 @@ function Page() {
   }, [open, tenantId]);
 
   const create = useMutation({
-    mutationFn: () => {
+    mutationFn: (submit: boolean) => {
       let proposed: any = {};
       try {
         proposed = JSON.parse(proposedJson || "{}");
@@ -153,12 +155,12 @@ function Page() {
           effective_date: effectiveDate,
           proposed_changes: proposed,
           notes: notes || null,
-          submit: true,
+          submit,
         },
       });
     },
-    onSuccess: () => {
-      toast.success("Variation submitted for approval");
+    onSuccess: (_res, submit) => {
+      toast.success(submit ? "Variation submitted for approval" : "Draft saved");
       setOpen(false);
       setEmployeeId("");
       setProposedJson('{"base_salary": 0}');
@@ -166,6 +168,15 @@ function Page() {
       qc.invalidateQueries({ queryKey: ["variations"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Create failed"),
+  });
+
+  const submitDraft = useMutation({
+    mutationFn: (id: string) => submitFn({ data: { id } }),
+    onSuccess: () => {
+      toast.success("Sent for approval");
+      qc.invalidateQueries({ queryKey: ["variations"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Could not submit the draft"),
   });
 
   const [rejectFor, setRejectFor] = useState<string | null>(null);
@@ -313,6 +324,16 @@ function Page() {
                           >
                             History
                           </Button>
+                          {r.status === "draft" && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              disabled={submitDraft.isPending}
+                              onClick={() => submitDraft.mutate(r.id)}
+                            >
+                              Submit
+                            </Button>
+                          )}
                           {r.status === "pending_approval" && (
                             <>
                               <Button
@@ -427,8 +448,23 @@ function Page() {
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => create.mutate()} disabled={!employeeId || create.isPending}>
-              {create.isPending ? "Submitting…" : "Submit for approval"}
+            {/*
+              A variation is real HR paperwork — a transfer, a change of hours,
+              a new contract — and it is normally prepared before it is put to
+              an approver. The draft state, its filter and its badge colour were
+              all authored; `submit` was hardcoded true at the one call site and
+              submitVariation had no caller, so a draft could be neither created
+              nor advanced. Both halves are wired now.
+            */}
+            <Button
+              variant="secondary"
+              onClick={() => create.mutate(false)}
+              disabled={!employeeId || create.isPending}
+            >
+              Save as draft
+            </Button>
+            <Button onClick={() => create.mutate(true)} disabled={!employeeId || create.isPending}>
+              {create.isPending ? "Saving…" : "Submit for approval"}
             </Button>
           </DialogFooter>
         </DialogContent>

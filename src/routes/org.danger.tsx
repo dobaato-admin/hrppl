@@ -31,7 +31,7 @@ import {
 import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/danger")({
-  head: () => ({ meta: [{ title: "Danger zone — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Danger zone — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.danger">
       <DangerZonePage />

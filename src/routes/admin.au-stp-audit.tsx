@@ -20,7 +20,7 @@ import { getAuStpAudit } from "@/lib/au-stp-audit.functions";
 import { CheckCircle2, AlertTriangle, XCircle, Download } from "lucide-react";
 
 export const Route = createFileRoute("/admin/au-stp-audit")({
-  head: () => ({ meta: [{ title: "AU STP2 & Payday Super audit — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "AU STP2 & Payday Super audit — hrppl" }] }),
   component: Page,
 });
 

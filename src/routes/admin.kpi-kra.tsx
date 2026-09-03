@@ -24,7 +24,7 @@ import { AppShell } from "@/components/AppShell";
 export const Route = createFileRoute("/admin/kpi-kra")({
   head: () => ({
     meta: [
-      { title: "KPI & KRA library — WorldPay HRMS" },
+      { title: "KPI & KRA library — hrppl" },
       {
         name: "description",
         content: "Browse standard KPI and KRA presets and apply them to your tenant in one click.",

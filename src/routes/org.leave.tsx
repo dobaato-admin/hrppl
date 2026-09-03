@@ -43,7 +43,7 @@ import {
 } from "@/lib/leave-accruals.functions";
 
 export const Route = createFileRoute("/org/leave")({
-  head: () => ({ meta: [{ title: "Leave management — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Leave management — hrppl" }] }),
   component: OrgLeave,
 });
 

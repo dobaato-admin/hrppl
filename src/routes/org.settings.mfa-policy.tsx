@@ -24,7 +24,7 @@ const ROLE_OPTIONS = [
 ];
 
 export const Route = createFileRoute("/org/settings/mfa-policy")({
-  head: () => ({ meta: [{ title: "MFA policy — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "MFA policy — hrppl" }] }),
   component: () => (
     <AdminGate feature="settings.organization">
       <MfaPolicyPage />

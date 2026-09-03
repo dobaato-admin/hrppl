@@ -32,7 +32,7 @@ import {
 import { getOrgAnalytics } from "@/lib/analytics.functions";
 
 export const Route = createFileRoute("/org/analytics")({
-  head: () => ({ meta: [{ title: "Analytics — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Analytics — hrppl" }] }),
   component: AnalyticsPage,
 });
 

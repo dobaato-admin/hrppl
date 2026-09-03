@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/select";
 
 export const Route = createFileRoute("/org/performance")({
-  head: () => ({ meta: [{ title: "Performance — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Performance — hrppl" }] }),
   component: OrgPerformance,
 });
 

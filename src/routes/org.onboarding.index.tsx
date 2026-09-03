@@ -53,7 +53,7 @@ import {
 import { PaySetupPanel } from "@/components/onboarding/PaySetupPanel";
 
 export const Route = createFileRoute("/org/onboarding/")({
-  head: () => ({ meta: [{ title: "Onboarding admin — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Onboarding admin — hrppl" }] }),
   component: OrgOnboarding,
 });
 

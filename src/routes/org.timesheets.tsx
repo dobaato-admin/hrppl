@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { approveTimesheet, rejectTimesheet } from "@/lib/attendance.functions";
 
 export const Route = createFileRoute("/org/timesheets")({
-  head: () => ({ meta: [{ title: "Timesheets — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Timesheets — hrppl" }] }),
   component: OrgTimesheets,
 });
 

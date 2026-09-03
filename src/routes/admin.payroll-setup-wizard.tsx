@@ -31,7 +31,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/payroll-setup-wizard")({
-  head: () => ({ meta: [{ title: "Pre-invite payroll checklist — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Pre-invite payroll checklist — hrppl" }] }),
   component: () => (
     <AdminGate allow={ORG_ADMIN_ONLY}>
       <WizardPage />

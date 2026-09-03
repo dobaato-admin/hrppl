@@ -15,7 +15,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 
 export const Route = createFileRoute("/settings/notifications")({
-  head: () => ({ meta: [{ title: "Notification Settings — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Notification Settings — hrppl" }] }),
   component: NotificationSettings,
 });
 

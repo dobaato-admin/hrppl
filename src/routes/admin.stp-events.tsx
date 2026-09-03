@@ -57,7 +57,7 @@ import { FileText, Download } from "lucide-react";
  * it to finance would put the "Forbidden" after the click instead of before.
  */
 export const Route = createFileRoute("/admin/stp-events")({
-  head: () => ({ meta: [{ title: "STP pay events — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "STP pay events — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.auStpEvents">
       <StpEventsPage />

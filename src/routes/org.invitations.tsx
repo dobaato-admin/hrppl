@@ -46,7 +46,7 @@ import { toast } from "sonner";
 import { Plus, RefreshCcw, Ban, Copy, UserPlus, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/org/invitations")({
-  head: () => ({ meta: [{ title: "Staff invitations — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Staff invitations — hrppl" }] }),
   component: OrgInvitationsPage,
 });
 

@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Link2 as LinkIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listEmployeeTimeline, recordCustomEvent } from "@/lib/timeline.functions";
+import { linkEvents, listEmployeeTimeline, recordCustomEvent } from "@/lib/timeline.functions";
 import { listEventAccessLog, accessLogSummary, logEventAccess } from "@/lib/audit.functions";
 import { AdminGate } from "@/components/AdminGate";
 
@@ -97,6 +97,7 @@ function EmployeeRecordPage() {
   const fetchAuditSummary = useServerFn(accessLogSummary);
   const logAccess = useServerFn(logEventAccess);
   const addEvent = useServerFn(recordCustomEvent);
+  const linkFn = useServerFn(linkEvents);
   const qc = useQueryClient();
 
   // W5 P3 · recordCustomEvent had no caller, so the employment timeline could
@@ -181,6 +182,33 @@ function EmployeeRecordPage() {
   });
 
   const events = data?.events ?? [];
+
+  // The links the server already returns, indexed for lookup while rendering.
+  const links = data?.links ?? [];
+  const eventById = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const e of events) m.set(e.id, e);
+    return m;
+  }, [events]);
+  const linksFrom = (id: string) => links.filter((l: any) => l.from_event_id === id);
+
+  // Manual linking. The auto-created pairs cover the one case Postgres knows
+  // about; everything else — a grievance and the discipline case that answered
+  // it, two absences that were the same illness — is a judgement only a person
+  // can make. linkEvents already asserts HR-or-admin server-side.
+  const [linkFrom, setLinkFrom] = useState<any | null>(null);
+  const [linkTo, setLinkTo] = useState("");
+  const [relation, setRelation] = useState("related");
+  const linkM = useMutation({
+    mutationFn: () => linkFn({ data: { fromEventId: linkFrom.id, toEventId: linkTo, relation } }),
+    onSuccess: () => {
+      toast.success("Events linked");
+      setLinkFrom(null);
+      setLinkTo("");
+      qc.invalidateQueries({ queryKey: ["employee-timeline"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Could not link the events"),
+  });
   const grouped = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const e of events) counts[e.category] = (counts[e.category] ?? 0) + 1;
@@ -385,6 +413,41 @@ function EmployeeRecordPage() {
                               Source: {e.source_table} · {e.source_id?.slice(0, 8)}
                             </p>
                           )}
+                          {/*
+                            W5 P5 · The database has always built these links —
+                            tg_event_medical writes a `spawned` / `caused_by`
+                            pair when a medical incident opens a disciplinary
+                            case — and listEmployeeTimeline has always returned
+                            them. Nothing rendered them, so the one thing a
+                            timeline exists to show, that this followed from
+                            that, was computed, stored, fetched and dropped.
+                          */}
+                          {linksFrom(e.id).map((l: any) => {
+                            const target = eventById.get(l.to_event_id);
+                            return (
+                              <p
+                                key={l.id ?? `${l.from_event_id}-${l.to_event_id}`}
+                                className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                              >
+                                <LinkIcon className="h-3 w-3 shrink-0" />
+                                <span className="capitalize">
+                                  {String(l.relation).replace(/_/g, " ")}
+                                </span>
+                                <span className="text-foreground">
+                                  {target?.title ?? "an event outside this range"}
+                                </span>
+                              </p>
+                            );
+                          })}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="mt-1 h-6 px-1.5 text-[11px]"
+                            onClick={() => setLinkFrom(e)}
+                          >
+                            <LinkIcon className="mr-1 h-3 w-3" />
+                            Link to another event
+                          </Button>
                         </li>
                       ))}
                     </ol>
@@ -394,6 +457,61 @@ function EmployeeRecordPage() {
             </TabsContent>
           </Tabs>
         )}
+
+        <Dialog open={!!linkFrom} onOpenChange={(o) => !o && setLinkFrom(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Link this event to another</DialogTitle>
+              <DialogDescription className="line-clamp-2">
+                From “{linkFrom?.title}”. Links appear on the timeline so the connection between two
+                entries is visible to whoever reads the record next.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="link-to">Event</Label>
+                <Select value={linkTo} onValueChange={setLinkTo}>
+                  <SelectTrigger id="link-to">
+                    <SelectValue placeholder="Select an event" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {events
+                      .filter((e: any) => e.id !== linkFrom?.id)
+                      .map((e: any) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {new Date(e.occurred_at).toLocaleDateString()} · {e.title}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="link-relation">Relation</Label>
+                <Select value={relation} onValueChange={setRelation}>
+                  <SelectTrigger id="link-relation">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Same vocabulary the trigger writes, so hand-made and
+                        auto-made links read identically on the timeline. */}
+                    <SelectItem value="related">Related to</SelectItem>
+                    <SelectItem value="spawned">Spawned</SelectItem>
+                    <SelectItem value="caused_by">Caused by</SelectItem>
+                    <SelectItem value="supersedes">Supersedes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setLinkFrom(null)}>
+                Cancel
+              </Button>
+              <Button disabled={!linkTo || linkM.isPending} onClick={() => linkM.mutate()}>
+                {linkM.isPending ? "Linking…" : "Link events"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppShell>
   );

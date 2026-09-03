@@ -42,7 +42,7 @@ import {
 } from "@/lib/role-management.functions";
 
 export const Route = createFileRoute("/org/roles")({
-  head: () => ({ meta: [{ title: "Roles & permissions — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Roles & permissions — hrppl" }] }),
   component: OrgRolesPage,
 });
 

@@ -36,7 +36,7 @@ import { useMyTenantId } from "@/hooks/use-tenant";
 import { ORG_ADMIN_OR_MANAGER } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/review-analytics")({
-  head: () => ({ meta: [{ title: "Review analytics — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Review analytics — hrppl" }] }),
   // AdminGate was imported but never used — this page had no route gate at
   // all, unlike every other page under /admin. The underlying server fns
   // (reviewDashboardSummary, exportReviewInstances, reviewReviewInstance) all

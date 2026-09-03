@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/practice/clients")({
-  head: () => ({ meta: [{ title: "Clients — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Clients — hrppl" }] }),
   component: () => (
     <AdminGate feature="practice.console">
       <ClientsPage />

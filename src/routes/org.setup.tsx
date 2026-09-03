@@ -34,7 +34,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/org/setup")({
-  head: () => ({ meta: [{ title: "Set up your organization — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Set up your organization — hrppl" }] }),
   component: OrgSetupPage,
 });
 

@@ -46,7 +46,7 @@ const LANES = ["hr", "it", "manager", "employee", "finance"] as const;
 const STATUSES = ["pending", "in_progress", "completed", "blocked", "skipped"] as const;
 
 export const Route = createFileRoute("/org/onboarding/control-room/$id")({
-  head: () => ({ meta: [{ title: "Onboarding control room — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Onboarding control room — hrppl" }] }),
   component: Page,
 });
 

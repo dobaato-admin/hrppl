@@ -35,7 +35,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useMyTenantCountry, useMyTenantId } from "@/hooks/use-tenant";
-import { assignEmployeeAward, listAwards } from "@/lib/awards.functions";
+import { assignEmployeeAward, getEffectiveAwardRate, listAwards } from "@/lib/awards.functions";
 import { Scale } from "lucide-react";
 
 /**
@@ -55,7 +55,7 @@ import { Scale } from "lucide-react";
  * and not the wider set the funds page uses.
  */
 export const Route = createFileRoute("/admin/awards")({
-  head: () => ({ meta: [{ title: "Award library — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Award library — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.auAwards">
       <AwardsPage />
@@ -150,6 +150,25 @@ function AwardsPage() {
       qc.invalidateQueries({ queryKey: ["au-award-assignments"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Could not assign the classification"),
+  });
+
+  /**
+   * "What is this person's award rate today?" — resolved server-side rather
+   * than by joining the tables in the page.
+   *
+   * `award_rate_on` picks the rate effective on a date, which is not the same
+   * as the newest row in the library: a pay-guide increase dated next July must
+   * not change what today's audit compares against. The Library tab shows the
+   * latest rate per classification; this shows what actually applies now, and
+   * the two legitimately differ around an effective date. That difference is
+   * the point — the underpayment audit uses this one.
+   */
+  const [rateFor, setRateFor] = useState<any | null>(null);
+  const fetchRate = useServerFn(getEffectiveAwardRate);
+  const rateQ = useQuery({
+    queryKey: ["au-effective-rate", rateFor?.id],
+    queryFn: () => fetchRate({ data: { employeeId: rateFor.id } }),
+    enabled: !!rateFor,
   });
 
   const unassignedCount = (assignmentsQ.data?.employees ?? []).filter(
@@ -285,6 +304,16 @@ function AwardsPage() {
                           {a?.effective_from ?? "—"}
                         </TableCell>
                         <TableCell>
+                          {a ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setRateFor(e)}
+                              title="The rate that applies today"
+                            >
+                              Rate
+                            </Button>
+                          ) : null}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -306,6 +335,59 @@ function AwardsPage() {
               </Table>
             </SectionCard>
           </TabsContent>
+
+          <Dialog open={!!rateFor} onOpenChange={(o) => !o && setRateFor(null)}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  Effective rate — {rateFor?.first_name} {rateFor?.last_name}
+                </DialogTitle>
+                <DialogDescription>
+                  The award rate in force today, which is what the underpayment audit compares
+                  actual pay against.
+                </DialogDescription>
+              </DialogHeader>
+              {rateQ.isLoading ? (
+                <p className="text-sm text-muted-foreground">Resolving…</p>
+              ) : !rateQ.data?.assignment ? (
+                <p className="text-sm text-muted-foreground">
+                  No classification is in force for this employee today.
+                </p>
+              ) : (
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">Award</dt>
+                    <dd className="text-right font-medium">
+                      {(rateQ.data.classification as any)?.awards?.code ?? "—"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">Classification</dt>
+                    <dd className="text-right font-medium">
+                      {(rateQ.data.classification as any)?.name ?? "—"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-muted-foreground">Basis</dt>
+                    <dd className="text-right">
+                      {(rateQ.data.assignment as any)?.casual ? "Casual" : "Permanent"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-4 border-t pt-2">
+                    <dt className="text-muted-foreground">Hourly rate today</dt>
+                    <dd className="text-right font-medium tabular-nums">
+                      {money(
+                        (rateQ.data.assignment as any)?.casual
+                          ? ((rateQ.data.rate as any)?.casual_hourly_rate ??
+                              (rateQ.data.rate as any)?.base_hourly_rate)
+                          : (rateQ.data.rate as any)?.base_hourly_rate,
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+              )}
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={!!assignFor} onOpenChange={(o) => !o && setAssignFor(null)}>
             <DialogContent className="max-w-md">

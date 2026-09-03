@@ -17,7 +17,7 @@ import {
 } from "@/lib/review-instances.functions";
 
 export const Route = createFileRoute("/me/reviews")({
-  head: () => ({ meta: [{ title: "My scorecards — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "My scorecards — hrppl" }] }),
   errorComponent: ({ error, reset }) => (
     <main className="p-6 text-sm text-destructive">
       <p>Couldn't load scorecards: {error.message}</p>

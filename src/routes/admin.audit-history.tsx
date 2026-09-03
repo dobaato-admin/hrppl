@@ -55,7 +55,7 @@ import {
 import { RefreshCw, AlertTriangle, History, Radio } from "lucide-react";
 
 export const Route = createFileRoute("/admin/audit-history")({
-  head: () => ({ meta: [{ title: "Audit history — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Audit history — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.auditHistory">
       <Page />

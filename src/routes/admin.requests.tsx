@@ -24,6 +24,7 @@ import { useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
+import { TicketThread } from "@/components/requests/TicketThread";
 import { AdminGate } from "@/components/AdminGate";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -261,16 +262,25 @@ function AdminRequestsPage() {
                                 </p>
                               ) : null}
                             </div>
-                            <TicketDecision
-                              disabled={updateTicket.isPending}
-                              onDecide={(status, notes) =>
-                                updateTicket.mutate({
-                                  ticket_id: t.id,
-                                  status,
-                                  decision_notes: notes,
-                                })
-                              }
-                            />
+                            <div className="flex shrink-0 items-center gap-1">
+                              {/*
+                                Deciding is one-way and only happens once. Most
+                                tickets need a question answered first — what
+                                size, which cost centre, when — and until now
+                                there was nowhere to ask it.
+                              */}
+                              <TicketThread ticketId={t.id} subject={t.subject} />
+                              <TicketDecision
+                                disabled={updateTicket.isPending}
+                                onDecide={(status, notes) =>
+                                  updateTicket.mutate({
+                                    ticket_id: t.id,
+                                    status,
+                                    decision_notes: notes,
+                                  })
+                                }
+                              />
+                            </div>
                           </li>
                         ))}
                       </ul>

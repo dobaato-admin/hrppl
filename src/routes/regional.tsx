@@ -36,7 +36,7 @@ import { AppShell } from "@/components/AppShell";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/regional")({
-  head: () => ({ meta: [{ title: "Regional Admin — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Regional Admin — hrppl" }] }),
   component: RegionalPage,
 });
 

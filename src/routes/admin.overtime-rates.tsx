@@ -30,7 +30,7 @@ import { can } from "@/lib/rbac";
 import { AppShell } from "@/components/AppShell";
 
 export const Route = createFileRoute("/admin/overtime-rates")({
-  head: () => ({ meta: [{ title: "Overtime & penalty rates — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Overtime & penalty rates — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.overtimeRates">
       <OvertimeRatesAdmin />

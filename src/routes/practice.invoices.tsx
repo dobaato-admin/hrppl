@@ -21,7 +21,7 @@ import { Check, Plus, Trash2, Download } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/practice/invoices")({
-  head: () => ({ meta: [{ title: "Invoices — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Invoices — hrppl" }] }),
   component: () => (
     <AdminGate feature="practice.console">
       <InvoicesPage />

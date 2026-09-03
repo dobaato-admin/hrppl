@@ -29,7 +29,7 @@ import {
 } from "@/lib/employee-duties.functions";
 
 export const Route = createFileRoute("/admin/employee-duties")({
-  head: () => ({ meta: [{ title: "Duties & responsibilities — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Duties & responsibilities — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.employeeDuties">
       <Page />

@@ -23,7 +23,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/overtime-setup-wizard")({
-  head: () => ({ meta: [{ title: "Overtime Setup Wizard — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Overtime Setup Wizard — hrppl" }] }),
   component: () => (
     <AdminGate allow={ORG_ADMIN_ONLY}>
       <OvertimeWizard />

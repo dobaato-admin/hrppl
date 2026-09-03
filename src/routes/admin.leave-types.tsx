@@ -39,7 +39,7 @@ import { can } from "@/lib/rbac";
 import { AppShell } from "@/components/AppShell";
 
 export const Route = createFileRoute("/admin/leave-types")({
-  head: () => ({ meta: [{ title: "Leave types — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Leave types — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.leaveTypes">
       <LeaveTypesAdmin />

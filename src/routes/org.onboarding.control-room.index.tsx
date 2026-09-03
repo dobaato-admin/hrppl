@@ -40,7 +40,7 @@ const STATUSES = ["pending", "in_progress", "completed", "blocked", "skipped"] a
 const ALL = "__all__";
 
 export const Route = createFileRoute("/org/onboarding/control-room/")({
-  head: () => ({ meta: [{ title: "Onboarding control room — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Onboarding control room — hrppl" }] }),
   component: Page,
 });
 

@@ -52,7 +52,7 @@ import { Landmark, Plus } from "lucide-react";
  * moving money is a different key, on the Payday Super page.
  */
 export const Route = createFileRoute("/admin/super-funds")({
-  head: () => ({ meta: [{ title: "Super funds — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Super funds — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.auSuperFunds">
       <SuperFundsPage />

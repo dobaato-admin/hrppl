@@ -59,7 +59,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/review-templates")({
-  head: () => ({ meta: [{ title: "Review templates — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Review templates — hrppl" }] }),
   // Gated at the route, per CLAUDE.md. This page hand-rolled `canAccess` and
   // rendered its own chrome-less "no access" panel, so the six roles that
   // cannot open it landed on a bare page with no sidebar and no way back — the

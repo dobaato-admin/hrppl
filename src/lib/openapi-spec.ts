@@ -1,5 +1,5 @@
 /**
- * OpenAPI 3.1 specification for WorldPay HRMS Public API v1.
+ * OpenAPI 3.1 specification for the hrppl Public API v1.
  *
  * Single source of truth for the public surface. Served at:
  *   GET /api/v1/openapi.json   (the spec)
@@ -976,7 +976,7 @@ const paths: Path = {
 const webhookEvent = (eventName: string, dataRef: string) => ({
   post: {
     summary: eventName,
-    description: `Fired when \`${eventName}\` occurs. Signed with HMAC-SHA256 over the request body using the per-subscription secret. Verify the \`X-WorldPay-Signature\` header.`,
+    description: `Fired when \`${eventName}\` occurs. Signed with HMAC-SHA256 over the request body using the per-subscription secret. Verify the \`X-HRPPL-Signature\` header.`,
     requestBody: {
       required: true,
       content: {
@@ -1024,12 +1024,12 @@ const webhooks = {
 export const openApiSpec = {
   openapi: "3.1.0",
   info: {
-    title: "WorldPay HRMS API",
+    title: "hrppl API",
     version: "1.0.0",
     summary: "Global HRMS & Payroll Suite — Public API v1",
     description:
-      "Plug-and-play REST + Webhooks API for the WorldPay HRMS suite. Every UI action has a corresponding API endpoint. All requests are scoped to a tenant derived from the bearer token. Idempotent writes (`Idempotency-Key`), cursor pagination, sparse fieldsets (`?fields=`), filtering (`?filter[...]=`) and resource expansion (`?include=`) are supported across all list endpoints.",
-    contact: { name: "WorldPay HRMS API", url: "https://docs.worldpayhrms.com", email: "api@worldpayhrms.com" },
+      "Plug-and-play REST + Webhooks API for the hrppl suite. Every UI action has a corresponding API endpoint. All requests are scoped to a tenant derived from the bearer token. Idempotent writes (`Idempotency-Key`), cursor pagination, sparse fieldsets (`?fields=`), filtering (`?filter[...]=`) and resource expansion (`?include=`) are supported across all list endpoints.",
+    contact: { name: "hrppl API", url: "https://docs.worldpayhrms.com", email: "api@worldpayhrms.com" },
     license: { name: "Proprietary" },
   },
   servers: [

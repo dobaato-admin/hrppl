@@ -10,7 +10,7 @@ import { AppShell } from "@/components/AppShell";
 import { AdminGate } from "@/components/AdminGate";
 
 export const Route = createFileRoute("/org/")({
-  head: () => ({ meta: [{ title: "Organization — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Organization — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.console">
       <OrgPage />
