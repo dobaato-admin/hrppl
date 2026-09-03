@@ -19,7 +19,7 @@ import { getMyOnboardingProfile, upsertMyOnboardingProfile } from "@/lib/staff-o
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/onboarding/profile")({
-  head: () => ({ meta: [{ title: "Complete your profile — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Complete your profile — hrppl" }] }),
   component: OnboardingProfilePage,
 });
 

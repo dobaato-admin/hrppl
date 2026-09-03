@@ -9,7 +9,7 @@ import { Target, ClipboardList } from "lucide-react";
 import { listMyDuties } from "@/lib/employee-duties.functions";
 
 export const Route = createFileRoute("/me/duties")({
-  head: () => ({ meta: [{ title: "My duties — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "My duties — hrppl" }] }),
   component: Page,
   errorComponent: ({ error, reset }) => {
     const router = useRouter();

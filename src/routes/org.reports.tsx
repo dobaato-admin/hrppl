@@ -27,7 +27,7 @@ import {
 import { getOrgReports } from "@/lib/reports.functions";
 
 export const Route = createFileRoute("/org/reports")({
-  head: () => ({ meta: [{ title: "Reports — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Reports — hrppl" }] }),
   component: ReportsPage,
 });
 

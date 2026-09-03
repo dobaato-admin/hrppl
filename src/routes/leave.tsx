@@ -20,7 +20,7 @@ import { KpiTile, StatusChip, statusTone, CardRail } from "@/components/monday";
 import { CalendarDays, Clock3, CheckCircle2, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/leave")({
-  head: () => ({ meta: [{ title: "My leave — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "My leave — hrppl" }] }),
   component: MyLeave,
 });
 

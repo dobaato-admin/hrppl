@@ -32,7 +32,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/review-cycles")({
-  head: () => ({ meta: [{ title: "KPI review cycles — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "KPI review cycles — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.reviewCycles">
       <Page />

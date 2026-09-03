@@ -144,12 +144,46 @@ export const listTicketComments = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ ticket_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context as any;
+    const { supabase, userId } = context as any;
     const { data: rows, error } = await supabase
       .from("support_ticket_comments")
       .select("id, body, is_internal, author_id, created_at")
       .eq("ticket_id", data.ticket_id)
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return { comments: rows ?? [] };
+
+    // Internal comments are filtered by RLS, not here: "support_ticket_comments_view"
+    // returns them only to org_admin / manager / regional_admin / super_admin.
+    // Re-filtering in the handler would duplicate the rule in a second place and
+    // let the two drift, which is the whole failure mode W5 was about.
+
+    // Author labels are resolved here so both the admin queue and the
+    // requester's own page render the same names from one implementation.
+    //
+    // Resolved through `employees` on the CALLER's client, deliberately, and it
+    // is expected to come up empty sometimes: no policy lets a plain employee
+    // read a colleague, so a requester sees their own name and a generic label
+    // for staff, while an admin sees everyone. Using the service-role client to
+    // "fix" that would publish who inside the organisation handled a request to
+    // the person who raised it, which is a disclosure decision, not a display
+    // detail. A missing name is the safe answer.
+    const authorIds = [...new Set((rows ?? []).map((r: any) => r.author_id).filter(Boolean))];
+    const names = new Map<string, string>();
+    if (authorIds.length) {
+      const { data: emps } = await supabase
+        .from("employees")
+        .select("user_id, first_name, last_name")
+        .in("user_id", authorIds);
+      for (const e of emps ?? []) {
+        const full = [(e as any).first_name, (e as any).last_name].filter(Boolean).join(" ").trim();
+        if (full) names.set((e as any).user_id, full);
+      }
+    }
+
+    const comments = (rows ?? []).map((r: any) => ({
+      ...r,
+      is_mine: r.author_id === userId,
+      author_label: r.author_id === userId ? "You" : (names.get(r.author_id) ?? "Support team"),
+    }));
+    return { comments };
   });

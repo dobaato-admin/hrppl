@@ -10,6 +10,7 @@
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
+import { TicketThread } from "@/components/requests/TicketThread";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/monday";
 import {
@@ -93,11 +94,22 @@ export function RequestList({
                 Raised {new Date(r.createdAt).toLocaleDateString()}
               </p>
             </div>
-            <Button asChild size="sm" variant="ghost" className="shrink-0">
-              <Link to={r.href}>
-                Open <ArrowRight className="ml-1 h-3.5 w-3.5" />
-              </Link>
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              {/*
+                Support tickets are the one kind with a conversation attached.
+                Rendering it here rather than on each page means /me/requests and
+                /admin/requests get the same thread from one implementation —
+                the same reason both pages render through this component at all.
+                The other five kinds are decided on the page that owns their
+                rules, and that page is where their discussion belongs.
+              */}
+              {r.kind === "ticket" ? <TicketThread ticketId={r.id} subject={r.title} /> : null}
+              <Button asChild size="sm" variant="ghost">
+                <Link to={r.href}>
+                  Open <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
           </li>
         );
       })}

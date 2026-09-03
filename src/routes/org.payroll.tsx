@@ -60,7 +60,7 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/org/payroll")({
-  head: () => ({ meta: [{ title: "Payroll — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Payroll — hrppl" }] }),
   component: PayrollPage,
 });
 

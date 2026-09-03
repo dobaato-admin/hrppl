@@ -27,7 +27,7 @@ import { describeOAuthError } from "@/lib/oauth-errors";
 import { buildGoogleRedirectUri } from "@/lib/oauth-config";
 
 export const Route = createFileRoute("/settings/account")({
-  head: () => ({ meta: [{ title: "Account — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Account — hrppl" }] }),
   component: AccountSettingsPage,
 });
 

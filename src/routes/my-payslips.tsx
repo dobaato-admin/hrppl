@@ -14,7 +14,7 @@ import { KpiTile } from "@/components/monday";
 import { Receipt, Wallet, Calendar as CalIcon, TrendingUp } from "lucide-react";
 
 export const Route = createFileRoute("/my-payslips")({
-  head: () => ({ meta: [{ title: "My payslips — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "My payslips — hrppl" }] }),
   component: MyPayslips,
 });
 

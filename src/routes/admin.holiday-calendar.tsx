@@ -26,7 +26,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { AppShell } from "@/components/AppShell";
 
 export const Route = createFileRoute("/admin/holiday-calendar")({
-  head: () => ({ meta: [{ title: "Holiday calendar — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Holiday calendar — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.publicHolidays">
       <HolidayCalendar />

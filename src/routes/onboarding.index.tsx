@@ -21,7 +21,7 @@ import { KpiTile, StatusChip, statusTone } from "@/components/monday";
 import { ListChecks, FileText, Hourglass, Award, CheckCircle2, ArrowRight } from "lucide-react";
 
 export const Route = createFileRoute("/onboarding/")({
-  head: () => ({ meta: [{ title: "Onboarding — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Onboarding — hrppl" }] }),
   component: OnboardingPage,
 });
 

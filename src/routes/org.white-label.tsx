@@ -14,7 +14,7 @@ import { getMyWhiteLabel, upsertMyWhiteLabel } from "@/lib/super-admin.functions
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/org/white-label")({
-  head: () => ({ meta: [{ title: "White-label — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "White-label — hrppl" }] }),
   component: WhiteLabelPage,
 });
 

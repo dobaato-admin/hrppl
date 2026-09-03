@@ -12,7 +12,7 @@ interface Props {
 }
 
 const Email = (p: Props) => (
-  <Shell preview={`You're invited to join ${p.organizationName ?? "our team"}`} title={`Join ${p.organizationName ?? "our team"} on WorldPay HRMS`}>
+  <Shell preview={`You're invited to join ${p.organizationName ?? "our team"}`} title={`Join ${p.organizationName ?? "our team"} on hrppl`}>
     <Text>
       Hi{p.firstName ? ` ${p.firstName}` : ""}, {p.inviterName ? `${p.inviterName} has` : "you have been"} invited
       you to join <strong>{p.organizationName ?? "their organization"}</strong>

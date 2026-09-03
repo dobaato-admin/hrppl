@@ -32,7 +32,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/leave-setup-wizard")({
-  head: () => ({ meta: [{ title: "Leave Setup Wizard — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Leave Setup Wizard — hrppl" }] }),
   component: () => (
     <AdminGate allow={ORG_ADMIN_ONLY}>
       <LeaveWizard />

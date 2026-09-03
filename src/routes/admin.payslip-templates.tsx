@@ -64,7 +64,7 @@ const SANITIZE_CONFIG = {
 const sanitizeHtml = (html: string) => DOMPurify.sanitize(html, SANITIZE_CONFIG);
 
 export const Route = createFileRoute("/admin/payslip-templates")({
-  head: () => ({ meta: [{ title: "Payslip Templates — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Payslip Templates — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.payslipTemplates">
       <PayslipTemplatesPage />

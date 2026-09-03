@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 
 export const Route = createFileRoute("/invite/$token")({
-  head: () => ({ meta: [{ title: "Accept invitation — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Accept invitation — hrppl" }] }),
   component: AcceptInvitePage,
 });
 

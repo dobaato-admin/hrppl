@@ -51,7 +51,7 @@ import {
 } from "recharts";
 
 export const Route = createFileRoute("/org/careers/settings")({
-  head: () => ({ meta: [{ title: "Careers page — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Careers page — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.recruitment">
       <Page />

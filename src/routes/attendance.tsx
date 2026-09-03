@@ -17,7 +17,7 @@ import { Clock, Timer, AlarmClock, FileCheck2 } from "lucide-react";
 import { browserTimeZone, localYmd } from "@/lib/work-date";
 
 export const Route = createFileRoute("/attendance")({
-  head: () => ({ meta: [{ title: "My attendance — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "My attendance — hrppl" }] }),
   component: AttendancePage,
 });
 

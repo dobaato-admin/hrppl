@@ -88,6 +88,7 @@ export type Feature =
   | "org.geofences"
   | "org.wfhApprovals"
   | "org.requests"
+  | "org.ticketInternalNotes"
   | "org.idRequests"
   | "org.analytics"
   | "org.reports"
@@ -296,6 +297,18 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   // from "not shown" to "Postgres rejected your update".
   "org.wfhApprovals": SET("super_admin", "org_admin", "manager", "hr"),
   "org.requests": SET("super_admin", "org_admin", "branch_admin", "hr", "manager"),
+  /**
+   * Who may write a comment the requester cannot see.
+   *
+   * Mirrors the second half of "support_ticket_comments_view", which returns
+   * `is_internal` rows only to org_admin, manager, regional_admin and
+   * super_admin. Note what is NOT here: `hr`, `finance` and `branch_admin` all
+   * reach the requests queue through org.requests, but the policy does not let
+   * them READ an internal note back. Offering them the toggle would let them
+   * write a note that vanishes on the next page load — worse than not offering
+   * it, because nothing would report the loss.
+   */
+  "org.ticketInternalNotes": SET("super_admin", "regional_admin", "org_admin", "manager"),
   "org.idRequests": SET("super_admin", "org_admin", "branch_admin", "hr"),
   "org.analytics": SET("super_admin", "org_admin", "branch_admin", "hr", "finance"),
   "org.reports": SET("super_admin", "org_admin", "branch_admin", "hr", "finance"),

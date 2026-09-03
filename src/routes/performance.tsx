@@ -21,7 +21,7 @@ import { KpiTile } from "@/components/monday";
 import { Target, MessagesSquare, Inbox, Trophy } from "lucide-react";
 
 export const Route = createFileRoute("/performance")({
-  head: () => ({ meta: [{ title: "My performance — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "My performance — hrppl" }] }),
   component: PerformancePage,
 });
 

@@ -50,7 +50,7 @@ import { can } from "@/lib/rbac";
 import { AppShell } from "@/components/AppShell";
 
 export const Route = createFileRoute("/admin/feedback-templates")({
-  head: () => ({ meta: [{ title: "360 feedback templates — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "360 feedback templates — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.feedbackTemplates">
       <FeedbackTemplatesAdmin />

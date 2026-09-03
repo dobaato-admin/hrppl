@@ -32,7 +32,7 @@ import {
   markSuperBatchPaid,
   submitSuperBatch,
 } from "@/lib/super.functions";
-import { getSuperSlaSummary } from "@/lib/super-sla.functions";
+import { getSuperSlaSummary, runSuperSlaSweep } from "@/lib/super-sla.functions";
 import { AlertTriangle, Download, Send } from "lucide-react";
 
 /**
@@ -49,7 +49,7 @@ import { AlertTriangle, Download, Send } from "lucide-react";
  * HR maintains the register, finance moves the money.
  */
 export const Route = createFileRoute("/admin/super-batches")({
-  head: () => ({ meta: [{ title: "Payday Super — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Payday Super — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.auSuperBatches">
       <SuperBatchesPage />
@@ -94,9 +94,27 @@ function SuperBatchesPage() {
   });
 
   const fetchSla = useServerFn(getSuperSlaSummary);
+  const sweep = useServerFn(runSuperSlaSweep);
   const slaQ = useQuery({
     queryKey: ["au-super-sla", tenantId],
-    queryFn: () => fetchSla({ data: { tenantId: tenantId! } }),
+    // Sweep, THEN summarise — in that order, every time this page loads.
+    //
+    // getSuperSlaSummary counts overdue money by `status = 'overdue'`, and
+    // runSuperSlaSweep is the only thing that ever sets that status. With the
+    // sweep unwired, a contribution could be months past its payment due date
+    // and this page would say "Overdue: $0.00" — a false all-clear on the exact
+    // number the page exists to show. Unpaid super is not deductible and
+    // attracts the superannuation guarantee charge, so a reassuring wrong
+    // answer here is worse than no page at all.
+    //
+    // The sweep is safe to run on load: it is idempotent, derives purely from
+    // payment_due_date against today, and only moves rows that are already
+    // past due out of a pending status.
+    queryFn: async () => {
+      const swept = await sweep({ data: { tenantId: tenantId! } });
+      const summary = await fetchSla({ data: { tenantId: tenantId! } });
+      return { ...summary, sweptNow: swept?.swept ?? 0 };
+    },
     enabled,
   });
 
@@ -195,6 +213,13 @@ function SuperBatchesPage() {
                 hint={`${sla.dueSoon.count} contribution${sla.dueSoon.count === 1 ? "" : "s"} approaching`}
               />
             </div>
+          ) : null}
+
+          {sla?.sweptNow > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {sla.sweptNow} contribution{sla.sweptNow === 1 ? " was" : "s were"} past the payment
+              due date and {sla.sweptNow === 1 ? "has" : "have"} just been marked overdue.
+            </p>
           ) : null}
 
           {sla?.overdue?.count > 0 ? (

@@ -30,7 +30,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { AppShell } from "@/components/AppShell";
 
 export const Route = createFileRoute("/admin/payroll-settings")({
-  head: () => ({ meta: [{ title: "Payroll Settings — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Payroll Settings — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.payrollSettings">
       <PayrollSettingsPage />

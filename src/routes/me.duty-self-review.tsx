@@ -26,7 +26,7 @@ import {
 } from "@/lib/duty-reviews.functions";
 
 export const Route = createFileRoute("/me/duty-self-review")({
-  head: () => ({ meta: [{ title: "My duty self-review — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "My duty self-review — hrppl" }] }),
   component: Page,
 });
 

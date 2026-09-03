@@ -29,7 +29,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { AppShell } from "@/components/AppShell";
 
 export const Route = createFileRoute("/admin/holidays")({
-  head: () => ({ meta: [{ title: "Public holidays — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Public holidays — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.publicHolidays">
       <HolidaysAdmin />

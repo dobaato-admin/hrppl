@@ -57,7 +57,7 @@ import { AlertTriangle, ShieldCheck } from "lucide-react";
  * them and says so, instead of showing a clean result that isn't one.
  */
 export const Route = createFileRoute("/admin/underpayment-audit")({
-  head: () => ({ meta: [{ title: "Underpayment audit — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Underpayment audit — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.auUnderpayment">
       <UnderpaymentAuditPage />

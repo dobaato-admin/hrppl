@@ -19,7 +19,7 @@ const searchSchema = z.object({ project: z.string().uuid().optional() });
 
 export const Route = createFileRoute("/practice/jobs")({
   validateSearch: (s) => searchSchema.parse(s),
-  head: () => ({ meta: [{ title: "Jobs — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Jobs — hrppl" }] }),
   component: () => (
     <AdminGate feature="practice.console">
       <JobsPage />

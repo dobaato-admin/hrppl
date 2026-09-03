@@ -47,7 +47,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { can } from "@/lib/rbac";
 
 export const Route = createFileRoute("/admin/payroll-setup")({
-  head: () => ({ meta: [{ title: "Payroll Setup — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Payroll Setup — hrppl" }] }),
   component: () => (
     <AdminGate feature="org.payrollSetup">
       <PayrollSetupPage />

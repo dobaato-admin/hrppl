@@ -12,7 +12,7 @@ import { acceptInvitation, getInvitationByToken } from "@/lib/staff-invitations.
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/welcome")({
-  head: () => ({ meta: [{ title: "Welcome — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Welcome — hrppl" }] }),
   component: WelcomePage,
 });
 
@@ -102,7 +102,7 @@ function WelcomePage() {
     <main className="min-h-screen bg-gradient-to-b from-background to-muted/30 px-4 py-12">
       <div className="mx-auto max-w-3xl space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-semibold tracking-tight">Welcome to WorldPay HRMS</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Welcome to hrppl</h1>
           <p className="mt-2 text-muted-foreground">
             Hi {user?.email}. Let's get you set up. Are you joining an existing organization, or starting a new one?
           </p>

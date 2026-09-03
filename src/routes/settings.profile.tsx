@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getMyProfile, updateMyProfile } from "@/lib/profile.functions";
 
 export const Route = createFileRoute("/settings/profile")({
-  head: () => ({ meta: [{ title: "Profile — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Profile — hrppl" }] }),
   component: ProfileSettingsPage,
 });
 

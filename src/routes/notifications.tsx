@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { listNotifications, markNotificationRead, markNotificationUnread } from "@/lib/notifications.functions";
 
 export const Route = createFileRoute("/notifications")({
-  head: () => ({ meta: [{ title: "Notifications — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Notifications — hrppl" }] }),
   component: Page,
 });
 

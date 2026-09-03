@@ -78,7 +78,7 @@ function statusBadge(s: string) {
 }
 
 export const Route = createFileRoute("/practice/time")({
-  head: () => ({ meta: [{ title: "Time entries — WorldPay HRMS" }] }),
+  head: () => ({ meta: [{ title: "Time entries — hrppl" }] }),
   component: () => (
     <AdminGate feature="practice.console">
       <TimePage />

@@ -40,7 +40,7 @@ import { ORG_ADMIN_OR_MANAGER } from "@/lib/rbac";
 const AU_STATES = ["NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT"];
 
 export const Route = createFileRoute("/admin/employee-holidays")({
-  head: () => ({ meta: [{ title: "Employee holiday overrides — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Employee holiday overrides — hrppl" }] }),
   component: () => (
     <AdminGate allow={ORG_ADMIN_OR_MANAGER}>
       <EmployeeHolidaysPage />

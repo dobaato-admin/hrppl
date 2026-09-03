@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Download } from "lucide-react";
 
 export const Route = createFileRoute("/org/onboarding/tracker")({
-  head: () => ({ meta: [{ title: "Onboarding tracker — HRPPL" }] }),
+  head: () => ({ meta: [{ title: "Onboarding tracker — hrppl" }] }),
   component: Page,
 });
 
