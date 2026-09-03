@@ -12,6 +12,9 @@
 | W3.1 · KPI/KRA distribution | **Done** |
 | W3.3 · WFH + geofence exception | **Done** |
 | W4 · Information architecture | **Done** |
+| W5 · Reachability (P0–P5) | **Done**, merged 2026-09-03 |
+| A1 · Security & performance audit | **Done**, migration applied and verified live |
+| W6 · Learning (LMS) | **Not started** — tenant-scoped; D-8 parked |
 
 ## Working agreement
 
@@ -574,6 +577,108 @@ dashboards, and `tests/nav-uniqueness.test.ts` asserting no two entries share a 
 `to` resolves in `routeTree.gen.ts`.
 
 ---
+
+## Wave 5 — Reachability *(done, merged 2026-09-03)*
+
+The wave that asked: **can a user actually get to what we built?** Two answers were wrong in
+opposite directions — pages offered and then refused, and features built and never offered.
+
+### The four places a page's permission could live
+
+W4 left the nav as markup inside `AppShell.tsx` and the gates inside each route. Nothing tied
+them together, so a page's answer to "who may be here?" could be written in four places that were
+free to disagree — and only the first pair had a test:
+
+| # | Where | Looks like | Had a test? |
+| --- | --- | --- | --- |
+| 1 | Nav row | `feature: "org.payroll"` | yes |
+| 2 | Route gate | `<AdminGate allow={…}>` | yes |
+| 3 | **Inline, in the page body** | `const canAccess = roles.includes(…)` | **no** |
+| 4 | **RLS policy** | `USING has_role(…)` | **no** |
+
+Each pass closed one axis and exposed the next:
+
+- **P0–P1 (1 vs 2)** — 36 dead links. `<AdminGate>`'s permissive default deleted; omitting the key
+  is now a **type error**. Nav data extracted from `AppShell.tsx` (1,466 lines) into
+  `src/lib/nav-tree.ts`, which the sidebar, GlobalSearch and the tests all read.
+- **P1.5 (1 vs 3) — unplanned.** A tester reported `finance` refused at `/org/payroll`. Eleven
+  pages wrote their permission inline, which the parity check could not see, including
+  `/org/white-label` locking `org_admin` out of its own branding page. Found by a person, not the
+  suite.
+- **P1.75 (no gate at all) — unplanned.** 23 nav destinations had *no* client gate and rendered
+  for any signed-in user — `/admin/discipline`, `/org/danger`, every `/platform` page. RLS held,
+  so it was a UI hole rather than a leak, but "page renders, then the database refuses" is the
+  offboarding failure mode.
+- **P2–P3** — 7 orphan pages resolved (5 given nav homes, 2 retired to redirects *after* porting
+  the capabilities they alone had); 14 orphan server fns wired, 4 deleted as superseded. The
+  role-primary **"Your work"** group added, because fixing the gate on `/org/payroll` made it
+  *reachable* without making it *findable* — it was three levels down for the role whose job it is.
+- **P4 — the Australian compliance domain.** 26 server functions with schema, RLS and unit tests,
+  and no user interface at all. Five pages, no migrations. **Five feature keys, not one**: the
+  database does not treat the domain uniformly (finance runs Payday Super and does not lodge with
+  the ATO; HR remediates underpayment and does not assign awards), so a single key would have been
+  wrong in both directions at once. First consumer of `NavItem.country` — the subgroup is *absent*
+  for a Nepali tenant, not empty.
+- **P5 — the last loose ends.** Ticket conversations, employment-variation drafts, timeline event
+  links, and one product name (three spellings shipped at once, including in a staff invitation
+  email and the public OpenAPI document).
+
+### What the wave is worth remembering for
+
+**Every check that compares two things reports nothing when one is absent.** That single shape
+produced P1.5 (no route gate to compare), P1.75 (no gate at all), and the sidebar bug below. Each
+new escape hatch is now an explicit allow-list with a written reason, never a silent `continue`.
+
+**A defect can pass every test and still be visible in one glance at the browser.** The sidebar
+flyout computed `visibleItems`/`visibleSections` through `can()` and then rendered the *raw*
+props — so every row was offered to every role, and the route gate refused the click. Every test
+read the nav *data* and the route *gates*, which agreed perfectly. Found by opening the flyout as
+a seeded user and counting rows.
+
+**Orphan server functions: 48 → 0**, held by `tests/no-orphan-server-fns.test.ts`. Four are
+recorded as deliberately uncalled, each naming the surface it waits on.
+
+## Audit A1 — security & performance *(done, 2026-09-03)*
+
+A full pass over 591 server functions, 208 migrations and 20 public hook endpoints. Both real
+findings were invisible from inside the app, because the *pages* were gated correctly.
+
+1. **`countOpenHighSeverityFindings` authenticated nobody.** No `.middleware()` at all, reading
+   through the service-role client. A server fn is a public HTTP endpoint, so anyone could read a
+   live count of the platform's open critical security findings. Now gated like its siblings and
+   reading through the caller's client so RLS applies as a second layer.
+2. **No public endpoint could be rate limited, by construction.** `check_rate_limit` opens with
+   `IF v_user IS NULL THEN RETURN true` and `rate_limit_buckets.user_id` has an FK to
+   `auth.users`. Five server fns take no session; four write; `createResumeUploadUrl` is an
+   unauthenticated mint of a storage upload credential. Fixed by
+   `20260903120000_public_rate_limit.sql` + `enforcePublicRateLimit()`, keyed on a salted hash of
+   the IP and **failing open** on every error path.
+
+Verified clean: RLS on all 207 tables; no unscoped `employees` read; no secret behind `VITE_`; all
+20 hooks use `hookFailure()`; `renderMarkdown` escapes before converting.
+
+**Performance, measured:** 36 loop-with-query sites (`payroll.functions.ts` has 8), and 194
+`useQuery` sites of which only 19 declare `staleTime`. Fixed the sharpest — a per-payslip fund
+lookup in `generateSuperContributionsForRun`, 500 sequential round trips on a 500-employee run,
+now one `.in()`. The rest is recorded, not urgent at demo scale.
+
+## Wave 6 — Learning (LMS) *(not started)*
+
+Training today is upload-a-certificate. The content layer — lessons, ordering, four content types,
+a storage bucket, per-lesson progress, resume-where-you-left-off, the quiz gate, certificates and
+expiry — is designed and unbuilt.
+
+**Scoped to the tenant, per the product owner's decision.** Authoring sits with `org_admin`/`hr`;
+managers and employees are the audience. The cross-tenant course library (nullable `tenant_id`,
+`owner_scope`, country scoping) is **parked with D-8** — the design is retained so it can resume
+unchanged, and nothing else in the wave depends on it.
+
+**X-07 belongs here and is the last open drift axis.** `/org/training`'s nav row and route admit
+`hr` and `branch_admin`; every RLS policy on `training_courses`, `training_enrollments` and
+`certifications` admits only `org_admin`, `super_admin` and `manager`. HR opens the page, selects
+employees, clicks Assign, and Postgres rejects the insert — the same failure that shipped on
+offboarding. `assignCourse` also carries no server-side role check of its own. Closing it needs a
+migration, not a component.
 
 ## CLAUDE.md update
 

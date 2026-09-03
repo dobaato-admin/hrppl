@@ -1,6 +1,7 @@
 # HRPPL / Global Payroll Hub — Product state & verification checklist
 
-**Generated:** 2026-08-30 · **Branch:** `main` @ `394009e` · **CodeGraph:** synced (8,452+ nodes, 578 files)
+**Generated:** 2026-08-30 · **Revised:** 2026-09-03 after Wave 5 + audit A1 · **Branch:** `main` @ `4da3ead`
+**Scale:** 166 routes · 97 fn modules · 591 server fns · 119 nav destinations · 208 migrations · 60 unit-test files
 **Dev server:** `bun run dev` → http://localhost:8080 · **Supabase:** `xnrjfrxzahmfdrqfsnnq` (dev)
 
 This document is two things at once:
@@ -393,88 +394,102 @@ verify isolation from the other side.
 
 ---
 
-## 7. Known gaps and inconsistencies — current, verified today
+## 7. Known gaps and inconsistencies — verified 2026-09-03
 
-Ordered by how likely you are to hit them while working through §5.
+**Everything §7 previously listed under "nav/route gate mismatches" is closed.** That table named
+9 route groups; the real count turned out to be 29 routes across three distinct failure shapes,
+all fixed in Wave 5. What follows is what is actually left.
 
-### 7.1 Nav/route gate mismatches (visible during the checklist)
+### 7.1 Gate drift — closed, and how to keep it closed
 
-Several nav entries are gated **wider** than the route's own `AdminGate`. The link appears, the
-page then refuses. Confirmed pairs:
+A page's permission could be written in four places that were free to disagree. Three of the four
+axes are now impossible by construction; the fourth is 7.3 below.
 
-| Route | Nav gate (`rbac.ts` feature) | Route gate (`AdminGate allow`) | Who sees a dead link |
-|---|---|---|---|
-| `/admin/leave-types` | `org.leaveTypes` (+`branch_admin`, `hr`) | `ORG_ADMIN_ONLY` | branch_admin, hr |
-| `/admin/holiday-categories` | `org.holidayCalendars` (+`branch_admin`, `hr`) | `ORG_ADMIN_ONLY` | branch_admin, hr |
-| `/admin/departments` | `org.departments` (+`branch_admin`, `hr`) | `ORG_ADMIN_ONLY` | branch_admin, hr |
-| `/admin/designations` | `org.designations` (+`branch_admin`, `hr`) | `ORG_ADMIN_ONLY` | branch_admin, hr |
-| `/admin/team-assignments` | `org.teamAssignments` (+`branch_admin`, `hr`) | `ORG_ADMIN_ONLY` | branch_admin, hr |
-| `/admin/review-templates`, `/admin/kpi-kra`, `/admin/feedback-templates` | `org.reviewTemplates` / `org.feedbackTemplates` (+`branch_admin`, `hr`) | `ORG_ADMIN_ONLY` | branch_admin, hr |
-| `/admin/payroll-setup` | `org.payrollSetup` (+`branch_admin`, `finance`) | `ORG_ADMIN_ONLY` | branch_admin, finance |
-| `/admin/payroll-settings`, `/admin/payslip-templates`, `/admin/overtime-rates` | (+`branch_admin`, `finance`) | `PLATFORM_OR_ORG_ADMIN` | branch_admin, finance |
-| `/admin/toil` | `org.leaveTypes` | *(no `AdminGate` at all)* | — (wider than intended) |
+| Axis | Was | Now |
+| --- | --- | --- |
+| nav row vs route gate | 36 dead links | one `feature` key each |
+| nav row vs inline page check | 11 more, incl. `/org/white-label` locking out `org_admin` | converged |
+| nav row vs no gate at all | 23 destinations open to any signed-in user | gated |
+| nav row vs RLS policy | — | **still open — see 7.3** |
 
-**This is the single most visible inconsistency in the product.** `/admin/employee-holidays` was
-already fixed this way (its comment in `rbac.ts` documents the pattern); the rest are the same bug.
+Do not re-derive this by hand. `bun run test tests/nav-route-gate-parity.test.ts` resolves the
+effective gate in all four forms and fails with a role × URL list. `tests/nav-render-filter.test.ts`
+covers the case where the sidebar filters correctly and *renders* the unfiltered list — which
+happened, and which no data-level test could see.
 
-### 7.2 Three unconnected review systems
+### 7.2 Acting-tenant coverage: 13 of 97 modules — **the biggest gap left**
 
-`performance_reviews` (whole-tenant fan-out on cycle activate) · `review_instances`
-(schedule-generated scorecards) · `duty_review_scores` (duty-based KPI). They share
-`review_templates` and **never reconcile**.
+`TenantSwitcher` and `platform_acting_tenant` exist and work. Only modules that call
+`requireTenantId()` / `getTenantId()` from `src/lib/tenant-scope.ts` honour them; the other 84 read
+`profiles.tenant_id` directly, which is `NULL` for a platform account.
 
-- **No assignment table, no targeting UI.** `generateReviewInstances` accepts `employeeIds`, but
-  its only caller never passes it → every "Schedule" blasts the entire tenant.
-- `reviewReviewInstance` (the approve/reject fn) has **zero callers**.
-- The templates page points at "Performance → Cycles", which does not exist under that name.
-  The real control is **`/org/performance`**.
+**What you will see:** as `sam.platform` acting as Acme, `/org/payroll` works and `/org/analytics`
+says "No tenant". Same switcher, same account, two different answers, page by page. Worth checking
+during §5 — it is the most likely thing to look like a broken page when it is not.
 
-### 7.3 Information architecture (Wave 4, design done, not implemented)
+### 7.3 X-07 — the nav can still disagree with RLS
 
-`docs/w4-information-architecture-design.md` is a **draft awaiting approval**. Measured today:
+`/org/training`'s nav row and route gate admit `hr` and `branch_admin`. Every RLS policy on
+`training_courses`, `training_enrollments` and `certifications` admits only `org_admin`,
+`super_admin` and `manager`, and `assignCourse` carries no server-side role check of its own.
 
-- **103 sidebar entries across 8 groups.** *Organization* alone is 52 — half the nav — with a
-  **17-item flat "Operations" accordion**.
-- **~20 in-app pages have no nav entry**, including **4 setup wizards** (`admin.payroll-wizard`,
-  `admin.payroll-setup-wizard`, `admin.overtime-setup-wizard`, `admin.leave-setup-wizard`) and a
-  duplicate security-findings page.
-- **Duplicate/collision sets:** 3-way Home (`/dashboard` ÷ `/me` ÷ `/me/dashboard`) · 4-way payroll
-  setup (two differing **only in capitalisation**) · 5-way templates · 3-way billing · 3-way expenses.
-- **Every role sees the same dashboard.** Same 5 KPI tiles, same 3 board cards for employee,
-  manager, hr and finance. `finance` and `regional_admin` get **no** admin shortcuts.
-  Two board rows are hardcoded and non-reactive (`dashboard.tsx:294`, `:308`).
-- **`GlobalSearch.tsx` is a second nav registry** maintained by hand, already drifting.
+**Net effect:** HR opens the training page, selects employees, clicks Assign, and Postgres rejects
+the insert. The page loads and the database refuses — the same shape that shipped on offboarding.
+This is the last open drift axis and it needs a migration, not a component. It is scheduled with
+Wave 6.
 
-### 7.4 Attendance remainder
+**To confirm:** as `hana.acme` (hr), open `/org/training` and assign any course. Repeat as
+`bruce.acme` (branch_admin). Compare with `alice.acme` (org_admin), for whom it succeeds.
 
-`clockOut` records position but **does not validate it**. (The rest of W3.3 — clockOut flagging,
-WFH email, the reconciliation cron, and the tenant-level remote-work toggle — landed in `4364a65`.)
+### 7.4 Three unconnected review systems
 
-### 7.5 Not seeded
+`performance_reviews` (whole-tenant fan-out on cycle activate), `review_instances`
+(schedule-generated scorecards) and `duty_review_scores` (duty-based KPI) share `review_templates`
+and never reconcile. There is no assignment table.
 
-Leave requests, timesheets, payroll runs and review cycles have **no demo rows**. The scaffolding
-they need (org structure, leave types, employee records, templates, categories) is all in place, so
-these pages render correctly but **empty**. Empty here is expected — create a row to exercise them.
+Both previously-orphaned functions now have callers and targeting works — `generateReviewInstances`
+is passed `employeeIds`, and `reviewReviewInstance` is wired to `/admin/review-analytics` — so this
+is a **modelling** gap rather than a dead feature. It will not block the checklist.
 
-### 7.6 Test baseline — do not mistake these for regressions
+### 7.5 Attendance remainder
 
-- **4 failing** in `tests/onboarding-readiness.test.ts` — pre-existing.
-- `tests/rbac.test.ts`, `tests/audit-overtime.test.ts` — cannot collect without live Supabase creds.
-- `bun run lint` — ~34k problems repo-wide, almost all Prettier. Lint only files you changed.
+`clockOut` records position but does not validate it; WFH decisions notify in-app only; the 24h
+reconciliation cron does not know the newer WFH mismatch types; there is no tenant-level "remote
+work allowed" switch. The punch-time, geofence-grading and WFH-exception work is done — see
+CLAUDE.md.
 
-A green run reads **"4 failed, N passed"**. Any *other* failure is new.
+### 7.6 Learning is upload-a-certificate only
 
-### 7.7 Stale in CLAUDE.md
+No lessons, no ordering, no content hosting, no progress inside a course. Enrollment status jumps
+straight from `assigned` to `completed`. Wave 6, tenant-scoped; the cross-tenant course library is
+parked with D-8. Do not file the absence as a defect.
 
-CLAUDE.md's "Known gaps" list is **out of date on two counts**, both fixed in later commits:
+### 7.7 Performance — measured, recorded, not urgent
 
-1. **"No tenant switcher"** — built in `1f994a1` (`TenantSwitcher.tsx` + `ActingTenantBanner.tsx` +
-   `platform_acting_tenant`).
-2. **"Leave trusts a client-computed `days`… `leave_approval_routes` never consumed"** — both
-   closed in `e43c356`, `d45cc16` and `210f43e`: days are recomputed server-side, weekends and
-   holidays excluded, over-balance rejected, and approval routes are enforced with notifications.
+36 loop-with-query sites remain (`payroll.functions.ts` has 8, the hottest path). 194 `useQuery`
+sites, of which only 19 declare `staleTime`, so most refetch on every mount. Neither bites at demo
+scale. The sharpest one — a per-payslip fund lookup in `generateSuperContributionsForRun`, 500
+sequential round trips on a 500-employee run — is fixed.
 
----
+### 7.8 Not seeded
+
+No payroll run, payslip, leave request, timesheet or attendance history exists until you create it.
+Several §5 rows therefore start from an empty state by design, not by fault. AU compliance pages in
+particular will show empty-with-an-explanation until an AU run is approved.
+
+### 7.9 Test baseline — do not mistake these for regressions
+
+A green run reads **4 failed / 913 passed / 5 skipped**. The 4 are pre-existing failures in
+`tests/onboarding-readiness.test.ts`. `tests/rbac.test.ts` and `tests/audit-overtime.test.ts`
+cannot collect without live service-role credentials. Any *other* failure is real.
+
+### 7.10 Security posture
+
+Audited 2026-09-03. Two findings, both fixed: an unauthenticated server fn that leaked a count of
+open critical security findings, and the absence of any rate limit on the five public endpoints
+(`check_rate_limit` waves anonymous callers through by construction). Verified clean in the same
+pass: RLS on all 207 tables, no unscoped `employees` read, no secret behind a `VITE_` prefix, all
+20 public hooks using `hookFailure()`. `tests/public-endpoint-security.test.ts` holds it.
 
 ## 8. Suggested verification order
 

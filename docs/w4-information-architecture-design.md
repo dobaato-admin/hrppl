@@ -1,7 +1,12 @@
 # Wave 4 — Information architecture: design document (Deliverable 1)
 
-**Status: draft, for review. No code changes in this wave until this document is approved** — per
-`docs/plan-waves.md`, Wave 4's own working agreement.
+**Status: implemented, then superseded in part by Wave 5 (2026-09-03).**
+
+Read §4 (the nav tree) and §5 (per-role dashboards) as the design that shipped. Read §8 as a
+historical record — the deferrals it lists were all subsequently done, and Wave 5 went further
+than this document proposed. **The nav is no longer authored in `AppShell.tsx`**; it is data in
+`src/lib/nav-tree.ts`, and §3's recommendation to have `GlobalSearch` consume the same registry
+was carried out. See "Wave 5 addendum" at the end of this file before using §8 for anything.
 
 This replaces the summary in `docs/plan-waves.md` §"Wave 4" with the actual regrouped tree, the
 concrete duplicate-resolution mapping (file-level, not just counts), the per-role dashboard
@@ -332,3 +337,53 @@ change above.
 - **Merging `hr.variations.tsx`, `org.promotions.tsx`, and `org.pay-rates.tsx` into one system** —
   resolved as out of scope (§6 item 2): the two-type overlap is handled by narrowing what
   `hr.variations.tsx` offers, not by merging three working pages into one.
+
+
+---
+
+## 10. Wave 5 addendum — what changed after this document *(2026-09-03)*
+
+This document designed the **shape** of the navigation. Wave 5 discovered that the shape was only
+half the problem: a correctly-grouped nav row is still a dead link if the page refuses the click.
+
+### Every deferral in §8 was subsequently done
+
+| §8 deferral | Outcome |
+| --- | --- |
+| Extract nav into `src/lib/nav-tree.ts`, consumed by `GlobalSearch` too | **Done.** The sidebar, GlobalSearch and eight test files now read one registry. `AppShell.tsx` went from 1,466 lines to ~600. |
+| `me.dashboard.tsx` / `admin.security-findings.tsx` redirects | **Done** — but only after porting the capabilities each held alone. Both turned out to be the *better* implementation of their pair; `/admin/security-findings` exposed `ticket_url` and `fixed_in_commit`, which the reachable page could not write. |
+| `<title>` / nav-label naming pass | **Done.** Three spellings of the product name were in flight at once — 41 "WorldPay HRMS", 26 "HRPPL", 63 "hrppl" — including in a staff invitation email and the public OpenAPI document. |
+
+### What this document did not anticipate
+
+**Grouping a nav row does not make its page reachable.** §7 of the product-state checklist listed
+9 route groups whose nav gate was wider than their route gate. The real number was 29 routes,
+across three shapes this document had no concept of:
+
+1. nav row vs route gate — the 36 dead links (the shape §7 knew about);
+2. nav row vs an **inline** `canAccess` in the page body, which no gate comparison could see;
+3. nav rows pointing at pages with **no gate at all** — 23 of them, rendering for any signed-in
+   user who had the URL.
+
+**A nav entry now states its own key.** The group-level `can()` wrappers this document's tree
+implied were the reason the Super admin group's twelve destinations carried no `feature` of their
+own: the gate lived in the markup, so nothing that read the item could see it. Every row now
+carries its key, and a group hides itself when none of its rows is visible.
+
+### Two structures added beyond §4
+
+- **"Your work"** — a per-role shortcut group above Organization, resolved from `ROLE_PRIMARY` in
+  `nav-tree.ts`. §5's per-role dashboards answered "what should I see when I land?"; this answers
+  "where is the thing my role exists to do?" — for `finance`, running payroll was three levels
+  down behind a flyout. Shortcuts are kept out of `NAV_DESTINATIONS`, so §4's one-destination-one-
+  entry rule still holds, and a role is never offered a shortcut it cannot open.
+- **Country-scoped subgroups** — `NavItem.country` / `NavSection.country`, first used by
+  "Australian compliance". The subgroup is *absent* for a Nepali tenant, not empty: an empty
+  heading reads as a broken page rather than an inapplicable feature. It fails closed while the
+  tenant's country is still loading.
+
+### The cap in §4 held
+
+Organization's nine-item subgroup cap survived the wave. When "Australian compliance" needed a
+home and Payroll was already at nine, the answer was a new subgroup rather than a raised cap —
+`tests/nav-integrity.test.ts` enforces it.
