@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { sanitizeDocHtml } from "@/lib/doc-html-sanitize";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -525,7 +526,11 @@ function TemplateBodyEditor({
               )}
               <div
                 className="rounded-md border bg-card p-4 prose prose-sm dark:prose-invert max-h-[420px] overflow-y-auto"
-                dangerouslySetInnerHTML={{ __html: preview.html }}
+                // renderTemplatePreview already sanitises server-side. This is the
+                // second half of the convention doc-html-sanitize.ts states: sanitise
+                // at write time AND defensively at render time. Every other HTML sink
+                // in the app does both; this one did not.
+                dangerouslySetInnerHTML={{ __html: sanitizeDocHtml(preview.html) }}
               />
               <div className="text-[10px] text-muted-foreground">
                 Sample values used: employee.full_name=Alex Sample · company.name=Acme Inc. ·

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import type { Database } from "@/integrations/supabase/types";
+import { enforcePublicRateLimit } from "@/lib/rate-limit.functions";
 
 function getPublicClient() {
   return createClient<Database>(
@@ -28,6 +29,8 @@ export const trackCareersEvent = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ data }) => {
+    // Fires per page view, so the ceiling is high — this only stops a flood.
+    await enforcePublicRateLimit("public_careers_event", 240, 3600);
     const sb = getPublicClient();
     const { data: site } = await sb
       .from("tenant_careers_settings")
