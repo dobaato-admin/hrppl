@@ -15,6 +15,7 @@
 | W5 · Reachability (P0–P5) | **Done**, merged 2026-09-03 |
 | A1 · Security & performance audit | **Done**, migration applied and verified live |
 | W6 · Learning (LMS) | **Not started** — tenant-scoped; D-8 parked |
+| W7 · Guided onboarding routes | **Specified, not started** — depends on W6; `docs/onboarding-guided-routes.md` |
 
 ## Working agreement
 
