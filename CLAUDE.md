@@ -516,6 +516,7 @@ Read the one you need; they do not repeat each other.
 | Question | Document |
 | --- | --- |
 | What is left to build, and how do I finish it? | **`docs/remaining-work.md`** — start here |
+| What are the guided onboarding flows meant to do? | `docs/onboarding-guided-routes.md` — spec + coverage map, queued after W6 |
 | Where are the trust boundaries, and what is public? | **`docs/security-model.md`** |
 | Who may do what? | `docs/rbac.md` §3 — **generated** from `rbac.ts`, pinned by a test |
 | What exists, and how do I verify it as each role? | `docs/product-state-and-feature-checklist.md` |

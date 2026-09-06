@@ -108,6 +108,45 @@ the product.
 
 ---
 
+## Priority 3.5 — Guided onboarding routes *(after Wave 6, not before)*
+
+**What.** Three guided flows the product owner specified on 2026-09-03: an org admin configuring a
+tenant through seven setup segments, an employee completing their own record (TFN declaration,
+bank, super, documents), and the automatic provisioning that fires when their record goes Active.
+
+**Why it matters.** The platform has the data and the pages; it has no *sequence* over them. An
+admin setting up a new tenant today has to find fourteen separate surfaces and know the order to
+visit them in. Nothing tells them what is still missing, and nothing stops them inviting staff
+into a half-configured org.
+
+**What to build.** Read `docs/onboarding-guided-routes.md` — it carries the workflow verbatim plus
+a coverage map against the live schema. The short version: **most of Phase 1 is sequencing, not
+new subsystems.** Ten things are genuinely missing, of which the guided shell itself (stepper,
+progress sidebar, auto-save, resume) is the real work.
+
+Three things to settle before writing code:
+
+- **Bank details already exist in three tables** (`employee_payroll_details`,
+  `staff_onboarding_profiles`, `employees`) and TFN in two. The spec's "split pay across multiple
+  accounts" would be a fourth shape. Reconcile the owner first — a fourth representation of an
+  employee's bank account in a payroll product is a defect waiting to happen, and a TFN in two
+  places is a privacy problem as much as a modelling one.
+- **`checkPayrollReadiness` / `checkOvertimeReadiness` already are** the "mandatory items
+  complete" concept the spec's Setup Lock needs. Extend them; do not invent a parallel notion of
+  readiness.
+- **Phase 3 step 1 auto-assigns KPIs**, which lands on the three unreconciled review systems in §5
+  below. Resolve those or this adds a fourth review pathway.
+
+**Why after W6.** Segment 4 (LMS module authoring, quizzes, compliance flagging) and Phase 3
+step 2 (mandatory module enrolment with due dates) are both W6 deliverables. Building the guided
+route first would mean stepping through a segment that configures nothing.
+
+**Done when.** A new org admin can go from an empty tenant to "Finalize & Activate" without
+leaving the flow or being told to go find a page, and a new employee can complete every section of
+their own record from one link.
+
+---
+
 ## Priority 4 — Performance, in the order it will bite
 
 Measured 2026-09-03, not guessed. Neither item bites at demo scale; both are real at tenant scale.
