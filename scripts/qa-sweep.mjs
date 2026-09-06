@@ -64,11 +64,34 @@ const ACCOUNTS = [
 /**
  * Destinations parsed from the nav itself, so the sweep cannot drift out of step
  * with it. Dynamic segments are skipped — there is no meaningful id to supply.
+ *
+ * Reads `src/lib/nav-tree.ts`. It used to read `AppShell.tsx`, which is where
+ * the nav was authored until Wave 5 extracted it — after which this function
+ * found exactly ONE destination (`/auth`, from a redirect) and the sweep
+ * cheerfully reported a clean run over nothing.
+ *
+ * That is the same shape Wave 5 spent itself on: a check that reads two things
+ * reports nothing when one of them moves. The floor below is the fix — a sweep
+ * that finds almost nothing is a broken sweep, not a clean bill of health, and
+ * it must say so instead of writing a reassuring report.
  */
 function navDestinations() {
-  const src = readFileSync(join(ROOT, "src/components/AppShell.tsx"), "utf8");
+  const src = readFileSync(join(ROOT, "src/lib/nav-tree.ts"), "utf8");
   const found = [...src.matchAll(/to:\s*"(\/[^"]*)"/g)].map((m) => m[1]);
-  return [...new Set(found)].filter((p) => !p.includes("$")).sort();
+  const routes = [...new Set(found)].filter((p) => !p.includes("$")).sort();
+
+  const FLOOR = 80; // 119 at the time of writing; a real regression is a cliff.
+  if (routes.length < FLOOR) {
+    console.error(
+      `\nqa-sweep: parsed only ${routes.length} nav destinations from ` +
+        `src/lib/nav-tree.ts (expected at least ${FLOOR}).\n` +
+        `The nav has probably moved or changed shape again. Sweeping a handful ` +
+        `of routes and writing a clean report is worse than not running, so ` +
+        `this stops here.\n`,
+    );
+    process.exit(1);
+  }
+  return routes;
 }
 
 /** Decode the base64 segment TanStack uses for server-fn URLs. */
