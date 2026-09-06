@@ -12,7 +12,7 @@
 | W3.1 · KPI/KRA distribution | **Done** |
 | W3.3 · WFH + geofence exception | **Done** |
 | W4 · Information architecture | **Done** |
-| W5 · Reachability (P0–P5) | **Done**, merged 2026-09-03 |
+| W5 · Reachability (P0–P5) | **Done**, merged 2026-09-03 · closed out 2026-09-03 (qa-sweep) |
 | A1 · Security & performance audit | **Done**, migration applied and verified live |
 | W6 · Learning (LMS) | **Not started** — tenant-scoped; D-8 parked |
 | W7 · Guided onboarding routes | **Specified, not started** — depends on W6; `docs/onboarding-guided-routes.md` |
@@ -638,6 +638,20 @@ a seeded user and counting rows.
 
 **Orphan server functions: 48 → 0**, held by `tests/no-orphan-server-fns.test.ts`. Four are
 recorded as deliberately uncalled, each naming the surface it waits on.
+
+### Closing out — the tool the wave broke
+
+Extracting the nav into `src/lib/nav-tree.ts` silently broke `scripts/qa-sweep.mjs`, which parsed
+its destination list out of `AppShell.tsx`. Afterwards it found **one** destination — `/auth`, from
+a redirect — swept it, and wrote a clean report.
+
+Nothing failed. That is the wave's own lesson landing on the wave's own tooling: a check that reads
+two things reports nothing when one of them moves. The script now reads `nav-tree.ts` and **exits
+non-zero if it parses fewer than 80 destinations**, because a sweep covering a handful of routes is
+a broken sweep, not a clean bill of health. `tests/nav-integrity.test.ts` pins the source and the
+floor, since an hour-long manual script is exactly the kind nobody runs often enough to notice.
+
+`docs/qa-sweep-report.md` carries a staleness banner until it is regenerated.
 
 ## Audit A1 — security & performance *(done, 2026-09-03)*
 

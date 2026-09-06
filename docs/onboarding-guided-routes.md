@@ -52,10 +52,16 @@ their own record, **Phase 3** the automatic provisioning that follows.
   sign-off between employee, line manager and HR.
 
 ### Segment 4: LMS setup
-- **Module creation** — WYSIWYG editor, SCORM package upload, embedded video, attached PDFs.
+- **Module creation** — WYSIWYG editor, embedded video, attached PDFs.
 - **Assessment engine** — multiple-choice quizzes, pass-percentage thresholds, retry limits.
 - **Compliance mapping** — flag modules mandatory (WHS, anti-bullying & harassment) with recurring
   renewal intervals (e.g. annual re-certification).
+
+> **SCORM package upload is deferred** (product owner, 2026-09-03). It is not a content type
+> alongside the others — it is a player, a sequencing runtime and a `cmi.*` state model, and it
+> would be the largest single item in the LMS. The four native content types cover mandatory
+> compliance training, which is what Phase 3 depends on. Revisit once the content layer is in use.
+> See §10.
 
 ### Segment 5: Asset register
 - **Categories** — laptops, mobile devices, vehicles, security access cards, tools/uniforms.
@@ -179,7 +185,7 @@ a guided *sequence* over surfaces that are already there, plus the genuinely mis
 | 6 | **Rating scales as config** | Currently implicit in review templates. |
 | 7 | **Split pay across multiple accounts** | See the warning below. |
 | 8 | **ABN Lookup + AU address autocomplete** | Both are external API integrations, both need a key and a failure mode. Neither exists. |
-| 9 | **SCORM support** | Segment 4. Note W6 as scoped does *not* include SCORM — that is an addition, and a substantial one. |
+| 9 | ~~SCORM support~~ | **Deferred** — see §10. Not in W6, not in this wave. |
 | 10 | **Setup Lock & Launch** | The readiness functions exist; the tenant-level "activated" state and the gate it opens do not. |
 
 ### ⚠ Decide before building: bank details already exist in three places
@@ -205,3 +211,32 @@ Phase 3 step 2 (mandatory module enrolment with due dates) has the same dependen
 Phase 3 step 1 lands in the middle of the unreconciled review systems documented in
 `docs/remaining-work.md` §5 — auto-assigning KPIs needs an assignment table that does not exist.
 Resolve that first or Phase 3 will add a fourth review pathway.
+
+---
+
+## 10. Deferred — SCORM
+
+**Decided 2026-09-03: later item. Not in Wave 6, not in the guided-onboarding wave.**
+
+SCORM reads like one more entry in a list of content types. It is not. Supporting it means
+shipping a **runtime**, not a format:
+
+- an iframe-hosted player exposing the SCORM JavaScript API (`LMSInitialize`, `LMSGetValue`,
+  `LMSSetValue`, `LMSCommit`, `LMSFinish`) on `window` for the package to call;
+- a `cmi.*` data model persisted per learner per attempt — `lesson_status`, `suspend_data`,
+  `score.raw`, `session_time` — with suspend/resume semantics that are the package's, not ours;
+- sequencing and navigation rules (SCORM 2004) if packages use them;
+- manifest parsing (`imsmanifest.xml`), zip extraction, and static hosting of arbitrary
+  third-party HTML/JS, which is a **content-security decision** as much as a feature — the whole
+  point of a SCORM package is that it runs code we did not write.
+
+That last point matters most here: everything else in this platform sanitises stored HTML at write
+and render (`docs/security-model.md` §6). A SCORM package is the deliberate exception, so it needs
+an origin-isolation story before it needs an editor.
+
+**What ships instead:** the four native content types — rich text, video, document, external link
+— plus the quiz engine. That covers mandatory compliance training, which is the only LMS
+dependency Phase 3 has.
+
+**Revisit when** there is a real package a customer needs to run, and treat it as its own wave with
+the sandboxing question answered first.

@@ -1,3 +1,14 @@
+> ⚠ **STALE — do not read this as the current state.**
+>
+> Generated 2026-08-24, before Wave 5. Everything it says predates the gating
+> convergence, the nav extraction, the AU compliance pages and the security
+> audit. It also predates the discovery that the sweep script was parsing the
+> nav from a file it had moved out of, so a run between the W5 merge and
+> 2026-09-03 would have covered one route and reported cleanly on it.
+>
+> Regenerate with `node scripts/qa-sweep.mjs` (needs a dev server and the
+> seeded demo accounts; takes the better part of an hour).
+
 # QA sweep report
 
 Generated 2026-08-22T19:10:42.725Z against `http://localhost:8080`.

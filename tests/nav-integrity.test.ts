@@ -194,3 +194,42 @@ describe("role shortcuts are shortcuts, not a second nav", () => {
     expect(roleShortcuts(["finance"], can)[0]?.to).toBe("/org/payroll");
   });
 });
+
+describe("the QA sweep walks the real nav", () => {
+  /**
+   * `scripts/qa-sweep.mjs` visits every nav destination as each seeded role and
+   * writes docs/qa-sweep-report.md. It parsed those destinations out of
+   * `AppShell.tsx` — which is where the nav lived until W5 extracted it into
+   * `nav-tree.ts`.
+   *
+   * After the extraction it found exactly ONE destination (`/auth`, from a
+   * redirect) and swept that. It did not fail; it produced a clean report over
+   * effectively nothing, which is worse than not running at all.
+   *
+   * The script now has a runtime floor, but it is a manual hour-long sweep that
+   * nobody runs often, so the mistake would sit undiscovered until someone
+   * trusted the report. This catches it in CI instead.
+   */
+  const SWEEP = readFileSync(join(root, "scripts/qa-sweep.mjs"), "utf8");
+
+  it("reads the nav from nav-tree.ts, not AppShell.tsx", () => {
+    const fn = SWEEP.slice(SWEEP.indexOf("function navDestinations"));
+    const body = fn.slice(0, fn.indexOf("\n}"));
+    expect(body).toContain("src/lib/nav-tree.ts");
+    expect(body).not.toContain("AppShell.tsx");
+  });
+
+  it("refuses to sweep an implausibly small nav", () => {
+    // A sweep that finds a handful of routes is broken, not clean.
+    expect(SWEEP).toMatch(/const FLOOR = \d+/);
+    expect(SWEEP).toMatch(/process\.exit\(1\)/);
+  });
+
+  it("the floor is below the real count but not by much", () => {
+    const floor = Number(SWEEP.match(/const FLOOR = (\d+)/)![1]);
+    expect(floor).toBeLessThanOrEqual(NAV_DESTINATIONS.length);
+    // If the nav ever shrinks past this, the floor was set too high and someone
+    // should think about why rather than lowering it reflexively.
+    expect(floor).toBeGreaterThan(NAV_DESTINATIONS.length * 0.5);
+  });
+});

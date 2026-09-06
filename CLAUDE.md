@@ -629,7 +629,10 @@ audience; the regional/cross-tenant course library is **parked with D-8**. Fixin
 here. See `docs/plan-waves.md`.
 
 `scripts/qa-sweep.mjs` walks every nav destination as each seeded role and writes
-`docs/qa-sweep-report.md`. Re-run it after structural changes.
+`docs/qa-sweep-report.md`. Re-run it after structural changes — the committed report is **stale**
+(pre-W5) and says so. The script reads the nav from `src/lib/nav-tree.ts` and **exits non-zero if
+it parses fewer than 80 destinations**: it previously read `AppShell.tsx`, and after W5 moved the
+nav it swept exactly one route and reported cleanly on it.
 
 **Local sign-in:** Google OAuth is configured only for deployed origins. Sign in with email +
 password at `/auth`, or use `/dev-session` (dev-only, guarded by `import.meta.env.DEV`).
