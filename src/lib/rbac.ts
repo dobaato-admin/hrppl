@@ -70,6 +70,7 @@ export type Feature =
   | "org.onboardingPacks"
   | "org.employmentVariations"
   | "org.training"
+  | "org.trainingManage"
   | "org.trainingCatalog"
   | "org.feedbackTemplates"
   | "org.reviewTemplates"
@@ -259,7 +260,22 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "org.onboardingPacks": SET("super_admin", "org_admin"),
   // Matches hr.variations.tsx's own inline role check.
   "org.employmentVariations": SET("super_admin", "org_admin", "hr"),
+  // W6 · Training needs TWO keys, because the database grants read and write to
+  // different sets and one key could only express one of them.
+  //
+  // `org.training` is the *view* key for /org/training: who may open the
+  // roster. It admits branch_admin, whose every policy in this domain is a
+  // `FOR SELECT` — the same shape 20260613140528 chose for branch_admin across
+  // performance, onboarding and assets.
+  //
+  // `org.trainingManage` is the *write* key: assign a course, change an
+  // enrollment, author a lesson or a quiz question. It mirrors
+  // `assertTrainingAuthor` in src/lib/training-guard.ts, which mirrors the RLS
+  // write policies. Collapsing these back into one key re-opens X-07 from
+  // whichever end you collapse it: branch_admin gets an Assign button Postgres
+  // refuses, or loses a roster they are entitled to read.
   "org.training": SET("super_admin", "org_admin", "branch_admin", "hr", "manager"),
+  "org.trainingManage": SET("super_admin", "org_admin", "hr", "manager"),
   "org.trainingCatalog": SET("super_admin", "org_admin", "hr", "manager"),
   "org.feedbackTemplates": SET("super_admin", "org_admin", "hr"),
   // W5 P1 · org.reviewTemplates used to gate SEVEN destinations at once —

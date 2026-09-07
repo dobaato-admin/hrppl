@@ -1,11 +1,38 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
+import { assertTrainingAuthor, isTrainingAuthor } from "@/lib/training-guard";
+import { resolveTimeZone, workDateInZone } from "@/lib/work-date";
 
+/**
+ * W6 · This module used to read `profiles.tenant_id` directly, which is NULL
+ * for a platform account and ignores `platform_acting_tenant` entirely. Going
+ * through `requireTenantId` makes training one of the modules a super_admin
+ * can actually use while acting as a tenant, instead of one that answers
+ * "No tenant" next to a page that works.
+ */
 async function getTenant(supabase: any, userId: string) {
-  const { data } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
-  return data?.tenant_id as string;
+  return requireTenantId(supabase, userId);
 }
+/**
+ * Today, as the tenant's own calendar reckons it.
+ *
+ * `new Date().toISOString().slice(0, 10)` was used here for both the overdue
+ * cut-off and the certificate-expiry horizon. That is today *in UTC*, so a
+ * Kathmandu tenant (UTC+05:45) chased people for training that was not yet
+ * overdue for the first six hours of every day, and a New York tenant stopped
+ * chasing five hours early. See src/lib/work-date.ts.
+ */
+async function tenantToday(supabase: any, tenantId: string): Promise<string> {
+  const { data } = await supabase
+    .from("tenants")
+    .select("timezone")
+    .eq("id", tenantId)
+    .maybeSingle();
+  return workDateInZone(new Date(), resolveTimeZone((data as any)?.timezone));
+}
+
 async function getEmployee(supabase: any, userId: string) {
   const { data } = await supabase.from("employees").select("id,tenant_id").eq("user_id", userId).maybeSingle();
   return data;
@@ -48,6 +75,7 @@ export const upsertCourse = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const tenant_id = await getTenant(supabase, userId);
+    await assertTrainingAuthor(supabase, userId, tenant_id);
     const payload: any = { ...data, tenant_id };
     if (!data.id) payload.created_by = userId;
     const { data: row, error } = data.id
@@ -61,7 +89,8 @@ export const deleteCourse = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context as any;
+    const { supabase, userId } = context as any;
+    await assertTrainingAuthor(supabase, userId, await getTenant(supabase, userId));
     const { error } = await supabase.from("training_courses").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
@@ -80,6 +109,9 @@ export const assignCourse = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const tenant_id = await getTenant(supabase, userId);
+    // X-07 · This was the function with no role check at all. branch_admin
+    // could see the Assign button, and Postgres refused the insert.
+    await assertTrainingAuthor(supabase, userId, tenant_id);
     const rows = data.employee_ids.map((employee_id) => ({
       tenant_id,
       course_id: data.course_id,
@@ -107,6 +139,22 @@ export const updateEnrollment = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => UpdateEnrollmentSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
+    // Two callers with different rights: a learner moving their OWN enrollment
+    // to in_progress from /me/training (RLS "employee update own enrollment
+    // progress"), and an administrator setting any status from /org/training.
+    // A learner may not waive or complete their own course.
+    const tenant_id = await getTenant(supabase, userId);
+    const { data: target } = await supabase
+      .from("training_enrollments")
+      .select("id,employee_id")
+      .eq("id", data.id)
+      .maybeSingle();
+    const emp = await getEmployee(supabase, userId);
+    const isOwner = !!emp && (target as any)?.employee_id === emp.id;
+    if (!isOwner) await assertTrainingAuthor(supabase, userId, tenant_id);
+    else if (data.status && !["assigned", "in_progress"].includes(data.status)) {
+      throw new Error("Completion is recorded by passing the quiz, not by self-declaration");
+    }
     const patch: any = { ...data };
     delete patch.id;
     if (patch.status === "in_progress" && !patch.started_at) patch.started_at = new Date().toISOString();
@@ -150,7 +198,7 @@ export const listEnrollments = createServerFn({ method: "GET" })
     const { supabase, userId } = context as any;
     let q = supabase
       .from("training_enrollments")
-      .select("*, training_courses(id,title,category,is_mandatory,validity_months), employees(id,first_name,last_name,email,job_title)")
+      .select("*, training_courses(id,title,category,is_mandatory,validity_months,content_mode,pass_score,max_attempts), employees(id,first_name,last_name,email,job_title)")
       .order("assigned_at", { ascending: false });
     if (data.scope === "me") {
       const emp = await getEmployee(supabase, userId);
@@ -168,7 +216,8 @@ export const deleteEnrollment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context as any;
+    const { supabase, userId } = context as any;
+    await assertTrainingAuthor(supabase, userId, await getTenant(supabase, userId));
     const { error } = await supabase.from("training_enrollments").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
@@ -192,11 +241,15 @@ export const upsertCertification = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const tenant_id = await getTenant(supabase, userId);
+    // /me/training lets anyone record their OWN external certification; only
+    // a training administrator may record one against somebody else.
+    const emp = await getEmployee(supabase, userId);
     let employee_id = data.employee_id;
     if (!employee_id) {
-      const emp = await getEmployee(supabase, userId);
       if (!emp) throw new Error("No employee record");
       employee_id = emp.id;
+    } else if (employee_id !== emp?.id) {
+      await assertTrainingAuthor(supabase, userId, tenant_id);
     }
     const payload: any = { ...data, tenant_id, employee_id };
     if (!data.id) payload.created_by = userId;
@@ -211,7 +264,13 @@ export const deleteCertification = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context as any;
+    const { supabase, userId } = context as any;
+    const { data: cert } = await supabase
+      .from("certifications").select("employee_id").eq("id", data.id).maybeSingle();
+    const emp = await getEmployee(supabase, userId);
+    if (!emp || (cert as any)?.employee_id !== emp.id) {
+      await assertTrainingAuthor(supabase, userId, await getTenant(supabase, userId));
+    }
     const { error } = await supabase.from("certifications").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
@@ -234,7 +293,10 @@ export const listCertifications = createServerFn({ method: "GET" })
       if (!emp) return { certifications: [] };
       q = q.eq("employee_id", emp.id);
     } else if (data.scope === "expiring") {
-      const horizon = new Date(); horizon.setDate(horizon.getDate() + data.days);
+      // The horizon counts from the tenant's today, not UTC's. See tenantToday.
+      const today = await tenantToday(supabase, await getTenant(supabase, userId));
+      const horizon = new Date(`${today}T00:00:00Z`);
+      horizon.setUTCDate(horizon.getUTCDate() + data.days);
       q = q.lte("expires_on", horizon.toISOString().slice(0, 10));
     }
     const { data: rows, error } = await q;
@@ -265,9 +327,9 @@ export const listQuestions = createServerFn({ method: "GET" })
     const { supabase, userId } = context as any;
     let allowAnswers = data.include_answers;
     if (allowAnswers) {
-      const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-      const r = (roles ?? []).map((x: any) => x.role);
-      if (!r.includes("org_admin") && !r.includes("super_admin") && !r.includes("manager")) allowAnswers = false;
+      // X-07 · hr authors quizzes as of 20260906090000, so the answer key is
+      // theirs to see. branch_admin is read-only and stays on the safe view.
+      allowAnswers = await isTrainingAuthor(supabase, userId, await getTenant(supabase, userId));
     }
     // Managers/admins read the full table (RLS-allowed); learners read the safe view that omits correct_index/explanation.
     const table = allowAnswers ? "training_quiz_questions" : "training_quiz_questions_public";
@@ -307,6 +369,7 @@ export const copyQuestions = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const tenant_id = await getTenant(supabase, userId);
+    await assertTrainingAuthor(supabase, userId, tenant_id);
     let q = supabase.from("training_quiz_questions")
       .select("sort_order,question,choices,correct_index,points,explanation")
       .eq("course_id", data.source_course_id);
@@ -357,11 +420,7 @@ export const importQuestions = createServerFn({ method: "POST" })
     const { supabase, userId } = context as any;
     const tenant_id = await getTenant(supabase, userId);
 
-    // Authz: manager+
-    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    const r = (roles ?? []).map((x: any) => x.role);
-    if (!r.includes("org_admin") && !r.includes("super_admin") && !r.includes("manager"))
-      throw new Error("Not authorized");
+    await assertTrainingAuthor(supabase, userId, tenant_id);
 
     for (const q of data.questions) {
       if (q.correct_index >= q.choices.length) throw new Error(`correct_index out of range for: ${q.question.slice(0, 60)}`);
@@ -403,6 +462,7 @@ export const upsertQuestion = createServerFn({ method: "POST" })
     const { supabase, userId } = context as any;
     if (data.correct_index >= data.choices.length) throw new Error("correct_index out of range");
     const tenant_id = await getTenant(supabase, userId);
+    await assertTrainingAuthor(supabase, userId, tenant_id);
     const payload: any = { ...data, tenant_id };
     if (!data.id) payload.created_by = userId;
     const { data: row, error } = data.id
@@ -416,7 +476,8 @@ export const deleteQuestion = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { supabase } = context as any;
+    const { supabase, userId } = context as any;
+    await assertTrainingAuthor(supabase, userId, await getTenant(supabase, userId));
     const { error } = await supabase.from("training_quiz_questions").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
@@ -448,12 +509,7 @@ export const submitQuizAttempt = createServerFn({ method: "POST" })
     // Authorize: employee owner OR manager+
     const emp = await getEmployee(supabase, userId);
     const isOwner = emp?.id === en.employee_id;
-    if (!isOwner) {
-      const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-      const r = (roles ?? []).map((x: any) => x.role);
-      if (!r.includes("org_admin") && !r.includes("super_admin") && !r.includes("manager"))
-        throw new Error("Not authorized");
-    }
+    if (!isOwner) await assertTrainingAuthor(supabase, userId, tenant_id);
 
     const course = en.training_courses;
     const pass_score = Number(course?.pass_score ?? 70);
@@ -585,6 +641,7 @@ export const seedTrainingPreset = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const tenant_id = await getTenant(supabase, userId);
+    await assertTrainingAuthor(supabase, userId, tenant_id);
     const { data: existing } = await supabase
       .from("training_courses")
       .select("id,title")
@@ -675,7 +732,8 @@ export const sendOverdueTrainingReminders = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const tenant_id = await getTenant(supabase, userId);
-    const today = new Date().toISOString().slice(0, 10);
+    await assertTrainingAuthor(supabase, userId, tenant_id);
+    const today = await tenantToday(supabase, tenant_id);
     let q = supabase
       .from("training_enrollments")
       .select(

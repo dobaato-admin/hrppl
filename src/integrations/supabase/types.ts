@@ -270,6 +270,20 @@ export type Database = {
             referencedRelation: "assets"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "asset_assignments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_assignments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
         ]
       }
       assets: {
@@ -2077,6 +2091,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "certifications_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certifications_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
             foreignKeyName: "certifications_source_course_id_fkey"
             columns: ["source_course_id"]
             isOneToOne: false
@@ -2792,7 +2820,22 @@ export type Database = {
           updated_at?: string
           withdrawn_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "disciplinary_cases_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "disciplinary_cases_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+        ]
       }
       disciplinary_overdue_state: {
         Row: {
@@ -3622,6 +3665,20 @@ export type Database = {
           visibility?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "employee_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_documents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
           {
             foreignKeyName: "employee_documents_source_envelope_id_fkey"
             columns: ["source_envelope_id"]
@@ -6115,7 +6172,22 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+        ]
       }
       leave_types: {
         Row: {
@@ -8669,7 +8741,22 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "performance_reviews_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "performance_reviews_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+        ]
       }
       platform_acting_tenant: {
         Row: {
@@ -12223,6 +12310,20 @@ export type Database = {
             referencedRelation: "payroll_runs"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "timesheets_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheets_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
         ]
       }
       toil_accruals: {
@@ -12526,6 +12627,7 @@ export type Database = {
       training_courses: {
         Row: {
           category: string | null
+          content_mode: string
           created_at: string
           created_by: string | null
           description: string | null
@@ -12538,6 +12640,7 @@ export type Database = {
           pass_score: number
           provider: string | null
           questions_per_attempt: number | null
+          require_lessons_before_quiz: boolean
           shuffle_questions: boolean
           tenant_id: string
           title: string
@@ -12546,6 +12649,7 @@ export type Database = {
         }
         Insert: {
           category?: string | null
+          content_mode?: string
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -12558,6 +12662,7 @@ export type Database = {
           pass_score?: number
           provider?: string | null
           questions_per_attempt?: number | null
+          require_lessons_before_quiz?: boolean
           shuffle_questions?: boolean
           tenant_id: string
           title: string
@@ -12566,6 +12671,7 @@ export type Database = {
         }
         Update: {
           category?: string | null
+          content_mode?: string
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -12578,6 +12684,7 @@ export type Database = {
           pass_score?: number
           provider?: string | null
           questions_per_attempt?: number | null
+          require_lessons_before_quiz?: boolean
           shuffle_questions?: boolean
           tenant_id?: string
           title?: string
@@ -12641,6 +12748,141 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "training_enrollments_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "training_courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_enrollments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_enrollments_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+        ]
+      }
+      training_lesson_progress: {
+        Row: {
+          completed_at: string | null
+          course_id: string
+          created_at: string
+          employee_id: string
+          id: string
+          lesson_id: string
+          started_at: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          course_id: string
+          created_at?: string
+          employee_id: string
+          id?: string
+          lesson_id: string
+          started_at?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          course_id?: string
+          created_at?: string
+          employee_id?: string
+          id?: string
+          lesson_id?: string
+          started_at?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_lesson_progress_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "training_courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_lesson_progress_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_lesson_progress_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "training_lesson_progress_lesson_id_fkey"
+            columns: ["lesson_id"]
+            isOneToOne: false
+            referencedRelation: "training_lessons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_lessons: {
+        Row: {
+          body: string | null
+          content_type: Database["public"]["Enums"]["training_content_type"]
+          content_url: string | null
+          course_id: string
+          created_at: string
+          created_by: string | null
+          duration_minutes: number | null
+          id: string
+          is_required: boolean
+          sort_order: number
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string | null
+          content_type?: Database["public"]["Enums"]["training_content_type"]
+          content_url?: string | null
+          course_id: string
+          created_at?: string
+          created_by?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_required?: boolean
+          sort_order?: number
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string | null
+          content_type?: Database["public"]["Enums"]["training_content_type"]
+          content_url?: string | null
+          course_id?: string
+          created_at?: string
+          created_by?: string | null
+          duration_minutes?: number | null
+          id?: string
+          is_required?: boolean
+          sort_order?: number
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_lessons_course_id_fkey"
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "training_courses"
@@ -13578,6 +13820,11 @@ export type Database = {
         | "penalty"
         | "manual"
         | "adjustment"
+      training_content_type:
+        | "rich_text"
+        | "video"
+        | "document"
+        | "external_link"
       training_enrollment_status:
         | "assigned"
         | "in_progress"
@@ -13935,6 +14182,12 @@ export const Constants = {
         "penalty",
         "manual",
         "adjustment",
+      ],
+      training_content_type: [
+        "rich_text",
+        "video",
+        "document",
+        "external_link",
       ],
       training_enrollment_status: [
         "assigned",

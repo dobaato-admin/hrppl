@@ -39,6 +39,18 @@ const BUCKETS_SQL = readFileSync(
   join(MIGRATIONS_DIR, "20260820090000_storage_buckets.sql"),
   "utf8",
 );
+/**
+ * Every migration, concatenated. A bucket does not have to live in the file
+ * above: `training-content` arrived with the W6 content layer in its own
+ * migration, which is the normal way a new bucket appears. Reading only the
+ * one file made this test fail for a bucket that WAS in a migration — the
+ * check has to follow the rule ("created by a migration"), not the file that
+ * happened to hold the first six.
+ */
+const ALL_MIGRATIONS = readdirSync(MIGRATIONS_DIR)
+  .filter((f) => f.endsWith(".sql"))
+  .map((f) => readFileSync(join(MIGRATIONS_DIR, f), "utf8"))
+  .join("\n");
 
 /**
  * Buckets the application actually addresses. Matches `.storage.from("x")`
@@ -56,11 +68,15 @@ function bucketsUsedInCode(): Set<string> {
 
 /** Bucket ids in the INSERT INTO storage.buckets. */
 function bucketsInMigration(): Set<string> {
-  const block = BUCKETS_SQL.slice(
-    BUCKETS_SQL.indexOf("INSERT INTO storage.buckets"),
-    BUCKETS_SQL.indexOf("ON CONFLICT"),
-  );
-  return new Set([...block.matchAll(/\(\s*'([a-z0-9-]+)'\s*,/g)].map((m) => m[1]));
+  const found = new Set<string>();
+  let from = ALL_MIGRATIONS.indexOf("INSERT INTO storage.buckets");
+  while (from !== -1) {
+    const end = ALL_MIGRATIONS.indexOf("ON CONFLICT", from);
+    const block = ALL_MIGRATIONS.slice(from, end === -1 ? undefined : end);
+    for (const m of block.matchAll(/\(\s*'([a-z0-9-]+)'\s*,/g)) found.add(m[1]);
+    from = ALL_MIGRATIONS.indexOf("INSERT INTO storage.buckets", from + 1);
+  }
+  return found;
 }
 
 describe("every bucket the app uses is created by a migration", () => {
@@ -76,7 +92,7 @@ describe("every bucket the app uses is created by a migration", () => {
     expect(unused).toEqual([]);
   });
 
-  it("finds the six known buckets and nothing else", () => {
+  it("finds the seven known buckets and nothing else", () => {
     expect([...bucketsUsedInCode()].sort()).toEqual([
       "candidate-resumes",
       "disciplinary-files",
@@ -84,6 +100,9 @@ describe("every bucket the app uses is created by a migration", () => {
       "expense-receipts",
       "medical-files",
       "payslips",
+      // W6 · lesson video and documents. Private, mime-allow-listed, and read
+      // back only through a signed URL minted after an enrollment check.
+      "training-content",
     ]);
   });
 });

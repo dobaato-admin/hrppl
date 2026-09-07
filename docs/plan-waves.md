@@ -14,7 +14,7 @@
 | W4 · Information architecture | **Done** |
 | W5 · Reachability (P0–P5) | **Done**, merged 2026-09-03 · closed out 2026-09-03 (qa-sweep) |
 | A1 · Security & performance audit | **Done**, migration applied and verified live |
-| W6 · Learning (LMS) | **Not started** — tenant-scoped; D-8 parked |
+| W6 · Learning (LMS) | **Done**, 5 migrations applied and verified live · closes X-07 |
 | W7 · Guided onboarding routes | **Specified, not started** — depends on W6; `docs/onboarding-guided-routes.md` |
 
 ## Working agreement
@@ -677,23 +677,101 @@ Verified clean: RLS on all 207 tables; no unscoped `employees` read; no secret b
 lookup in `generateSuperContributionsForRun`, 500 sequential round trips on a 500-employee run,
 now one `.in()`. The rest is recorded, not urgent at demo scale.
 
-## Wave 6 — Learning (LMS) *(not started)*
+## Wave 6 — Learning (LMS) *(done, 2026-09-06)*
 
-Training today is upload-a-certificate. The content layer — lessons, ordering, four content types,
-a storage bucket, per-lesson progress, resume-where-you-left-off, the quiz gate, certificates and
-expiry — is designed and unbuilt.
+Training was upload-a-certificate: `external_url` was the only content field on a course, so every
+course sent the learner somewhere else and an enrollment jumped straight from `assigned` to
+`completed`. The content layer now exists.
 
-**Scoped to the tenant, per the product owner's decision.** Authoring sits with `org_admin`/`hr`;
-managers and employees are the audience. The cross-tenant course library (nullable `tenant_id`,
-`owner_scope`, country scoping) is **parked with D-8** — the design is retained so it can resume
-unchanged, and nothing else in the wave depends on it.
+**Shipped:**
 
-**X-07 belongs here and is the last open drift axis.** `/org/training`'s nav row and route admit
-`hr` and `branch_admin`; every RLS policy on `training_courses`, `training_enrollments` and
-`certifications` admits only `org_admin`, `super_admin` and `manager`. HR opens the page, selects
-employees, clicks Assign, and Postgres rejects the insert — the same failure that shipped on
-offboarding. `assignCourse` also carries no server-side role check of its own. Closing it needs a
-migration, not a component.
+- `training_lessons` and `training_lesson_progress` (`20260906091000`), four content types
+  (`rich_text | video | document | external_link`), a private `training-content` bucket with a
+  mime allow-list that admits no executable type, and `content_mode` on `training_courses`
+  defaulting to `'external'` — so **no course already assigned to anyone changed underneath them**.
+- **Course builder** at `/admin/training/$courseId` — Lessons (ordered, per-type editor, direct-to-
+  storage upload through a signed URL), Quiz (the 400-line question bank moved out of a modal on
+  the catalogue and put beside the lessons it tests), Settings (content mode, the lesson gate, pass
+  score, attempts, validity).
+- **Course player** at `/me/training/$enrollmentId` — lesson list, markdown/video/document panes,
+  mark-complete, resume-where-you-left-off, and the quiz locked until the required lessons are
+  done, with the reason on screen.
+- **Roster progress** on `/org/training` — per-learner lesson completion, one query for the whole
+  page rather than one per enrollment.
+- `admin.training.tsx` and `me.training.tsx` became pure `<Outlet />` layouts with `.index.tsx`
+  siblings, the split `admin`, `me`, `org.documents` and `org.recruitment` already use.
+
+**Verified end to end against the dev project**, which is the only way to check RLS: `hana.acme`
+(hr) authored a lesson and a quiz question and switched the course to hosted content; `evan.acme`
+(employee) read the lesson, was refused the quiz until he completed it, passed, and the enrollment
+completed and issued a certificate.
+
+### X-07 — closed, and it was not what the doc said
+
+The finding recorded in W5 was that HR clicks Assign and Postgres rejects the insert. That was
+**already stale**: `20260613140528` had given `hr` manage policies on `training_courses` and
+`training_enrollments` and given `branch_admin` read. What it never revisited was
+`training_quiz_questions` and `certifications`, where hr had **no policy at all** — so HR could
+assign a course and not author its quiz, and opened an "Expiring certs" tab that was empty by
+construction for the role that chases renewals.
+
+Direction taken: **widen for hr, keep branch_admin read-only.** HR administering training was an
+explicit earlier decision; the quiz and certificate halves were an oversight. Every branch_admin
+policy in this domain is a `FOR SELECT`, so that is what the client now offers them — which needed
+a second feature key, `org.trainingManage`, because one key cannot express "may read the roster,
+may not assign". `src/lib/training-guard.ts` asserts the same set server-side, so the refusal is a
+sentence instead of a Postgres policy error.
+
+### The two defects found underneath it
+
+Both were invisible for the same reason: **they render as emptiness, not as errors.**
+
+**1. No learner could see a quiz question.** `20260609033335` deliberately built
+`training_quiz_questions_public` as a SECURITY DEFINER view — the learner's SELECT policy on the
+base table had just been dropped so nobody sitting a quiz could read `correct_index`, and the view
+was to be their only read path, enforcing enrollment scope in its own WHERE. `20260609120840`
+logged it in `security_findings_log` as an accepted risk. Four days later `20260613143222` — "Fix
+Security Definer view" — set `security_invoker = on` to clear the linter warning **that had already
+been accepted**, handing enforcement back to the base table's deny. Verified with a real JWT: an
+enrolled employee read 0 rows. The dialog said "No quiz questions have been set for this course
+yet" and, because `/me/training` completes a course only via the quiz, **no employee could finish
+any course.** No demo tenant had a quiz question, so nothing ever contradicted it.
+
+**2. Four surfaces have been empty since the day they shipped.** PostgREST resolves
+`.select("*, employees(...)")` from the foreign-key graph, and `training_enrollments.employee_id`
+was declared a bare `uuid NOT NULL` in `20260606063457` — no key, ever. Every such call answered
+`PGRST200`; every caller renders `rows ?? []`. Auditing the rest of the codebase found **six more
+tables** in the same state. The sharpest was `leave_requests`: the requests inbox normalises six
+tables into one list and four carried the key, so `/me/requests` and `/admin/requests` worked while
+silently dropping leave — the highest-volume request type in the product. Fixed in
+`20260906092000`, `20260906093000` and `20260906094000`; two constraints are `NOT VALID` because
+two real rows (a pending leave request and a submitted timesheet) point at a deleted employee, and
+deleting a record of someone's absence to satisfy a constraint is not a fix.
+
+`tests/postgrest-embeds.test.ts` now fails if a table embeds `employees` with no key to it.
+
+### Also fixed in passing
+
+- `listEnrollments` never selected `pass_score` or `max_attempts`, so the learner's quiz dialog
+  always displayed 70% regardless of the course and never showed the attempt limit.
+- The overdue-training sweep and the certificate-expiry horizon both derived "today" from
+  `toISOString()`, i.e. UTC — the exact pattern `src/lib/work-date.ts` exists to prevent.
+- The quiz dialog printed "No quiz questions have been set" *while still loading*. That sentence is
+  what made a total RLS failure look like a configuration choice, so it now distinguishes the two.
+- `tests/storage-buckets.test.ts` read buckets from one named migration and failed for a bucket
+  that *was* in a migration; it now scans them all.
+- `tests/route-parent-outlet.test.ts` grew a pure-layout detector instead of a list of exempt
+  filenames.
+
+### Deferred out of this wave
+
+**SCORM.** It is a runtime, not a content type: an iframe player exposing the SCORM JS API, a
+`cmi.*` model persisted per learner per attempt, manifest parsing, and hosting arbitrary
+third-party JavaScript — a content-security decision this platform has otherwise avoided by
+sanitising every HTML sink. See `docs/onboarding-guided-routes.md` §10.
+
+**The cross-tenant course library** (nullable `tenant_id`, `owner_scope`, country scoping) remains
+**parked with D-8**. Nothing shipped here depends on it.
 
 ## CLAUDE.md update
 
