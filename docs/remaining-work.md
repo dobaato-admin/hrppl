@@ -106,6 +106,11 @@ found in the last three waves. Verified live as `mia.acme` (manager): both `list
 **"No envelopes yet."** with a "Send document" button beside it. A manager reasonably concludes the
 organisation has no documents. Four of the six admitted roles are affected.
 
+**Corroborated across the whole role matrix.** The 2026-09-07 sweep walked all eight roles over
+122 routes each. The three `/org/documents*` pages report console errors for **manager, hr, finance
+and branch_admin — and for no one else.** That is precisely the set `org.documents` admits minus
+the set `getOrgAdminTenant` admits, which makes the diagnosis certain rather than likely.
+
 This is X-07 exactly: the nav and the route agree with each other, and the *server function*
 disagrees with both. Wave 5 converged the first three gate axes and Wave 6 closed the RLS axis for
 training; nothing systematically checks the server-fn axis, which is why this survived.
@@ -125,6 +130,12 @@ same domain, same admins", which is true of the two keys and false of the module
 
 **Done when.** As `mia.acme` (manager) and `hana.acme` (hr), `/org/documents` either lists
 envelopes or is not offered. No third outcome — and in particular, not an empty table.
+
+**Also open, same sweep, cause not yet identified:** `/me/signatures` reports 3 console errors for
+`hr` and `branch_admin` and none for `employee`, `manager` or `super_admin` — verified clean by
+hand as a manager. Two roles, the same count, is a pattern rather than noise, and it is *not* the
+guard above: the page's only server fn (`myPendingEnvelopes`) does not use `getOrgAdminTenant`.
+Worth ten minutes before assuming it is related.
 
 **Worth doing at the same time:** a test asserting that every server fn reachable from a page is
 callable by every role that page's feature key admits. That is the axis with no coverage, and it
