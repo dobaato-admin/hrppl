@@ -93,6 +93,45 @@ Lookup and address autocomplete are external APIs needing a key.
 
 ---
 
+## Priority 1b — X-07's twin, in the documents module *(found 2026-09-07 by the QA sweep)*
+
+**What.** `/org/documents` is offered by nav and route to six roles —
+`super_admin`, `org_admin`, `branch_admin`, `hr`, `finance`, `manager`. Fourteen of the twenty-one
+server functions in `documents.functions.ts` go through `getOrgAdminTenant`, which admits
+**`org_admin` and `super_admin` only** and throws `"Not authorized"` for everyone else.
+
+**Why it matters.** It renders as emptiness, not as an error — the same shape as every other defect
+found in the last three waves. Verified live as `mia.acme` (manager): both `listEnvelopes` and
+`listTemplates` returned `"Not authorized"`, and the page drew a table saying
+**"No envelopes yet."** with a "Send document" button beside it. A manager reasonably concludes the
+organisation has no documents. Four of the six admitted roles are affected.
+
+This is X-07 exactly: the nav and the route agree with each other, and the *server function*
+disagrees with both. Wave 5 converged the first three gate axes and Wave 6 closed the RLS axis for
+training; nothing systematically checks the server-fn axis, which is why this survived.
+
+**What to build.** Decide the direction first — they are not equivalent, and the X-07 write-up sat
+in this document with the direction wrong for months, so check the code before believing either:
+
+- *Widen the guard* if HR and managers should administer documents. Replace `getOrgAdminTenant`
+  with a guard mirroring the RLS write policies on `document_templates` / `document_envelopes`,
+  the way `training-guard.ts` mirrors training's — and confirm those policies actually admit the
+  wider set, or the failure just moves from `"Not authorized"` to a Postgres policy error.
+- *Narrow the keys* if they should not. `org.documents` and `org.documentTemplates` drop to
+  `super_admin` + `org_admin`, and four roles stop being offered a page that never worked for them.
+
+The comment beside `org.documentTemplates` in `rbac.ts` currently reads "Matches org.documents —
+same domain, same admins", which is true of the two keys and false of the module they gate.
+
+**Done when.** As `mia.acme` (manager) and `hana.acme` (hr), `/org/documents` either lists
+envelopes or is not offered. No third outcome — and in particular, not an empty table.
+
+**Worth doing at the same time:** a test asserting that every server fn reachable from a page is
+callable by every role that page's feature key admits. That is the axis with no coverage, and it
+is what would have caught both this and X-07 before a human did.
+
+---
+
 ## Priority 2 — Performance, in the order it will bite
 
 Measured 2026-09-03, not guessed. Neither item bites at demo scale; both are real at tenant scale.
