@@ -161,7 +161,7 @@ Three rules those tests encode, worth stating in prose because the next person w
 
 ## Baseline
 
-A green test run reads **0 failed / 990 passed / 5 skipped**.
+A green test run reads **0 failed / 995 passed / 5 skipped**.
 
 **This changed in Wave 7.** The baseline used to read "4 failed", and those four were stale
 fixtures in `tests/onboarding-readiness.test.ts` describing a table shape that no longer exists —

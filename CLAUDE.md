@@ -631,10 +631,10 @@ Read the one you need; they do not repeat each other.
 scoping section before doing anything else; the rest of this file is stable reference.**
 
 Runs against Supabase dev project `xnrjfrxzahmfdrqfsnnq`, 215 migrations applied.
-Scale: 173 routes, 101 `*.functions.ts` modules, ~615 server fns, 121 nav destinations,
+Scale: 173 routes, 102 `*.functions.ts` modules, ~620 server fns, 122 nav destinations,
 66 unit-test files, 37 Playwright specs.
 
-**A green suite reads 0 failed / 990 passed / 5 skipped.** This changed in W7: the long-standing
+**A green suite reads 0 failed / 995 passed / 5 skipped.** This changed in W7: the long-standing
 "4 failed" baseline was four stale fixtures in `tests/onboarding-readiness.test.ts`, not a product
 bug, and a permanently-red suite is the state in which real regressions hide. Any red is now yours.
 `tests/rbac.test.ts` and `tests/audit-overtime.test.ts` still cannot *collect* without live
