@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, GraduationCap, BadgeCheck, AlertTriangle } from "lucide-react";
+import { Plus, GraduationCap, BadgeCheck, AlertTriangle, Eye } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
@@ -46,7 +46,9 @@ import {
   deleteEnrollment,
   listCertifications,
 } from "@/lib/training.functions";
+import { listCourseProgress } from "@/lib/training-lessons.functions";
 import { useMyTenantId } from "@/hooks/use-tenant";
+import { Progress } from "@/components/ui/progress";
 
 export const Route = createFileRoute("/org/training")({
   head: () => ({ meta: [{ title: "Training — hrppl" }] }),
@@ -64,11 +66,18 @@ function OrgTrainingPage() {
   const updateFn = useServerFn(updateEnrollment);
   const delFn = useServerFn(deleteEnrollment);
   const certsFn = useServerFn(listCertifications);
+  const progressFn = useServerFn(listCourseProgress);
   // W5 · Single source: the same feature key this page's nav row uses.
   // These pages carry no route-level gate component, only this inline
   // check, so the two were free to disagree — and did. The sidebar offered
   // the page and the page answered "Forbidden".
   const canAccess = can("org.training", roles);
+  // X-07 · Reading the roster and changing it are different rights, because
+  // the database grants them to different sets: branch_admin's every policy in
+  // this domain is a `FOR SELECT`. One key could only have been wrong in one
+  // direction — an Assign button Postgres refuses, or a roster hidden from
+  // someone entitled to read it. See the note beside these keys in rbac.ts.
+  const canManage = can("org.trainingManage", roles);
   const [tab, setTab] = useState("enrollments");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
@@ -113,6 +122,12 @@ function OrgTrainingPage() {
         data: { scope: "all", status: statusFilter === "all" ? undefined : statusFilter },
       }),
     enabled: canAccess,
+  });
+  const { data: progressData } = useQuery({
+    queryKey: ["training-progress"],
+    queryFn: () => progressFn({ data: {} }),
+    enabled: canAccess,
+    staleTime: 30_000,
   });
   const { data: certsData } = useQuery({
     queryKey: ["certs-expiring"],
@@ -185,84 +200,92 @@ function OrgTrainingPage() {
       subtitle="Assign courses, track completion, monitor certificate expiries"
       actions={
         <div className="flex gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin/training">Manage catalog</Link>
-          </Button>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="mr-1 h-4 w-4" /> Assign course
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Assign a course</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={submit} className="space-y-3">
-                <div className="space-y-2">
-                  <Label>Course*</Label>
-                  <Select
-                    value={form.course_id ?? ""}
-                    onValueChange={(v) => setForm({ ...form, course_id: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pick course" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeCourses.map((c: any) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Due date</Label>
-                  <Input
-                    type="date"
-                    value={form.due_date ?? ""}
-                    onChange={(e) => setForm({ ...form, due_date: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Employees* ({form.employee_ids.length} selected)</Label>
-                  <div className="max-h-64 space-y-1 overflow-auto rounded border p-2">
-                    {employees.map((e) => {
-                      const checked = form.employee_ids.includes(e.id);
-                      return (
-                        <label
-                          key={e.id}
-                          className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(c) => {
-                              const next = c
-                                ? [...form.employee_ids, e.id]
-                                : form.employee_ids.filter((x) => x !== e.id);
-                              setForm({ ...form, employee_ids: next });
-                            }}
-                          />
-                          <span>
-                            {e.first_name} {e.last_name}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {e.job_title ?? e.email}
-                          </span>
-                        </label>
-                      );
-                    })}
+          {canManage && (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/training">Manage catalog</Link>
+            </Button>
+          )}
+          {canManage ? (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="mr-1 h-4 w-4" /> Assign course
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Assign a course</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Course*</Label>
+                    <Select
+                      value={form.course_id ?? ""}
+                      onValueChange={(v) => setForm({ ...form, course_id: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pick course" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeCourses.map((c: any) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={busy}>
-                    {busy ? "Assigning…" : "Assign"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div className="space-y-2">
+                    <Label>Due date</Label>
+                    <Input
+                      type="date"
+                      value={form.due_date ?? ""}
+                      onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Employees* ({form.employee_ids.length} selected)</Label>
+                    <div className="max-h-64 space-y-1 overflow-auto rounded border p-2">
+                      {employees.map((e) => {
+                        const checked = form.employee_ids.includes(e.id);
+                        return (
+                          <label
+                            key={e.id}
+                            className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(c) => {
+                                const next = c
+                                  ? [...form.employee_ids, e.id]
+                                  : form.employee_ids.filter((x) => x !== e.id);
+                                setForm({ ...form, employee_ids: next });
+                              }}
+                            />
+                            <span>
+                              {e.first_name} {e.last_name}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {e.job_title ?? e.email}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={busy}>
+                      {busy ? "Assigning…" : "Assign"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Eye className="h-3.5 w-3.5" /> View only
+            </span>
+          )}
         </div>
       }
     >
@@ -302,6 +325,7 @@ function OrgTrainingPage() {
                       <TableRow>
                         <TableHead>Employee</TableHead>
                         <TableHead>Course</TableHead>
+                        <TableHead>Lessons</TableHead>
                         <TableHead>Due</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
@@ -310,7 +334,7 @@ function OrgTrainingPage() {
                     <TableBody>
                       {(enrollData?.enrollments ?? []).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-muted-foreground">
+                          <TableCell colSpan={6} className="text-muted-foreground">
                             No enrollments.
                           </TableCell>
                         </TableRow>
@@ -331,28 +355,56 @@ function OrgTrainingPage() {
                                 </Badge>
                               )}
                             </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const p =
+                                  progressData?.progress?.[`${en.course_id}:${en.employee_id}`];
+                                const total =
+                                  p?.total ?? progressData?.progress?.[en.course_id]?.total ?? 0;
+                                if (!total)
+                                  return <span className="text-xs text-muted-foreground">—</span>;
+                                const done = p?.done ?? 0;
+                                return (
+                                  <div className="w-24">
+                                    <Progress
+                                      value={Math.round((done / total) * 100)}
+                                      className="h-1.5"
+                                    />
+                                    <span className="text-xs text-muted-foreground">
+                                      {done}/{total}
+                                    </span>
+                                  </div>
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell className="text-xs">{en.due_date ?? "—"}</TableCell>
                             <TableCell>
-                              <Select
-                                value={en.status}
-                                onValueChange={(v) => changeStatus(en.id, v)}
-                              >
-                                <SelectTrigger className="h-7 w-32 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="assigned">Assigned</SelectItem>
-                                  <SelectItem value="in_progress">In progress</SelectItem>
-                                  <SelectItem value="completed">Completed</SelectItem>
-                                  <SelectItem value="expired">Expired</SelectItem>
-                                  <SelectItem value="waived">Waived</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              {canManage ? (
+                                <Select
+                                  value={en.status}
+                                  onValueChange={(v) => changeStatus(en.id, v)}
+                                >
+                                  <SelectTrigger className="h-7 w-32 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="assigned">Assigned</SelectItem>
+                                    <SelectItem value="in_progress">In progress</SelectItem>
+                                    <SelectItem value="completed">Completed</SelectItem>
+                                    <SelectItem value="expired">Expired</SelectItem>
+                                    <SelectItem value="waived">Waived</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Badge variant="outline">{en.status.replace("_", " ")}</Badge>
+                              )}
                             </TableCell>
                             <TableCell className="text-right">
-                              <Button size="sm" variant="ghost" onClick={() => remove(en.id)}>
-                                Remove
-                              </Button>
+                              {canManage && (
+                                <Button size="sm" variant="ghost" onClick={() => remove(en.id)}>
+                                  Remove
+                                </Button>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))

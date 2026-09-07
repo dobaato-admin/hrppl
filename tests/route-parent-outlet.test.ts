@@ -32,9 +32,10 @@ const GEN = readFileSync(join(ROOT, "src/routeTree.gen.ts"), "utf8");
 
 /** Route symbol -> source file, from the generated import block. */
 const IMPORTS = new Map<string, string>(
-  [...GEN.matchAll(/import \{ Route as (\w+) \} from '\.\/routes\/([^']+)'/g)].map(
-    (m) => [m[1], m[2]],
-  ),
+  [...GEN.matchAll(/import \{ Route as (\w+) \} from '\.\/routes\/([^']+)'/g)].map((m) => [
+    m[1],
+    m[2],
+  ]),
 );
 
 /** Every symbol some other route names as its parent. */
@@ -87,8 +88,7 @@ describe("every parent route can render its children", () => {
     // servers writing routeTree.gen.ts at once), so check it directly.
     for (const sym of PARENT_SYMBOLS) {
       if (sym === "rootRouteImport") continue;
-      const declared =
-        new RegExp(`const ${sym} = `).test(GEN) || IMPORTS.has(`${sym}Import`);
+      const declared = new RegExp(`const ${sym} = `).test(GEN) || IMPORTS.has(`${sym}Import`);
       expect(declared, `routeTree.gen.ts names ${sym} as a parent but never defines it`).toBe(true);
     }
   });
@@ -156,15 +156,33 @@ describe("every authenticated page renders inside the app chrome", () => {
 
   /** Public, pre-auth, or gate destinations — chrome would be wrong on these. */
   const EXEMPT_EXACT = new Set([
-    "__root", "index", "auth", "signup", "forgot-password", "reset-password",
-    "welcome", "suspended", "org.setup", "onboarding.profile", "dev-session",
-    "unsubscribe", "developers", "contact", "pricing", "privacy", "terms",
+    "__root",
+    "index",
+    "auth",
+    "signup",
+    "forgot-password",
+    "reset-password",
+    "welcome",
+    "suspended",
+    "org.setup",
+    "onboarding.profile",
+    "dev-session",
+    "unsubscribe",
+    "developers",
+    "contact",
+    "pricing",
+    "privacy",
+    "terms",
     "admin", // the bare layout itself
   ]);
   const EXEMPT_PREFIX = ["api.", "blog", "careers", "invite.", "sign.", "email.", "[.", "help.$"];
 
-  const routeFiles = globSync("src/routes/**/*.tsx", { cwd: ROOT })
-    .map((f) => f.replace(/\\/g, "/").replace("src/routes/", "").replace(/\.tsx$/, ""));
+  const routeFiles = globSync("src/routes/**/*.tsx", { cwd: ROOT }).map((f) =>
+    f
+      .replace(/\\/g, "/")
+      .replace("src/routes/", "")
+      .replace(/\.tsx$/, ""),
+  );
 
   function ancestorsOf(name: string): string[] {
     // "org.onboarding.tracker" -> ["org.onboarding", "org"]
@@ -172,6 +190,19 @@ describe("every authenticated page renders inside the app chrome", () => {
     const out: string[] = [];
     for (let i = parts.length - 1; i > 0; i--) out.push(parts.slice(0, i).join("."));
     return out;
+  }
+
+  /**
+   * True when the route's component tree is nothing but an <Outlet /> (plus,
+   * optionally, a gate wrapper). Anything with real markup — a heading, a nav,
+   * a <div> of its own — is a page and must answer for its chrome.
+   */
+  function isPureLayout(src: string): boolean {
+    if (!src.includes("<Outlet")) return false;
+    const stripped = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    // Any JSX tag that is not Outlet, a gate, or a fragment makes this a page.
+    const tags = [...stripped.matchAll(/<([A-Za-z][\w.]*)/g)].map((m) => m[1]);
+    return tags.every((t) => t === "Outlet" || /Gate$/.test(t));
   }
 
   const uncovered: string[] = [];
@@ -193,6 +224,15 @@ describe("every authenticated page renders inside the app chrome", () => {
     // anything paints. Retired duplicates are kept in this form rather than
     // deleted, so a bookmarked URL still lands somewhere sensible.
     if (/throw redirect\(/.test(own) && !/component:/.test(own)) continue;
+    // A pure layout route renders only its children — an <Outlet /> and at most
+    // a gate around it, with no markup of its own. It cannot appear
+    // chrome-less because it never paints anything; the child underneath it is
+    // the page, and the page is checked on its own line above. `admin.tsx` has
+    // always had this shape (it is why every /admin page carries its own
+    // AppShell) and `admin.training.tsx` took it when the course builder was
+    // added. Detected rather than listed, so the next one does not have to be
+    // remembered.
+    if (isPureLayout(own)) continue;
     // For an index route the provider is the segment itself: me.index.tsx sits
     // under me.tsx, not under a further ancestor.
     if (name.endsWith(".index") && LAYOUT_PROVIDERS.includes(base)) continue;

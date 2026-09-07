@@ -165,7 +165,9 @@ import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]
 import { Route as OrgRecruitmentIndexRouteImport } from './routes/org.recruitment.index'
 import { Route as OrgOnboardingIndexRouteImport } from './routes/org.onboarding.index'
 import { Route as OrgDocumentsIndexRouteImport } from './routes/org.documents.index'
+import { Route as MeTrainingIndexRouteImport } from './routes/me.training.index'
 import { Route as CareersTenantSlugIndexRouteImport } from './routes/careers.$tenantSlug.index'
+import { Route as AdminTrainingIndexRouteImport } from './routes/admin.training.index'
 import { Route as SignCertificateTokenRouteImport } from './routes/sign.certificate.$token'
 import { Route as OrgSettingsMfaPolicyRouteImport } from './routes/org.settings.mfa-policy'
 import { Route as OrgRecruitmentJobIdRouteImport } from './routes/org.recruitment.$jobId'
@@ -173,10 +175,12 @@ import { Route as OrgOnboardingTrackerRouteImport } from './routes/org.onboardin
 import { Route as OrgDocumentsTemplatesRouteImport } from './routes/org.documents.templates'
 import { Route as OrgDocumentsExpiringRouteImport } from './routes/org.documents.expiring'
 import { Route as OrgCareersSettingsRouteImport } from './routes/org.careers.settings'
+import { Route as MeTrainingEnrollmentIdRouteImport } from './routes/me.training.$enrollmentId'
 import { Route as LovableEmailSuppressionRouteImport } from './routes/lovable/email/suppression'
 import { Route as CareersTenantSlugJobSlugRouteImport } from './routes/careers.$tenantSlug.$jobSlug'
 import { Route as ApiV1OpenapiDotjsonRouteImport } from './routes/api/v1/openapi[.]json'
 import { Route as ApiV1DocsRouteImport } from './routes/api/v1/docs'
+import { Route as AdminTrainingCourseIdRouteImport } from './routes/admin.training.$courseId'
 import { Route as AdminEmployeesEmployeeIdRouteImport } from './routes/admin.employees.$employeeId'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
@@ -994,10 +998,20 @@ const OrgDocumentsIndexRoute = OrgDocumentsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => OrgDocumentsRoute,
 } as any)
+const MeTrainingIndexRoute = MeTrainingIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MeTrainingRoute,
+} as any)
 const CareersTenantSlugIndexRoute = CareersTenantSlugIndexRouteImport.update({
   id: '/careers/$tenantSlug/',
   path: '/careers/$tenantSlug/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTrainingIndexRoute = AdminTrainingIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminTrainingRoute,
 } as any)
 const SignCertificateTokenRoute = SignCertificateTokenRouteImport.update({
   id: '/sign/certificate/$token',
@@ -1034,6 +1048,11 @@ const OrgCareersSettingsRoute = OrgCareersSettingsRouteImport.update({
   path: '/careers/settings',
   getParentRoute: () => OrgRoute,
 } as any)
+const MeTrainingEnrollmentIdRoute = MeTrainingEnrollmentIdRouteImport.update({
+  id: '/$enrollmentId',
+  path: '/$enrollmentId',
+  getParentRoute: () => MeTrainingRoute,
+} as any)
 const LovableEmailSuppressionRoute = LovableEmailSuppressionRouteImport.update({
   id: '/lovable/email/suppression',
   path: '/lovable/email/suppression',
@@ -1054,6 +1073,11 @@ const ApiV1DocsRoute = ApiV1DocsRouteImport.update({
   id: '/api/v1/docs',
   path: '/api/v1/docs',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTrainingCourseIdRoute = AdminTrainingCourseIdRouteImport.update({
+  id: '/$courseId',
+  path: '/$courseId',
+  getParentRoute: () => AdminTrainingRoute,
 } as any)
 const AdminEmployeesEmployeeIdRoute =
   AdminEmployeesEmployeeIdRouteImport.update({
@@ -1331,7 +1355,7 @@ export interface FileRoutesByFullPath {
   '/admin/teams': typeof AdminTeamsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
-  '/admin/training': typeof AdminTrainingRoute
+  '/admin/training': typeof AdminTrainingRouteWithChildren
   '/admin/underpayment-audit': typeof AdminUnderpaymentAuditRoute
   '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -1358,7 +1382,7 @@ export interface FileRoutesByFullPath {
   '/me/signatures': typeof MeSignaturesRoute
   '/me/timeline': typeof MeTimelineRoute
   '/me/toil': typeof MeToilRoute
-  '/me/training': typeof MeTrainingRoute
+  '/me/training': typeof MeTrainingRouteWithChildren
   '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
@@ -1406,10 +1430,12 @@ export interface FileRoutesByFullPath {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/admin/employees/$employeeId': typeof AdminEmployeesEmployeeIdRoute
+  '/admin/training/$courseId': typeof AdminTrainingCourseIdRoute
   '/api/v1/docs': typeof ApiV1DocsRoute
   '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/careers/$tenantSlug/$jobSlug': typeof CareersTenantSlugJobSlugRoute
   '/lovable/email/suppression': typeof LovableEmailSuppressionRoute
+  '/me/training/$enrollmentId': typeof MeTrainingEnrollmentIdRoute
   '/org/careers/settings': typeof OrgCareersSettingsRoute
   '/org/documents/expiring': typeof OrgDocumentsExpiringRoute
   '/org/documents/templates': typeof OrgDocumentsTemplatesRoute
@@ -1417,7 +1443,9 @@ export interface FileRoutesByFullPath {
   '/org/recruitment/$jobId': typeof OrgRecruitmentJobIdRoute
   '/org/settings/mfa-policy': typeof OrgSettingsMfaPolicyRoute
   '/sign/certificate/$token': typeof SignCertificateTokenRoute
+  '/admin/training/': typeof AdminTrainingIndexRoute
   '/careers/$tenantSlug/': typeof CareersTenantSlugIndexRoute
+  '/me/training/': typeof MeTrainingIndexRoute
   '/org/documents/': typeof OrgDocumentsIndexRoute
   '/org/onboarding/': typeof OrgOnboardingIndexRoute
   '/org/recruitment/': typeof OrgRecruitmentIndexRoute
@@ -1531,7 +1559,6 @@ export interface FileRoutesByTo {
   '/admin/teams': typeof AdminTeamsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
-  '/admin/training': typeof AdminTrainingRoute
   '/admin/underpayment-audit': typeof AdminUnderpaymentAuditRoute
   '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -1558,7 +1585,6 @@ export interface FileRoutesByTo {
   '/me/signatures': typeof MeSignaturesRoute
   '/me/timeline': typeof MeTimelineRoute
   '/me/toil': typeof MeToilRoute
-  '/me/training': typeof MeTrainingRoute
   '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
@@ -1604,10 +1630,12 @@ export interface FileRoutesByTo {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/admin/employees/$employeeId': typeof AdminEmployeesEmployeeIdRoute
+  '/admin/training/$courseId': typeof AdminTrainingCourseIdRoute
   '/api/v1/docs': typeof ApiV1DocsRoute
   '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/careers/$tenantSlug/$jobSlug': typeof CareersTenantSlugJobSlugRoute
   '/lovable/email/suppression': typeof LovableEmailSuppressionRoute
+  '/me/training/$enrollmentId': typeof MeTrainingEnrollmentIdRoute
   '/org/careers/settings': typeof OrgCareersSettingsRoute
   '/org/documents/expiring': typeof OrgDocumentsExpiringRoute
   '/org/documents/templates': typeof OrgDocumentsTemplatesRoute
@@ -1615,7 +1643,9 @@ export interface FileRoutesByTo {
   '/org/recruitment/$jobId': typeof OrgRecruitmentJobIdRoute
   '/org/settings/mfa-policy': typeof OrgSettingsMfaPolicyRoute
   '/sign/certificate/$token': typeof SignCertificateTokenRoute
+  '/admin/training': typeof AdminTrainingIndexRoute
   '/careers/$tenantSlug': typeof CareersTenantSlugIndexRoute
+  '/me/training': typeof MeTrainingIndexRoute
   '/org/documents': typeof OrgDocumentsIndexRoute
   '/org/onboarding': typeof OrgOnboardingIndexRoute
   '/org/recruitment': typeof OrgRecruitmentIndexRoute
@@ -1733,7 +1763,7 @@ export interface FileRoutesById {
   '/admin/teams': typeof AdminTeamsRoute
   '/admin/templates': typeof AdminTemplatesRoute
   '/admin/toil': typeof AdminToilRoute
-  '/admin/training': typeof AdminTrainingRoute
+  '/admin/training': typeof AdminTrainingRouteWithChildren
   '/admin/underpayment-audit': typeof AdminUnderpaymentAuditRoute
   '/admin/wfh': typeof AdminWfhRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -1760,7 +1790,7 @@ export interface FileRoutesById {
   '/me/signatures': typeof MeSignaturesRoute
   '/me/timeline': typeof MeTimelineRoute
   '/me/toil': typeof MeToilRoute
-  '/me/training': typeof MeTrainingRoute
+  '/me/training': typeof MeTrainingRouteWithChildren
   '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
@@ -1808,10 +1838,12 @@ export interface FileRoutesById {
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/admin/employees/$employeeId': typeof AdminEmployeesEmployeeIdRoute
+  '/admin/training/$courseId': typeof AdminTrainingCourseIdRoute
   '/api/v1/docs': typeof ApiV1DocsRoute
   '/api/v1/openapi.json': typeof ApiV1OpenapiDotjsonRoute
   '/careers/$tenantSlug/$jobSlug': typeof CareersTenantSlugJobSlugRoute
   '/lovable/email/suppression': typeof LovableEmailSuppressionRoute
+  '/me/training/$enrollmentId': typeof MeTrainingEnrollmentIdRoute
   '/org/careers/settings': typeof OrgCareersSettingsRoute
   '/org/documents/expiring': typeof OrgDocumentsExpiringRoute
   '/org/documents/templates': typeof OrgDocumentsTemplatesRoute
@@ -1819,7 +1851,9 @@ export interface FileRoutesById {
   '/org/recruitment/$jobId': typeof OrgRecruitmentJobIdRoute
   '/org/settings/mfa-policy': typeof OrgSettingsMfaPolicyRoute
   '/sign/certificate/$token': typeof SignCertificateTokenRoute
+  '/admin/training/': typeof AdminTrainingIndexRoute
   '/careers/$tenantSlug/': typeof CareersTenantSlugIndexRoute
+  '/me/training/': typeof MeTrainingIndexRoute
   '/org/documents/': typeof OrgDocumentsIndexRoute
   '/org/onboarding/': typeof OrgOnboardingIndexRoute
   '/org/recruitment/': typeof OrgRecruitmentIndexRoute
@@ -2013,10 +2047,12 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/admin/employees/$employeeId'
+    | '/admin/training/$courseId'
     | '/api/v1/docs'
     | '/api/v1/openapi.json'
     | '/careers/$tenantSlug/$jobSlug'
     | '/lovable/email/suppression'
+    | '/me/training/$enrollmentId'
     | '/org/careers/settings'
     | '/org/documents/expiring'
     | '/org/documents/templates'
@@ -2024,7 +2060,9 @@ export interface FileRouteTypes {
     | '/org/recruitment/$jobId'
     | '/org/settings/mfa-policy'
     | '/sign/certificate/$token'
+    | '/admin/training/'
     | '/careers/$tenantSlug/'
+    | '/me/training/'
     | '/org/documents/'
     | '/org/onboarding/'
     | '/org/recruitment/'
@@ -2138,7 +2176,6 @@ export interface FileRouteTypes {
     | '/admin/teams'
     | '/admin/templates'
     | '/admin/toil'
-    | '/admin/training'
     | '/admin/underpayment-audit'
     | '/admin/wfh'
     | '/blog/$slug'
@@ -2165,7 +2202,6 @@ export interface FileRouteTypes {
     | '/me/signatures'
     | '/me/timeline'
     | '/me/toil'
-    | '/me/training'
     | '/me/wfh'
     | '/onboarding/profile'
     | '/org/analytics'
@@ -2211,10 +2247,12 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/admin/employees/$employeeId'
+    | '/admin/training/$courseId'
     | '/api/v1/docs'
     | '/api/v1/openapi.json'
     | '/careers/$tenantSlug/$jobSlug'
     | '/lovable/email/suppression'
+    | '/me/training/$enrollmentId'
     | '/org/careers/settings'
     | '/org/documents/expiring'
     | '/org/documents/templates'
@@ -2222,7 +2260,9 @@ export interface FileRouteTypes {
     | '/org/recruitment/$jobId'
     | '/org/settings/mfa-policy'
     | '/sign/certificate/$token'
+    | '/admin/training'
     | '/careers/$tenantSlug'
+    | '/me/training'
     | '/org/documents'
     | '/org/onboarding'
     | '/org/recruitment'
@@ -2414,10 +2454,12 @@ export interface FileRouteTypes {
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/admin/employees/$employeeId'
+    | '/admin/training/$courseId'
     | '/api/v1/docs'
     | '/api/v1/openapi.json'
     | '/careers/$tenantSlug/$jobSlug'
     | '/lovable/email/suppression'
+    | '/me/training/$enrollmentId'
     | '/org/careers/settings'
     | '/org/documents/expiring'
     | '/org/documents/templates'
@@ -2425,7 +2467,9 @@ export interface FileRouteTypes {
     | '/org/recruitment/$jobId'
     | '/org/settings/mfa-policy'
     | '/sign/certificate/$token'
+    | '/admin/training/'
     | '/careers/$tenantSlug/'
+    | '/me/training/'
     | '/org/documents/'
     | '/org/onboarding/'
     | '/org/recruitment/'
@@ -3649,12 +3693,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgDocumentsIndexRouteImport
       parentRoute: typeof OrgDocumentsRoute
     }
+    '/me/training/': {
+      id: '/me/training/'
+      path: '/'
+      fullPath: '/me/training/'
+      preLoaderRoute: typeof MeTrainingIndexRouteImport
+      parentRoute: typeof MeTrainingRoute
+    }
     '/careers/$tenantSlug/': {
       id: '/careers/$tenantSlug/'
       path: '/careers/$tenantSlug'
       fullPath: '/careers/$tenantSlug/'
       preLoaderRoute: typeof CareersTenantSlugIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/training/': {
+      id: '/admin/training/'
+      path: '/'
+      fullPath: '/admin/training/'
+      preLoaderRoute: typeof AdminTrainingIndexRouteImport
+      parentRoute: typeof AdminTrainingRoute
     }
     '/sign/certificate/$token': {
       id: '/sign/certificate/$token'
@@ -3705,6 +3763,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgCareersSettingsRouteImport
       parentRoute: typeof OrgRoute
     }
+    '/me/training/$enrollmentId': {
+      id: '/me/training/$enrollmentId'
+      path: '/$enrollmentId'
+      fullPath: '/me/training/$enrollmentId'
+      preLoaderRoute: typeof MeTrainingEnrollmentIdRouteImport
+      parentRoute: typeof MeTrainingRoute
+    }
     '/lovable/email/suppression': {
       id: '/lovable/email/suppression'
       path: '/lovable/email/suppression'
@@ -3732,6 +3797,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/v1/docs'
       preLoaderRoute: typeof ApiV1DocsRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/training/$courseId': {
+      id: '/admin/training/$courseId'
+      path: '/$courseId'
+      fullPath: '/admin/training/$courseId'
+      preLoaderRoute: typeof AdminTrainingCourseIdRouteImport
+      parentRoute: typeof AdminTrainingRoute
     }
     '/admin/employees/$employeeId': {
       id: '/admin/employees/$employeeId'
@@ -3967,6 +4039,20 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminTrainingRouteChildren {
+  AdminTrainingCourseIdRoute: typeof AdminTrainingCourseIdRoute
+  AdminTrainingIndexRoute: typeof AdminTrainingIndexRoute
+}
+
+const AdminTrainingRouteChildren: AdminTrainingRouteChildren = {
+  AdminTrainingCourseIdRoute: AdminTrainingCourseIdRoute,
+  AdminTrainingIndexRoute: AdminTrainingIndexRoute,
+}
+
+const AdminTrainingRouteWithChildren = AdminTrainingRoute._addFileChildren(
+  AdminTrainingRouteChildren,
+)
+
 interface AdminRouteChildren {
   AdminApiDocsRoute: typeof AdminApiDocsRoute
   AdminAssetsRoute: typeof AdminAssetsRoute
@@ -4019,7 +4105,7 @@ interface AdminRouteChildren {
   AdminTeamsRoute: typeof AdminTeamsRoute
   AdminTemplatesRoute: typeof AdminTemplatesRoute
   AdminToilRoute: typeof AdminToilRoute
-  AdminTrainingRoute: typeof AdminTrainingRoute
+  AdminTrainingRoute: typeof AdminTrainingRouteWithChildren
   AdminUnderpaymentAuditRoute: typeof AdminUnderpaymentAuditRoute
   AdminWfhRoute: typeof AdminWfhRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -4078,7 +4164,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminTeamsRoute: AdminTeamsRoute,
   AdminTemplatesRoute: AdminTemplatesRoute,
   AdminToilRoute: AdminToilRoute,
-  AdminTrainingRoute: AdminTrainingRoute,
+  AdminTrainingRoute: AdminTrainingRouteWithChildren,
   AdminUnderpaymentAuditRoute: AdminUnderpaymentAuditRoute,
   AdminWfhRoute: AdminWfhRoute,
   AdminIndexRoute: AdminIndexRoute,
@@ -4086,6 +4172,20 @@ const AdminRouteChildren: AdminRouteChildren = {
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface MeTrainingRouteChildren {
+  MeTrainingEnrollmentIdRoute: typeof MeTrainingEnrollmentIdRoute
+  MeTrainingIndexRoute: typeof MeTrainingIndexRoute
+}
+
+const MeTrainingRouteChildren: MeTrainingRouteChildren = {
+  MeTrainingEnrollmentIdRoute: MeTrainingEnrollmentIdRoute,
+  MeTrainingIndexRoute: MeTrainingIndexRoute,
+}
+
+const MeTrainingRouteWithChildren = MeTrainingRoute._addFileChildren(
+  MeTrainingRouteChildren,
+)
 
 interface MeRouteChildren {
   MeAssetsRoute: typeof MeAssetsRoute
@@ -4104,7 +4204,7 @@ interface MeRouteChildren {
   MeSignaturesRoute: typeof MeSignaturesRoute
   MeTimelineRoute: typeof MeTimelineRoute
   MeToilRoute: typeof MeToilRoute
-  MeTrainingRoute: typeof MeTrainingRoute
+  MeTrainingRoute: typeof MeTrainingRouteWithChildren
   MeWfhRoute: typeof MeWfhRoute
   MeIndexRoute: typeof MeIndexRoute
 }
@@ -4126,7 +4226,7 @@ const MeRouteChildren: MeRouteChildren = {
   MeSignaturesRoute: MeSignaturesRoute,
   MeTimelineRoute: MeTimelineRoute,
   MeToilRoute: MeToilRoute,
-  MeTrainingRoute: MeTrainingRoute,
+  MeTrainingRoute: MeTrainingRouteWithChildren,
   MeWfhRoute: MeWfhRoute,
   MeIndexRoute: MeIndexRoute,
 }
