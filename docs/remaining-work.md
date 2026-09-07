@@ -131,11 +131,15 @@ same domain, same admins", which is true of the two keys and false of the module
 **Done when.** As `mia.acme` (manager) and `hana.acme` (hr), `/org/documents` either lists
 envelopes or is not offered. No third outcome — and in particular, not an empty table.
 
-**Also open, same sweep, cause not yet identified:** `/me/signatures` reports 3 console errors for
-`hr` and `branch_admin` and none for `employee`, `manager` or `super_admin` — verified clean by
-hand as a manager. Two roles, the same count, is a pattern rather than noise, and it is *not* the
-guard above: the page's only server fn (`myPendingEnvelopes`) does not use `getOrgAdminTenant`.
-Worth ten minutes before assuming it is related.
+**Two more open observations from the same sweep, neither chased:**
+
+- `/settings/billing` reports console errors for **every one of the eight roles**, usually two.
+  Something on that page fails for everybody, including super_admin, which rules out a permission
+  gate. Cheapest of the three to diagnose and the only one that affects all users.
+- `/me/signatures` reports 3 console errors for `hr` and `branch_admin` and none for `employee`,
+  `manager` or `super_admin` — verified clean by hand as a manager. Two roles at the same count is
+  a pattern rather than noise, and it is *not* the guard above: the page's only server fn
+  (`myPendingEnvelopes`) does not use `getOrgAdminTenant`.
 
 **Worth doing at the same time:** a test asserting that every server fn reachable from a page is
 callable by every role that page's feature key admits. That is the axis with no coverage, and it

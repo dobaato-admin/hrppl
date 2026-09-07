@@ -159,3 +159,26 @@ elsewhere, which is expected for routes a role may not see.
 | `listMyQuickAccess` | 128 | 1.0 |
 
 </details>
+
+## regional_admin — `rita.platform@demo.hrppl.test`
+
+122 routes visited · **2** without chrome · **2** with console errors · **0** non-2xx.
+
+| route | status | chrome | heading | console errors |
+|---|---|---|---|---|
+| `/admin/policies` | 200 | **NO** | HR policies | 0 |
+| `/org/training` | 200 | **NO** | Training & Certifications | 0 |
+| `/admin` | 200 | yes | Home | 2 |
+| `/settings/billing` | 200 | yes | Billing & subscription | 2 |
+
+<details><summary>Server fns called more than once per page load (122 loads)</summary>
+
+| server fn | calls | per load |
+|---|---|---|
+| `getMyGateStatus` | 246 | 2.0 |
+
+</details>
+
+---
+
+**Totals:** 20 route/role combinations without chrome, 25 with console errors.
