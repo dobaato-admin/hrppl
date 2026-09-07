@@ -15,7 +15,7 @@
 | W5 · Reachability (P0–P5) | **Done**, merged 2026-09-03 · closed out 2026-09-03 (qa-sweep) |
 | A1 · Security & performance audit | **Done**, migration applied and verified live |
 | W6 · Learning (LMS) | **Done**, 5 migrations applied and verified live · closes X-07 |
-| W7 · Guided onboarding routes | **Specified, not started** — depends on W6; `docs/onboarding-guided-routes.md` |
+| W7 · Guided onboarding routes | **Done**, 2 migrations applied and verified live |
 
 ## Working agreement
 
@@ -772,6 +772,109 @@ sanitising every HTML sink. See `docs/onboarding-guided-routes.md` §10.
 
 **The cross-tenant course library** (nullable `tenant_id`, `owner_scope`, country scoping) remains
 **parked with D-8**. Nothing shipped here depends on it.
+
+## Wave 7 — Guided onboarding routes *(done, 2026-09-07)*
+
+`docs/onboarding-guided-routes.md` §9 predicted this correctly: **most of Phase 1
+was sequencing, not new subsystems.** The wave is a guided layer over surfaces
+that already existed, plus the two things that genuinely did not.
+
+### The design decision that shapes everything else
+
+**Segment completion is computed from the tenant's data. It is never stored.**
+
+There is no per-segment "done" flag anywhere. Every check in `buildSetupGuide`
+reads the actual rows — is there a leave type, is there a pay period, has a
+policy been published. A stored flag records that somebody clicked a button; it
+goes stale the moment the rows it was vouching for are deleted, and it cannot
+tell an admin returning after a month what is genuinely missing. CLAUDE.md
+already asked that the Setup Lock **extend `checkPayrollReadiness`** rather than
+invent a parallel notion of readiness, and this does.
+
+`tenant_setup_state` therefore holds exactly two facts a query cannot derive:
+which optional segments were deferred on purpose, and when the tenant went live.
+
+The consequence, which the page states out loud rather than hiding: **a segment
+can reopen.** Delete every leave type and payroll goes back to incomplete. That
+is the honest answer, and `tests/setup-guide.test.ts` pins it.
+
+**Skipping cannot open the activation gate.** Required segments refuse to be
+skipped server-side, and `finalizeSetup` re-derives readiness from the database
+rather than believing whatever the browser last rendered — the client's copy can
+be minutes old and this is the one call where that would matter.
+
+### What shipped
+
+| Piece | Where |
+| --- | --- |
+| Guided setup, 7 segments, resume, skip, activate | `/org/setup-guide` · `setup-guide.functions.ts` |
+| Segment 1 editable **in place** | no company-profile page existed; bouncing an admin into the create-an-org wizard to change an address is the "go and find the page" this flow removes |
+| Policy library + acknowledgements | `/admin/policies`, `/me/policies` · `policies.functions.ts` |
+| Phase 3 provisioning | `ProvisionButton` on `/org/onboarding/tracker` · `provisioning.functions.ts` |
+
+**The policy library** (§9 item 4) is the one genuinely new subsystem. Three
+properties carry its evidentiary weight: an acknowledgement is of a **version**,
+so revising the wording asks again instead of inheriting consent given to
+different words; **only the person may sign**, enforced by RLS independently of
+the server fn; and a signed policy is **retired, never deleted**, because the
+acknowledgements cascade and destroying the record that someone accepted the
+code of conduct is not something a Delete button should do.
+
+**Phase 3** enrols mandatory training (7 days) and assigns policy sign-offs
+(3 days), both dated in the tenant's own zone. It deliberately does **not**
+fabricate an asset assignment — issuing a laptop is a physical act, and a false
+row in a register that exists to be authoritative is worse than a gap. And it
+reports KPI assignment as **blocked**, naming the three unreconciled review
+systems, rather than picking one and quietly becoming a fourth pathway.
+
+### Two defects found while walking the flow
+
+Both the same shape as the ones under X-07: a write or a check that reports
+success while doing nothing.
+
+**1. An org admin could not edit their own organisation, and the save said it
+worked.** `tenants` had no UPDATE policy for `org_admin` at all — only
+`super_admin` (ALL) and `regional_admin` (country-scoped). The product hid it
+because `updateOrganizationProfile` writes through the **service-role client**,
+so the app's main write path to that table had never exercised RLS at all. And
+PostgREST answers an UPDATE matching zero rows with **200 and no error**, so the
+company-profile form saved nothing, toasted "saved", and left the segment at
+2/6.
+
+Fixed on both sides, because either alone would leave the trap: an UPDATE policy
+scoped to the caller's own tenant, with a trigger blocking `plan`, `status`,
+`slug` and `country_code` — otherwise a settings form becomes a way to set your
+own billing plan or lift your own suspension — and `.select()` on the update so
+a write that changes nothing raises instead of returning `ok`. Verified under a
+real JWT: tagline succeeds, plan/status/country are refused by name, another
+tenant matches no rows.
+
+**2. The four "pre-existing" test failures were stale fixtures, not a bug.**
+`overtime_penalty_rates` carries a `country_code` and **no `tenant_id`** — the
+rates are shared reference data, like `public_holidays`. Every fixture in
+`tests/onboarding-readiness.test.ts` filed them under a tenant and left
+`country_code` off the tenant, describing a table shape that does not exist.
+Four tests had failed continuously, and CLAUDE.md recorded the redness as the
+expected baseline — which is exactly the state in which a real regression goes
+unnoticed. One of the four that *passed* was passing vacuously, asserting the
+right answer for the wrong reason.
+
+**The suite is now fully green: 990 passed, 0 failed.** `rbac.test.ts` and
+`audit-overtime.test.ts` still cannot collect without live service-role
+credentials; that is a missing credential, not a failure.
+
+### Still not built, and why
+
+| # | Item | Why not |
+| --- | --- | --- |
+| 3 | Pay calendars as first-class rows | Its own feature; the guide sequences to `/admin/payroll-setup-wizard`, which covers pay frequency today |
+| 5 | KPI library | Blocked behind the three unreconciled review systems, same as Phase 3 step 1 |
+| 6 | Rating scales as config | Implicit in review templates; the guide checks a template exists |
+| 7 | Split pay across accounts | **Blocked by design** — bank details already exist in three tables and TFN in two. A fourth shape in a payroll product is a defect waiting to happen. Reconcile the owner first |
+| 8 | ABN Lookup, address autocomplete | External APIs needing a key and a failure mode; neither exists in this repo |
+| 9 | SCORM | Deferred, §10 of the spec |
+
+---
 
 ## CLAUDE.md update
 

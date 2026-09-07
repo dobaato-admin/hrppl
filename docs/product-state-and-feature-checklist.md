@@ -486,6 +486,33 @@ exactly as it did; a course only gains the player once someone switches it in Se
 content type — `docs/onboarding-guided-routes.md` §10) and the cross-tenant course library (parked
 with D-8). Do not file either as a defect.
 
+### 7.6b Guided setup and policies — built in Wave 7
+
+`/org/setup-guide` walks an org admin through seven configuration segments, and
+**every item is checked against the tenant's real data** rather than a stored
+tick. A segment therefore reopens if its rows are deleted, and the page says so.
+Required segments (company, payroll, policies) gate "Finalize & activate";
+optional ones can be deferred, and a required one cannot.
+
+- **Segment 1 is editable inside the guide** — there is no company-profile page,
+  and sending an established admin into the create-an-org wizard to change an
+  address is the thing this flow exists to remove.
+- `/admin/policies` is the policy document library; `/me/policies` is where an
+  employee reads and signs. An acknowledgement records the **version** read, so
+  a materially revised policy asks everyone again.
+- Phase 3 provisioning runs from `/org/onboarding/tracker` — mandatory training
+  (7 days) and policy sign-offs (3 days), dated in the tenant's zone.
+
+**To confirm:** as `alice.acme`, open `/org/setup-guide`, fill in the company
+form and watch the percentage move; publish a policy on `/admin/policies` and
+watch Segment 7 go green. As `evan.acme`, `/me/policies` shows it, and signing
+records your name and the version.
+
+**Deliberately not automated:** asset allocation (issuing a laptop is a physical
+act; a false row in the register is worse than a gap) and KPI assignment, which
+is blocked on the three unreconciled review systems and says so on screen rather
+than silently doing nothing.
+
 ### 7.7 Performance — measured, recorded, not urgent
 
 36 loop-with-query sites remain (`payroll.functions.ts` has 8, the hottest path). 194 `useQuery`
