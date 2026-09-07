@@ -48,3 +48,25 @@ elsewhere, which is expected for routes a role may not see.
 | `getMyGateStatus` | 246 | 2.0 |
 
 </details>
+
+## super_admin — `sam.platform@demo.hrppl.test`
+
+122 routes visited · **6** without chrome · **2** with console errors · **0** non-2xx.
+
+| route | status | chrome | heading | console errors |
+|---|---|---|---|---|
+| `/admin/overtime-rates` | 200 | **NO** | Overtime & Penalty Rates | 2 |
+| `/attendance` | 200 | **NO** | — | 0 |
+| `/leave` | 200 | **NO** | — | 0 |
+| `/onboarding` | 200 | **NO** | — | 0 |
+| `/org/setup-guide` | 200 | **NO** | Setup guide | 0 |
+| `/performance` | 200 | **NO** | — | 0 |
+| `/settings/billing` | 200 | yes | Billing & subscription | 2 |
+
+<details><summary>Server fns called more than once per page load (122 loads)</summary>
+
+| server fn | calls | per load |
+|---|---|---|
+| `getMyGateStatus` | 248 | 2.0 |
+
+</details>

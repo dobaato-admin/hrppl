@@ -23,6 +23,27 @@
  * The consequence worth knowing: **a segment can go back to incomplete.** Delete
  * every leave type and Segment 2 reopens. That is the honest answer, and the UI
  * says so rather than pretending otherwise.
+ *
+ * ---------------------------------------------------------------------------
+ * A platform account acting as a tenant sees a LOWER percentage
+ * ---------------------------------------------------------------------------
+ *
+ * `requireTenantId` resolves `platform_acting_tenant`, so the queries below are
+ * scoped to the right tenant — but several of the tables they read carry RLS
+ * keyed on `user_tenant_id(auth.uid())`, which is **NULL for a platform
+ * account**. `training_courses` is the clearest: a super_admin acting as Acme
+ * reads 0 of its 7 courses, so Segment 4 shows incomplete for them and complete
+ * for Acme's own admin, looking at the same tenant on the same day.
+ *
+ * Measured 2026-09-07: 71% through the service-role client, 57% as
+ * `sam.platform` acting as Acme — one segment's difference.
+ *
+ * This is gap 1 in `docs/remaining-work.md` (acting-tenant coverage), not
+ * something this module can fix on its own; closing it means widening those RLS
+ * policies, which is a migration. **It does not affect the gate**: all three
+ * required segments read tables a platform account can see, so activation is
+ * offered and refused identically either way. Worth knowing before someone
+ * reports the percentage as a bug.
  */
 
 import { createServerFn } from "@tanstack/react-start";

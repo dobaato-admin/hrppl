@@ -58,6 +58,14 @@ It is **not** a leak — the direct read is still tenant-bound. It is a correctn
 **Done when.** A test asserts no `*.functions.ts` module reads `profiles.tenant_id` outside
 `tenant-scope.ts`. Write that test first and let it fail with the list — it is the work plan.
 
+**A second half nobody had named until W7.** Converting a module to `requireTenantId` fixes the
+*scoping* but not the *reading*: several tables carry RLS keyed on `user_tenant_id(auth.uid())`,
+which is NULL for a platform account, so a correctly-converted module still returns nothing.
+Measured on the setup guide: a super_admin acting as Acme reads **0 of its 7 `training_courses`**,
+so the guide showed 57% for them and 71% for Acme's own admin — same tenant, same day. The
+conversion is a code change; this half is a migration widening those policies to admit an acting
+platform admin. Both are needed, and the second is the larger of the two.
+
 ---
 
 ## Done in Wave 7 (2026-09-07) — guided setup and the policy library
