@@ -91,3 +91,71 @@ elsewhere, which is expected for routes a role may not see.
 | `listMyQuickAccess` | 124 | 1.0 |
 
 </details>
+
+## hr — `hana.acme@demo.hrppl.test`
+
+122 routes visited · **1** without chrome · **5** with console errors · **0** non-2xx.
+
+| route | status | chrome | heading | console errors |
+|---|---|---|---|---|
+| `/org/reports` | 200 | **NO** | Reports & analytics | 0 |
+| `/me/signatures` | 200 | yes | Me | 3 |
+| `/org/documents` | 200 | yes | Documents & e-signature | 1 |
+| `/org/documents/expiring` | 200 | yes | Documents & e-signature | 1 |
+| `/org/documents/templates` | 200 | yes | Documents & e-signature | 1 |
+| `/settings/billing` | 200 | yes | Home | 2 |
+
+<details><summary>Server fns called more than once per page load (122 loads)</summary>
+
+| server fn | calls | per load |
+|---|---|---|
+| `getMyGateStatus` | 246 | 2.0 |
+
+</details>
+
+## finance — `fred.acme@demo.hrppl.test`
+
+122 routes visited · **4** without chrome · **4** with console errors · **0** non-2xx.
+
+| route | status | chrome | heading | console errors |
+|---|---|---|---|---|
+| `/admin/biometric` | 200 | **NO** | Home | 0 |
+| `/admin/feedback-templates` | 200 | **NO** | Home | 0 |
+| `/admin/team-assignments` | 200 | **NO** | Home | 0 |
+| `/org/training` | 200 | **NO** | Home | 0 |
+| `/org/documents` | 200 | yes | Documents & e-signature | 1 |
+| `/org/documents/expiring` | 200 | yes | Documents & e-signature | 1 |
+| `/org/documents/templates` | 200 | yes | Documents & e-signature | 1 |
+| `/settings/billing` | 200 | yes | Home | 2 |
+
+<details><summary>Server fns called more than once per page load (122 loads)</summary>
+
+| server fn | calls | per load |
+|---|---|---|
+| `getMyGateStatus` | 244 | 2.0 |
+| `listMyQuickAccess` | 128 | 1.0 |
+
+</details>
+
+## branch_admin — `bruce.acme@demo.hrppl.test`
+
+122 routes visited · **1** without chrome · **6** with console errors · **0** non-2xx.
+
+| route | status | chrome | heading | console errors |
+|---|---|---|---|---|
+| `/org/white-label` | 200 | **NO** | Home | 0 |
+| `/me/signatures` | 200 | yes | Me | 3 |
+| `/org/documents` | 200 | yes | Documents & e-signature | 2 |
+| `/org/documents/expiring` | 200 | yes | Documents & e-signature | 1 |
+| `/org/documents/templates` | 200 | yes | Documents & e-signature | 1 |
+| `/performance` | 200 | yes | My performance | 1 |
+| `/settings/billing` | 200 | yes | Home | 1 |
+
+<details><summary>Server fns called more than once per page load (122 loads)</summary>
+
+| server fn | calls | per load |
+|---|---|---|
+| `getMyGateStatus` | 246 | 2.0 |
+| `listMyQuickAccess` | 128 | 1.0 |
+
+</details>
