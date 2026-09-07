@@ -325,3 +325,47 @@ describe("a write that changes nothing must not report success", () => {
     expect(code).not.toContain("session_user");
   });
 });
+
+describe("the employee side is one link, not four", () => {
+  const src = readFileSync(join(process.cwd(), "src/lib/onboarding-journey.functions.ts"), "utf8");
+  const page = readFileSync(join(process.cwd(), "src/routes/onboarding.index.tsx"), "utf8");
+  const GEN = readFileSync(join(process.cwd(), "src/routeTree.gen.ts"), "utf8");
+
+  /**
+   * Phase 2's "done when": a new employee can complete every section of their
+   * own record from one link. Before W7 there were four unconnected pages, and
+   * `/onboarding/profile` was not linked from `/onboarding` at all — people
+   * reached the personal-details form only if someone sent them the URL.
+   */
+  it("covers all four surfaces an employee owes something to", () => {
+    for (const key of ["profile", "documents", "policies", "training"]) {
+      expect(src, `journey must include the ${key} step`).toContain(`key: "${key}"`);
+    }
+  });
+
+  it("links each step at a route that exists", () => {
+    const hrefs = [...new Set([...src.matchAll(/href: "(\/[a-z0-9/$-]*)"/g)].map((m) => m[1]))];
+    expect(hrefs.length).toBeGreaterThanOrEqual(4);
+    expect(hrefs.filter((h) => !GEN.includes(`'${h}'`))).toEqual([]);
+  });
+
+  it("is rendered on /onboarding rather than adding a fifth page", () => {
+    expect(page).toContain("<OnboardingJourney />");
+  });
+
+  it("defers to computeOnboardingCompletion for the checklist verdict", () => {
+    // Recomputing it here would let the employee's page and HR's tracker give
+    // different answers about the same person — including on the deliberate
+    // rule that "nothing assigned yet" is not "finished".
+    expect(src).toContain("computeOnboardingCompletion");
+    expect(src).toContain("result.doneRequired");
+    expect(src).toContain("result.totalRequired");
+    expect(src).toContain("checklistComplete = result.complete");
+  });
+
+  it("treats a platform account with no employee record as a normal state", () => {
+    expect(src).toMatch(
+      /if \(!employeeId\) return \{ steps: \[\] as JourneyStep\[\], noEmployeeRecord: true/,
+    );
+  });
+});
