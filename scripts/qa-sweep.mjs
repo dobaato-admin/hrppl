@@ -206,6 +206,17 @@ report.push(
   "navigation at all. **landed** is filled in only when the gate redirected",
   "elsewhere, which is expected for routes a role may not see.",
   "",
+  "> **Triage a `chrome: NO` row by its heading before opening any code.**",
+  "> A row showing the *page's own* heading is almost always this sweep being",
+  "> early rather than the page being broken: chrome is detected by waiting up",
+  `> to ${SETTLE_MS}ms for the sidebar, and a dev server under load (another`,
+  "> browser, a build, a second sweep) can push a real page past that budget.",
+  "> A row showing `Home` or a blank heading is a **redirect** — the gate sent",
+  "> the role somewhere else, which is the expected result for a page they may",
+  "> not open. Only a row with the page's own heading that *stays* chrome-less",
+  "> across two runs is a finding worth chasing; confirm by grepping the route",
+  "> for `<AppShell`.",
+  "",
 );
 
 let totalMissingChrome = 0;
