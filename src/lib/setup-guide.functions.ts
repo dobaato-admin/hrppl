@@ -138,7 +138,6 @@ export async function buildSetupGuide(
     tenantRes,
     payrollSettingsRes,
     payrollReadiness,
-    holidaysRes,
     leaveTypesRes,
     superFundsRes,
     templatesRes,
@@ -164,7 +163,6 @@ export async function buildSetupGuide(
       .eq("tenant_id", tenantId)
       .maybeSingle(),
     checkPayrollReadiness(supabase, tenantId),
-    supabase.from("tenants").select("country_code").eq("id", tenantId).maybeSingle(),
     supabase
       .from("leave_types")
       .select("id")
@@ -202,7 +200,7 @@ export async function buildSetupGuide(
 
   const tenant = tenantRes?.data ?? {};
   const settings = payrollSettingsRes?.data ?? null;
-  const country = (holidaysRes?.data as any)?.country_code ?? tenant.country_code ?? null;
+  const country = tenant.country_code ?? null;
 
   // Public holidays are keyed by country, not tenant — they are shared
   // reference data, so this asks "does this tenant's country have any" rather
