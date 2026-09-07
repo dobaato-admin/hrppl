@@ -6112,7 +6112,29 @@ export type Database = {
           used_days?: number
           year?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leave_balances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_balances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "leave_balances_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       leave_requests: {
         Row: {
@@ -6186,6 +6208,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "toil_balances"
             referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "leave_requests_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -8777,6 +8806,133 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "platform_acting_tenant_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      policy_acknowledgements: {
+        Row: {
+          acknowledged_at: string | null
+          assigned_at: string
+          created_at: string
+          due_date: string | null
+          employee_id: string
+          id: string
+          policy_id: string
+          policy_version: number
+          signature_name: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          acknowledged_at?: string | null
+          assigned_at?: string
+          created_at?: string
+          due_date?: string | null
+          employee_id: string
+          id?: string
+          policy_id: string
+          policy_version: number
+          signature_name?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          acknowledged_at?: string | null
+          assigned_at?: string
+          created_at?: string
+          due_date?: string | null
+          employee_id?: string
+          id?: string
+          policy_id?: string
+          policy_version?: number
+          signature_name?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_acknowledgements_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_acknowledgements_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "policy_acknowledgements_policy_id_fkey"
+            columns: ["policy_id"]
+            isOneToOne: false
+            referencedRelation: "policy_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "policy_acknowledgements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      policy_documents: {
+        Row: {
+          body_md: string
+          category: string
+          created_at: string
+          created_by: string | null
+          effective_from: string | null
+          id: string
+          is_active: boolean
+          requires_acknowledgement: boolean
+          summary: string | null
+          tenant_id: string
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          body_md?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          id?: string
+          is_active?: boolean
+          requires_acknowledgement?: boolean
+          summary?: string | null
+          tenant_id: string
+          title: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          body_md?: string
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string | null
+          id?: string
+          is_active?: boolean
+          requires_acknowledgement?: boolean
+          summary?: string | null
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "policy_documents_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -11796,6 +11952,44 @@ export type Database = {
           },
         ]
       }
+      tenant_setup_state: {
+        Row: {
+          activated_at: string | null
+          activated_by: string | null
+          created_at: string
+          last_segment: string | null
+          skipped_segments: string[]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          activated_at?: string | null
+          activated_by?: string | null
+          created_at?: string
+          last_segment?: string | null
+          skipped_segments?: string[]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          activated_at?: string | null
+          activated_by?: string | null
+          created_at?: string
+          last_segment?: string | null
+          skipped_segments?: string[]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_setup_state_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_subscriptions: {
         Row: {
           addon_subscription_item_id: string | null
@@ -11949,6 +12143,7 @@ export type Database = {
           tagline: string | null
           tax_id_number: string | null
           timezone: string
+          trading_name: string | null
           updated_at: string
           website: string | null
           wfh_enabled: boolean
@@ -11983,6 +12178,7 @@ export type Database = {
           tagline?: string | null
           tax_id_number?: string | null
           timezone?: string
+          trading_name?: string | null
           updated_at?: string
           website?: string | null
           wfh_enabled?: boolean
@@ -12017,6 +12213,7 @@ export type Database = {
           tagline?: string | null
           tax_id_number?: string | null
           timezone?: string
+          trading_name?: string | null
           updated_at?: string
           website?: string | null
           wfh_enabled?: boolean

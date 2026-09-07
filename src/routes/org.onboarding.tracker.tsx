@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
 import { listOnboardingTrackerRows } from "@/lib/onboarding-tracker.functions";
+import { ProvisionButton } from "@/components/onboarding/ProvisionButton";
 import { exportOnboardingTrackerAuditCsv } from "@/lib/audit-explorer.functions";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -144,20 +145,21 @@ function Page() {
                   <TableHead className="text-right">Overdue</TableHead>
                   <TableHead className="text-right">Missing attestation</TableHead>
                   <TableHead className="text-right">Missing evidence</TableHead>
+                  <TableHead className="text-right">Provisioning</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rowsQ.isLoading && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground">
                       Loading…
                     </TableCell>
                   </TableRow>
                 )}
                 {!rowsQ.isLoading && rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground">
                       No assignments match.
                     </TableCell>
                   </TableRow>
@@ -194,6 +196,15 @@ function Page() {
                       </TableCell>
                       <TableCell className="text-right">{r.stats.missingAttest}</TableCell>
                       <TableCell className="text-right">{r.stats.missingEvidence}</TableCell>
+                      <TableCell className="text-right">
+                        {/* Phase 3 · enrols mandatory training and assigns the
+                            policies this person has to sign. Idempotent, so
+                            running it twice is harmless. */}
+                        <ProvisionButton
+                          employeeId={e.id}
+                          employeeName={`${e.first_name ?? ""} ${e.last_name ?? ""}`.trim()}
+                        />
+                      </TableCell>
                       <TableCell className="text-right">
                         <Link
                           to="/org/onboarding/control-room/$id"

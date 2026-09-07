@@ -63,6 +63,7 @@ import { Route as OrgWhiteLabelRouteImport } from './routes/org.white-label'
 import { Route as OrgTrainingRouteImport } from './routes/org.training'
 import { Route as OrgTimesheetsRouteImport } from './routes/org.timesheets'
 import { Route as OrgTimesheetReviewRouteImport } from './routes/org.timesheet-review'
+import { Route as OrgSetupGuideRouteImport } from './routes/org.setup-guide'
 import { Route as OrgSetupRouteImport } from './routes/org.setup'
 import { Route as OrgRolesRouteImport } from './routes/org.roles'
 import { Route as OrgReportsRouteImport } from './routes/org.reports'
@@ -88,6 +89,7 @@ import { Route as MeSignaturesRouteImport } from './routes/me.signatures'
 import { Route as MeSecurityRouteImport } from './routes/me.security'
 import { Route as MeReviewsRouteImport } from './routes/me.reviews'
 import { Route as MeRequestsRouteImport } from './routes/me.requests'
+import { Route as MePoliciesRouteImport } from './routes/me.policies'
 import { Route as MeGrievancesRouteImport } from './routes/me.grievances'
 import { Route as MeExpensesRouteImport } from './routes/me.expenses'
 import { Route as MeDutySelfReviewRouteImport } from './routes/me.duty-self-review'
@@ -122,6 +124,7 @@ import { Route as AdminReviewTemplatesRouteImport } from './routes/admin.review-
 import { Route as AdminReviewCyclesRouteImport } from './routes/admin.review-cycles'
 import { Route as AdminReviewAnalyticsRouteImport } from './routes/admin.review-analytics'
 import { Route as AdminRequestsRouteImport } from './routes/admin.requests'
+import { Route as AdminPoliciesRouteImport } from './routes/admin.policies'
 import { Route as AdminPayslipTemplatesRouteImport } from './routes/admin.payslip-templates'
 import { Route as AdminPayrollWizardRouteImport } from './routes/admin.payroll-wizard'
 import { Route as AdminPayrollSetupWizardRouteImport } from './routes/admin.payroll-setup-wizard'
@@ -485,6 +488,11 @@ const OrgTimesheetReviewRoute = OrgTimesheetReviewRouteImport.update({
   path: '/timesheet-review',
   getParentRoute: () => OrgRoute,
 } as any)
+const OrgSetupGuideRoute = OrgSetupGuideRouteImport.update({
+  id: '/setup-guide',
+  path: '/setup-guide',
+  getParentRoute: () => OrgRoute,
+} as any)
 const OrgSetupRoute = OrgSetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -608,6 +616,11 @@ const MeReviewsRoute = MeReviewsRouteImport.update({
 const MeRequestsRoute = MeRequestsRouteImport.update({
   id: '/requests',
   path: '/requests',
+  getParentRoute: () => MeRoute,
+} as any)
+const MePoliciesRoute = MePoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
   getParentRoute: () => MeRoute,
 } as any)
 const MeGrievancesRoute = MeGrievancesRouteImport.update({
@@ -778,6 +791,11 @@ const AdminReviewAnalyticsRoute = AdminReviewAnalyticsRouteImport.update({
 const AdminRequestsRoute = AdminRequestsRouteImport.update({
   id: '/requests',
   path: '/requests',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPoliciesRoute = AdminPoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminPayslipTemplatesRoute = AdminPayslipTemplatesRouteImport.update({
@@ -1342,6 +1360,7 @@ export interface FileRoutesByFullPath {
   '/admin/payroll-setup-wizard': typeof AdminPayrollSetupWizardRoute
   '/admin/payroll-wizard': typeof AdminPayrollWizardRoute
   '/admin/payslip-templates': typeof AdminPayslipTemplatesRoute
+  '/admin/policies': typeof AdminPoliciesRoute
   '/admin/requests': typeof AdminRequestsRoute
   '/admin/review-analytics': typeof AdminReviewAnalyticsRoute
   '/admin/review-cycles': typeof AdminReviewCyclesRoute
@@ -1376,6 +1395,7 @@ export interface FileRoutesByFullPath {
   '/me/duty-self-review': typeof MeDutySelfReviewRoute
   '/me/expenses': typeof MeExpensesRoute
   '/me/grievances': typeof MeGrievancesRoute
+  '/me/policies': typeof MePoliciesRoute
   '/me/requests': typeof MeRequestsRoute
   '/me/reviews': typeof MeReviewsRoute
   '/me/security': typeof MeSecurityRoute
@@ -1401,6 +1421,7 @@ export interface FileRoutesByFullPath {
   '/org/reports': typeof OrgReportsRoute
   '/org/roles': typeof OrgRolesRoute
   '/org/setup': typeof OrgSetupRoute
+  '/org/setup-guide': typeof OrgSetupGuideRoute
   '/org/timesheet-review': typeof OrgTimesheetReviewRoute
   '/org/timesheets': typeof OrgTimesheetsRoute
   '/org/training': typeof OrgTrainingRoute
@@ -1546,6 +1567,7 @@ export interface FileRoutesByTo {
   '/admin/payroll-setup-wizard': typeof AdminPayrollSetupWizardRoute
   '/admin/payroll-wizard': typeof AdminPayrollWizardRoute
   '/admin/payslip-templates': typeof AdminPayslipTemplatesRoute
+  '/admin/policies': typeof AdminPoliciesRoute
   '/admin/requests': typeof AdminRequestsRoute
   '/admin/review-analytics': typeof AdminReviewAnalyticsRoute
   '/admin/review-cycles': typeof AdminReviewCyclesRoute
@@ -1579,6 +1601,7 @@ export interface FileRoutesByTo {
   '/me/duty-self-review': typeof MeDutySelfReviewRoute
   '/me/expenses': typeof MeExpensesRoute
   '/me/grievances': typeof MeGrievancesRoute
+  '/me/policies': typeof MePoliciesRoute
   '/me/requests': typeof MeRequestsRoute
   '/me/reviews': typeof MeReviewsRoute
   '/me/security': typeof MeSecurityRoute
@@ -1601,6 +1624,7 @@ export interface FileRoutesByTo {
   '/org/reports': typeof OrgReportsRoute
   '/org/roles': typeof OrgRolesRoute
   '/org/setup': typeof OrgSetupRoute
+  '/org/setup-guide': typeof OrgSetupGuideRoute
   '/org/timesheet-review': typeof OrgTimesheetReviewRoute
   '/org/timesheets': typeof OrgTimesheetsRoute
   '/org/training': typeof OrgTrainingRoute
@@ -1750,6 +1774,7 @@ export interface FileRoutesById {
   '/admin/payroll-setup-wizard': typeof AdminPayrollSetupWizardRoute
   '/admin/payroll-wizard': typeof AdminPayrollWizardRoute
   '/admin/payslip-templates': typeof AdminPayslipTemplatesRoute
+  '/admin/policies': typeof AdminPoliciesRoute
   '/admin/requests': typeof AdminRequestsRoute
   '/admin/review-analytics': typeof AdminReviewAnalyticsRoute
   '/admin/review-cycles': typeof AdminReviewCyclesRoute
@@ -1784,6 +1809,7 @@ export interface FileRoutesById {
   '/me/duty-self-review': typeof MeDutySelfReviewRoute
   '/me/expenses': typeof MeExpensesRoute
   '/me/grievances': typeof MeGrievancesRoute
+  '/me/policies': typeof MePoliciesRoute
   '/me/requests': typeof MeRequestsRoute
   '/me/reviews': typeof MeReviewsRoute
   '/me/security': typeof MeSecurityRoute
@@ -1809,6 +1835,7 @@ export interface FileRoutesById {
   '/org/reports': typeof OrgReportsRoute
   '/org/roles': typeof OrgRolesRoute
   '/org/setup': typeof OrgSetupRoute
+  '/org/setup-guide': typeof OrgSetupGuideRoute
   '/org/timesheet-review': typeof OrgTimesheetReviewRoute
   '/org/timesheets': typeof OrgTimesheetsRoute
   '/org/training': typeof OrgTrainingRoute
@@ -1959,6 +1986,7 @@ export interface FileRouteTypes {
     | '/admin/payroll-setup-wizard'
     | '/admin/payroll-wizard'
     | '/admin/payslip-templates'
+    | '/admin/policies'
     | '/admin/requests'
     | '/admin/review-analytics'
     | '/admin/review-cycles'
@@ -1993,6 +2021,7 @@ export interface FileRouteTypes {
     | '/me/duty-self-review'
     | '/me/expenses'
     | '/me/grievances'
+    | '/me/policies'
     | '/me/requests'
     | '/me/reviews'
     | '/me/security'
@@ -2018,6 +2047,7 @@ export interface FileRouteTypes {
     | '/org/reports'
     | '/org/roles'
     | '/org/setup'
+    | '/org/setup-guide'
     | '/org/timesheet-review'
     | '/org/timesheets'
     | '/org/training'
@@ -2163,6 +2193,7 @@ export interface FileRouteTypes {
     | '/admin/payroll-setup-wizard'
     | '/admin/payroll-wizard'
     | '/admin/payslip-templates'
+    | '/admin/policies'
     | '/admin/requests'
     | '/admin/review-analytics'
     | '/admin/review-cycles'
@@ -2196,6 +2227,7 @@ export interface FileRouteTypes {
     | '/me/duty-self-review'
     | '/me/expenses'
     | '/me/grievances'
+    | '/me/policies'
     | '/me/requests'
     | '/me/reviews'
     | '/me/security'
@@ -2218,6 +2250,7 @@ export interface FileRouteTypes {
     | '/org/reports'
     | '/org/roles'
     | '/org/setup'
+    | '/org/setup-guide'
     | '/org/timesheet-review'
     | '/org/timesheets'
     | '/org/training'
@@ -2366,6 +2399,7 @@ export interface FileRouteTypes {
     | '/admin/payroll-setup-wizard'
     | '/admin/payroll-wizard'
     | '/admin/payslip-templates'
+    | '/admin/policies'
     | '/admin/requests'
     | '/admin/review-analytics'
     | '/admin/review-cycles'
@@ -2400,6 +2434,7 @@ export interface FileRouteTypes {
     | '/me/duty-self-review'
     | '/me/expenses'
     | '/me/grievances'
+    | '/me/policies'
     | '/me/requests'
     | '/me/reviews'
     | '/me/security'
@@ -2425,6 +2460,7 @@ export interface FileRouteTypes {
     | '/org/reports'
     | '/org/roles'
     | '/org/setup'
+    | '/org/setup-guide'
     | '/org/timesheet-review'
     | '/org/timesheets'
     | '/org/training'
@@ -2979,6 +3015,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrgTimesheetReviewRouteImport
       parentRoute: typeof OrgRoute
     }
+    '/org/setup-guide': {
+      id: '/org/setup-guide'
+      path: '/setup-guide'
+      fullPath: '/org/setup-guide'
+      preLoaderRoute: typeof OrgSetupGuideRouteImport
+      parentRoute: typeof OrgRoute
+    }
     '/org/setup': {
       id: '/org/setup'
       path: '/setup'
@@ -3152,6 +3195,13 @@ declare module '@tanstack/react-router' {
       path: '/requests'
       fullPath: '/me/requests'
       preLoaderRoute: typeof MeRequestsRouteImport
+      parentRoute: typeof MeRoute
+    }
+    '/me/policies': {
+      id: '/me/policies'
+      path: '/policies'
+      fullPath: '/me/policies'
+      preLoaderRoute: typeof MePoliciesRouteImport
       parentRoute: typeof MeRoute
     }
     '/me/grievances': {
@@ -3390,6 +3440,13 @@ declare module '@tanstack/react-router' {
       path: '/requests'
       fullPath: '/admin/requests'
       preLoaderRoute: typeof AdminRequestsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/policies': {
+      id: '/admin/policies'
+      path: '/policies'
+      fullPath: '/admin/policies'
+      preLoaderRoute: typeof AdminPoliciesRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/payslip-templates': {
@@ -4092,6 +4149,7 @@ interface AdminRouteChildren {
   AdminPayrollSetupWizardRoute: typeof AdminPayrollSetupWizardRoute
   AdminPayrollWizardRoute: typeof AdminPayrollWizardRoute
   AdminPayslipTemplatesRoute: typeof AdminPayslipTemplatesRoute
+  AdminPoliciesRoute: typeof AdminPoliciesRoute
   AdminRequestsRoute: typeof AdminRequestsRoute
   AdminReviewAnalyticsRoute: typeof AdminReviewAnalyticsRoute
   AdminReviewCyclesRoute: typeof AdminReviewCyclesRoute
@@ -4151,6 +4209,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminPayrollSetupWizardRoute: AdminPayrollSetupWizardRoute,
   AdminPayrollWizardRoute: AdminPayrollWizardRoute,
   AdminPayslipTemplatesRoute: AdminPayslipTemplatesRoute,
+  AdminPoliciesRoute: AdminPoliciesRoute,
   AdminRequestsRoute: AdminRequestsRoute,
   AdminReviewAnalyticsRoute: AdminReviewAnalyticsRoute,
   AdminReviewCyclesRoute: AdminReviewCyclesRoute,
@@ -4198,6 +4257,7 @@ interface MeRouteChildren {
   MeDutySelfReviewRoute: typeof MeDutySelfReviewRoute
   MeExpensesRoute: typeof MeExpensesRoute
   MeGrievancesRoute: typeof MeGrievancesRoute
+  MePoliciesRoute: typeof MePoliciesRoute
   MeRequestsRoute: typeof MeRequestsRoute
   MeReviewsRoute: typeof MeReviewsRoute
   MeSecurityRoute: typeof MeSecurityRoute
@@ -4220,6 +4280,7 @@ const MeRouteChildren: MeRouteChildren = {
   MeDutySelfReviewRoute: MeDutySelfReviewRoute,
   MeExpensesRoute: MeExpensesRoute,
   MeGrievancesRoute: MeGrievancesRoute,
+  MePoliciesRoute: MePoliciesRoute,
   MeRequestsRoute: MeRequestsRoute,
   MeReviewsRoute: MeReviewsRoute,
   MeSecurityRoute: MeSecurityRoute,
@@ -4285,6 +4346,7 @@ interface OrgRouteChildren {
   OrgReportsRoute: typeof OrgReportsRoute
   OrgRolesRoute: typeof OrgRolesRoute
   OrgSetupRoute: typeof OrgSetupRoute
+  OrgSetupGuideRoute: typeof OrgSetupGuideRoute
   OrgTimesheetReviewRoute: typeof OrgTimesheetReviewRoute
   OrgTimesheetsRoute: typeof OrgTimesheetsRoute
   OrgTrainingRoute: typeof OrgTrainingRoute
@@ -4315,6 +4377,7 @@ const OrgRouteChildren: OrgRouteChildren = {
   OrgReportsRoute: OrgReportsRoute,
   OrgRolesRoute: OrgRolesRoute,
   OrgSetupRoute: OrgSetupRoute,
+  OrgSetupGuideRoute: OrgSetupGuideRoute,
   OrgTimesheetReviewRoute: OrgTimesheetReviewRoute,
   OrgTimesheetsRoute: OrgTimesheetsRoute,
   OrgTrainingRoute: OrgTrainingRoute,
