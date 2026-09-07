@@ -456,6 +456,13 @@ and assigns policy sign-offs, idempotently. It does not fabricate an asset
 assignment, and it reports KPI assignment as **blocked** — naming the three
 unreconciled review systems — rather than picking one and becoming a fourth.
 
+**Phase 2** (`onboarding-journey.functions.ts`) renders at the top of
+`/onboarding`, not as a fifth page. Its checklist step **defers to
+`computeOnboardingCompletion`** rather than recomputing — that helper counts
+required items only, reopens what HR bounced back, and treats "nothing assigned
+yet" as *not* complete on purpose. Recomputing any of it would let the
+employee's page and HR's tracker disagree about the same person.
+
 ### A write that changes nothing is not a success
 
 PostgREST answers an `UPDATE` matching **zero rows** with `200` and no error. So

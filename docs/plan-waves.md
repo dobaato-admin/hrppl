@@ -827,6 +827,25 @@ row in a register that exists to be authoritative is worse than a gap. And it
 reports KPI assignment as **blocked**, naming the three unreconciled review
 systems, rather than picking one and quietly becoming a fourth pathway.
 
+### Phase 2 — the employee's side was four pages with nothing joining them
+
+`/onboarding/profile` **was not linked from `/onboarding` at all**; an employee
+reached the personal-details form only if somebody sent them the URL. W6 and W7
+had since added `/me/training` and `/me/policies`, so a new starter owed things
+on four unconnected surfaces.
+
+`getMyOnboardingJourney` computes all four steps — profile sections, checklist,
+policies, mandatory training — naming what is outstanding rather than only
+counting it, and renders at the top of `/onboarding` rather than as a fifth
+page. Another destination would be the problem, not the fix.
+
+The checklist step **defers to `computeOnboardingCompletion`** instead of
+recomputing. That helper counts required items only, reopens anything HR bounced
+back, and deliberately treats "nothing assigned yet" as *not* complete so a
+brand-new hire is not told they have finished before anyone assigned them
+anything. A second opinion here would let the employee's page and HR's tracker
+disagree about the same person.
+
 ### Two defects found while walking the flow
 
 Both the same shape as the ones under X-07: a write or a check that reports
