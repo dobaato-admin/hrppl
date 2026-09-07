@@ -423,6 +423,76 @@ query can fail, the surface has to be able to say so — `requests-inbox.functio
 `incomplete` list and the page prints "Could not load leave requests. This list is incomplete.",
 which is what made the leave outage diagnosable in a single page load.
 
+### Guided setup — completion is computed, never stored
+
+`src/lib/setup-guide.functions.ts` drives `/org/setup-guide`, the seven-segment
+walk-through an org admin uses to configure a new tenant.
+
+**There is no per-segment "done" flag anywhere, and adding one would be the
+regression.** Every check reads the tenant's actual rows. A stored flag records
+that somebody clicked; it goes stale the moment the data it vouched for is
+deleted, and it cannot tell an admin returning after a month what is genuinely
+missing. `tenant_setup_state` holds only what a query cannot derive: which
+optional segments were deferred, and when the tenant went live.
+
+- **A segment can reopen.** Delete every leave type and payroll goes back to
+  incomplete. The page says so rather than pretending otherwise.
+- **A required segment cannot be skipped**, and `finalizeSetup` re-derives
+  readiness server-side — the browser's copy of the guide can be minutes old.
+- **A check carrying a `hint` is advisory and does not block.** "Role duties
+  carrying KPI targets" is permanently unsatisfiable (there is no KPI library),
+  and a check nobody can ever satisfy would make the whole guide untrustworthy.
+- The guide is almost entirely deep links, so `tests/setup-guide.test.ts`
+  resolves every one against `routeTree.gen.ts`. One stale path turns a segment
+  into a dead end on somebody's first day.
+
+**Policies** (`policies.functions.ts`, `/admin/policies`, `/me/policies`): an
+acknowledgement is of a **version**, only the person may sign (RLS enforces it
+independently), and a signed policy is retired rather than deleted because the
+acknowledgements cascade.
+
+**Phase 3 provisioning** (`provisioning.functions.ts`) enrols mandatory training
+and assigns policy sign-offs, idempotently. It does not fabricate an asset
+assignment, and it reports KPI assignment as **blocked** — naming the three
+unreconciled review systems — rather than picking one and becoming a fourth.
+
+**Phase 2** (`onboarding-journey.functions.ts`) renders at the top of
+`/onboarding`, not as a fifth page. Its checklist step **defers to
+`computeOnboardingCompletion`** rather than recomputing — that helper counts
+required items only, reopens what HR bounced back, and treats "nothing assigned
+yet" as *not* complete on purpose. Recomputing any of it would let the
+employee's page and HR's tracker disagree about the same person.
+
+### A write that changes nothing is not a success
+
+PostgREST answers an `UPDATE` matching **zero rows** with `200` and no error. So
+this reports success having done nothing:
+
+```ts
+const { error } = await supabase.from("tenants").update(patch).eq("id", id);
+if (error) throw error;
+return { ok: true };          // ← lies when RLS matched no row
+```
+
+That shipped in W7 and was caught only by checking the database: `tenants` had
+**no UPDATE policy for `org_admin` at all** — only `super_admin` and
+`regional_admin` — because every tenant-profile write in the product goes
+through the *service-role* client, so RLS on that path had never been exercised.
+The form saved, the toast said "saved", the row never changed.
+
+**Read the row back on any update whose success matters:**
+
+```ts
+const { data: updated, error } = await supabase
+  .from("tenants").update(patch).eq("id", id).select("id").maybeSingle();
+if (error) throw error;
+if (!updated) throw new Error("…not updated — you may not have permission");
+```
+
+`20260907100000` also gave org_admin the missing policy, with a trigger blocking
+`plan`, `status`, `slug` and `country_code` — without that, a settings form is a
+way to set your own billing plan or lift your own suspension.
+
 ### UI shell
 
 `src/components/AppShell.tsx` provides the chrome. Four layout routes (`me.tsx`, `org.tsx`,
@@ -557,13 +627,18 @@ Read the one you need; they do not repeat each other.
 
 ## Current status
 
-**Last full pass: 2026-09-06 (Wave 6 / LMS). Read this section and the Tenant scoping section
-before doing anything else; the rest of this file is stable reference.**
+**Last full pass: 2026-09-07 (Wave 7 / guided onboarding). Read this section and the Tenant
+scoping section before doing anything else; the rest of this file is stable reference.**
 
-Runs against Supabase dev project `xnrjfrxzahmfdrqfsnnq`, 213 migrations applied.
-Scale: 170 routes, 98 `*.functions.ts` modules, ~600 server fns, 119 nav destinations,
-64 unit-test files, 37 Playwright specs. A green suite reads **4 failed / 948 passed / 5 skipped**;
-the 4 are pre-existing in `tests/onboarding-readiness.test.ts`.
+Runs against Supabase dev project `xnrjfrxzahmfdrqfsnnq`, 215 migrations applied.
+Scale: 173 routes, 102 `*.functions.ts` modules, ~620 server fns, 122 nav destinations,
+66 unit-test files, 37 Playwright specs.
+
+**A green suite reads 0 failed / 995 passed / 5 skipped.** This changed in W7: the long-standing
+"4 failed" baseline was four stale fixtures in `tests/onboarding-readiness.test.ts`, not a product
+bug, and a permanently-red suite is the state in which real regressions hide. Any red is now yours.
+`tests/rbac.test.ts` and `tests/audit-overtime.test.ts` still cannot *collect* without live
+service-role credentials — a missing credential, not a failure.
 
 **Demo data:** `bun --env-file=.env run scripts/demo-seed.ts` builds two tenants (Acme Global AU,
 Globex Nepal NP) and 16 accounts covering all 8 roles. Credentials in `docs/demo-accounts.md`;
@@ -602,6 +677,8 @@ invisible in review, in the browser, or both:
 | --- | --- |
 | `training-access` | the quiz view flipped back to `security_invoker = on`; a training write with no guard |
 | `postgrest-embeds` | a table embedding `employees(...)` with no foreign key to `employees` |
+| `setup-guide` | a setup segment that stores completion instead of computing it; a dead deep link; a skip that opens the activation gate |
+| `policies-and-provisioning` | a signature somebody else could record; a provisioning step that silently no-ops |
 | `nav-route-gate-parity` | a nav row and its page disagreeing, in any of four gate forms |
 | `nav-render-filter` | the sidebar computing a filtered list and rendering the unfiltered one |
 | `nav-integrity` | duplicate/dead nav destinations, role shortcuts a role cannot open |
@@ -694,10 +771,12 @@ Also fixed: `listEnrollments` never selected `pass_score` / `max_attempts` (so t
 dialog always showed 70%); the overdue sweep and the expiry horizon both took "today" from UTC;
 and the quiz dialog said "no questions have been set" *while still loading*.
 
-**Next: W7 / guided onboarding routes**, specified in `docs/onboarding-guided-routes.md` and
-scheduled after W6, which is now done. **SCORM and the cross-tenant course library are both
-parked** — SCORM because it is a JavaScript runtime and a content-security decision rather than a
-content type (§10 of that doc), the library with D-8.
+**Next: the acting-tenant conversion** (gap 1 below) — the largest architectural inconsistency
+left, and now the only one with no wave behind it. **Parked, each for a stated reason:** SCORM (a
+JavaScript runtime and a content-security decision, not a content type), the cross-tenant course
+library (D-8), split pay across accounts (three bank-detail shapes to reconcile first), the KPI
+library (the three review systems), and ABN Lookup / address autocomplete (external APIs needing a
+key).
 
 `scripts/qa-sweep.mjs` walks every nav destination as each seeded role and writes
 `docs/qa-sweep-report.md`. Re-run it after structural changes — the committed report is **stale**

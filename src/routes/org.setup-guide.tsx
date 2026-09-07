@@ -1,0 +1,402 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  ArrowRight,
+  Check,
+  CircleDashed,
+  ExternalLink,
+  Info,
+  Lock,
+  Rocket,
+  RotateCcw,
+  SkipForward,
+} from "lucide-react";
+import { AppShell } from "@/components/AppShell";
+import { AdminGate } from "@/components/AdminGate";
+import { SectionCard, SkeletonRows, StatusChip, EmptyState } from "@/components/monday";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import {
+  getSetupGuide,
+  setSetupSegmentSkipped,
+  setSetupLastSegment,
+  finalizeSetup,
+  reopenSetup,
+  updateCompanyProfile,
+} from "@/lib/setup-guide.functions";
+
+export const Route = createFileRoute("/org/setup-guide")({
+  head: () => ({ meta: [{ title: "Setup guide — hrppl" }] }),
+  component: () => (
+    <AdminGate feature="org.setupGuide">
+      <SetupGuidePage />
+    </AdminGate>
+  ),
+});
+
+function SetupGuidePage() {
+  const qc = useQueryClient();
+  const guideFn = useServerFn(getSetupGuide);
+  const skipFn = useServerFn(setSetupSegmentSkipped);
+  const lastFn = useServerFn(setSetupLastSegment);
+  const finalizeFn = useServerFn(finalizeSetup);
+  const reopenFn = useServerFn(reopenSetup);
+  const companyFn = useServerFn(updateCompanyProfile);
+
+  const [active, setActive] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [company, setCompany] = useState({
+    legal_name: "",
+    trading_name: "",
+    address_line1: "",
+    city: "",
+    region: "",
+    postal_code: "",
+    registration_number: "",
+  });
+  const [companyLoaded, setCompanyLoaded] = useState(false);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["setup-guide"],
+    queryFn: () => guideFn(),
+    retry: false,
+  });
+
+  const segments = data?.segments ?? [];
+  const activated = !!data?.state?.activated_at;
+
+  // Resume: drop the admin back where they were, or at the first thing that is
+  // actually outstanding. Doing nothing here would open on Segment 1 every
+  // time, which is the behaviour a checklist is supposed to remove.
+  useEffect(() => {
+    if (active || segments.length === 0) return;
+    const remembered = data?.state?.last_segment as string | undefined;
+    if (remembered && segments.some((s: any) => s.key === remembered)) {
+      setActive(remembered);
+      return;
+    }
+    const next = segments.find((s: any) => !s.done && !s.skipped) ?? segments[0];
+    setActive(next.key);
+  }, [segments, data, active]);
+
+  const current = useMemo(
+    () => segments.find((s: any) => s.key === active) ?? null,
+    [segments, active],
+  );
+
+  async function select(key: string) {
+    setActive(key);
+    // Fire and forget: remembering the tab is a convenience, and a failed save
+    // here must not interrupt the person's actual work.
+    lastFn({ data: { segment: key as never } }).catch(() => {});
+  }
+
+  async function toggleSkip(key: string, skipped: boolean) {
+    try {
+      await skipFn({ data: { segment: key as never, skipped } });
+      await qc.invalidateQueries({ queryKey: ["setup-guide"] });
+      toast.success(skipped ? "Segment deferred" : "Segment restored");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not update");
+    }
+  }
+
+  async function saveCompany() {
+    setBusy(true);
+    try {
+      await companyFn({ data: company });
+      await qc.invalidateQueries({ queryKey: ["setup-guide"] });
+      toast.success("Company profile saved");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function activate() {
+    setBusy(true);
+    try {
+      await finalizeFn({});
+      await qc.invalidateQueries({ queryKey: ["setup-guide"] });
+      toast.success("Your organisation is live.");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not activate", { duration: 9000 });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <AppShell title="Setup guide">
+        <div className="mx-auto max-w-5xl p-4 md:p-6">
+          <SkeletonRows rows={7} />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <AppShell title="Setup guide">
+        <div className="mx-auto max-w-5xl p-4 md:p-6">
+          <EmptyState
+            icon={Info}
+            tone="pending"
+            title="No organisation selected"
+            description="A platform account has no tenant of its own. Use the tenant switcher to act as one, or sign in as an organisation admin."
+          />
+        </div>
+      </AppShell>
+    );
+  }
+
+  const requiredOutstanding = segments.filter((s: any) => s.required && !s.done);
+
+  return (
+    <AppShell
+      title="Setup guide"
+      subtitle="Everything your organisation needs before it goes live"
+      actions={
+        activated ? (
+          <div className="flex items-center gap-2">
+            <StatusChip tone="done">Live</StatusChip>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await reopenFn({});
+                qc.invalidateQueries({ queryKey: ["setup-guide"] });
+              }}
+            >
+              <RotateCcw className="mr-1 h-4 w-4" /> Reopen setup
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" disabled={!data.requiredComplete || busy} onClick={activate}>
+            {data.requiredComplete ? (
+              <Rocket className="mr-1 h-4 w-4" />
+            ) : (
+              <Lock className="mr-1 h-4 w-4" />
+            )}
+            Finalize &amp; activate
+          </Button>
+        )
+      }
+    >
+      <section className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
+        <SectionCard
+          tone={activated ? "done" : "primary"}
+          title={activated ? "Organisation is live" : `${data.percent}% configured`}
+          description={
+            activated
+              ? `Activated ${new Date(data.state.activated_at).toLocaleDateString()}. Reopen setup if something needs changing.`
+              : requiredOutstanding.length === 0
+                ? "Everything required is done — you can activate whenever you are ready."
+                : `Still required: ${requiredOutstanding.map((s: any) => s.title).join(", ")}.`
+          }
+        >
+          <Progress value={data.percent} className="h-2" />
+          <p className="mt-3 text-xs text-muted-foreground">
+            Each item below is checked against your organisation&apos;s actual data, not against a
+            box someone ticked. That means a segment can reopen — delete every leave type and
+            payroll goes back to incomplete, which is the honest answer.
+          </p>
+        </SectionCard>
+
+        <div className="grid gap-4 md:grid-cols-[minmax(0,280px)_1fr]">
+          {/* ------------------------------------------------- segment list -- */}
+          <SectionCard title="Segments" className="h-fit">
+            <ol className="space-y-1">
+              {segments.map((s: any, i: number) => (
+                <li key={s.key}>
+                  <button
+                    type="button"
+                    onClick={() => select(s.key)}
+                    aria-current={s.key === active}
+                    className={cn(
+                      "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-sm transition",
+                      s.key === active
+                        ? "bg-primary/10 font-medium text-primary"
+                        : "hover:bg-muted",
+                    )}
+                  >
+                    <span className="mt-0.5 shrink-0">
+                      {s.done ? (
+                        <Check className="h-4 w-4 text-primary" />
+                      ) : s.skipped ? (
+                        <SkipForward className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <CircleDashed className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block">
+                        {i + 1}. {s.title}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {s.skipped
+                          ? "Deferred"
+                          : s.done
+                            ? "Complete"
+                            : `${s.checks.filter((c: any) => c.done).length}/${s.checks.length} done`}
+                        {s.required && !s.done && " · required"}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </SectionCard>
+
+          {/* ---------------------------------------------- segment detail -- */}
+          {current && (
+            <SectionCard
+              tone={current.done ? "done" : current.required ? "primary" : undefined}
+              title={current.title}
+              description={current.description}
+              actions={
+                current.required ? (
+                  <Badge variant="outline">Required to activate</Badge>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => toggleSkip(current.key, !current.skipped)}
+                  >
+                    <SkipForward className="mr-1 h-4 w-4" />
+                    {current.skipped ? "Bring back" : "Do this later"}
+                  </Button>
+                )
+              }
+            >
+              <ul className="space-y-2">
+                {current.checks.map((c: any) => (
+                  <li key={c.key} className="flex items-start gap-3 rounded-lg border p-3">
+                    <span className="mt-0.5 shrink-0">
+                      {c.done ? (
+                        <Check className="h-4 w-4 text-primary" />
+                      ) : (
+                        <CircleDashed className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{c.label}</div>
+                      {c.hint && (
+                        <div className="text-xs text-muted-foreground">
+                          {c.hint}
+                          {!c.done && " Not required to activate."}
+                        </div>
+                      )}
+                    </div>
+                    {c.href && !c.done && (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={c.href}>
+                          Set up <ArrowRight className="ml-1 h-4 w-4" />
+                        </Link>
+                      </Button>
+                    )}
+                    {c.href && c.done && (
+                      <Button asChild size="sm" variant="ghost">
+                        <Link to={c.href}>
+                          <ExternalLink className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Segment 1 is editable in place: there is no company-profile
+                  page to link to, and sending someone into the create-an-org
+                  wizard to change an address is exactly the "go and find the
+                  page" this flow exists to remove. */}
+              {current.key === "company" && (
+                <CompanyForm
+                  value={company}
+                  onChange={setCompany}
+                  loaded={companyLoaded}
+                  onLoad={() => setCompanyLoaded(true)}
+                  onSave={saveCompany}
+                  busy={busy}
+                />
+              )}
+            </SectionCard>
+          )}
+        </div>
+      </section>
+    </AppShell>
+  );
+}
+
+function CompanyForm({
+  value,
+  onChange,
+  loaded,
+  onLoad,
+  onSave,
+  busy,
+}: {
+  value: Record<string, string>;
+  onChange: (v: any) => void;
+  loaded: boolean;
+  onLoad: () => void;
+  onSave: () => void;
+  busy: boolean;
+}) {
+  const guideFn = useServerFn(getSetupGuide);
+  const { data } = useQuery({ queryKey: ["setup-guide"], queryFn: () => guideFn() });
+
+  // Prefill once from whatever is already stored, so an admin editing one field
+  // does not blank the rest.
+  useEffect(() => {
+    if (loaded || !data) return;
+    const t = (data as any).tenantProfile;
+    if (t) onChange({ ...value, ...t });
+    onLoad();
+  }, [data, loaded]);
+
+  const FIELDS: { key: string; label: string; placeholder?: string }[] = [
+    { key: "legal_name", label: "Registered legal entity name" },
+    { key: "trading_name", label: "Trading name (DBA)", placeholder: "Optional" },
+    { key: "registration_number", label: "ABN / registration number" },
+    { key: "address_line1", label: "Head office address" },
+    { key: "city", label: "City" },
+    { key: "region", label: "State / region" },
+    { key: "postal_code", label: "Postcode" },
+  ];
+
+  return (
+    <div className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-4">
+      <div className="text-sm font-medium">Edit here</div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {FIELDS.map((f) => (
+          <div key={f.key} className="space-y-1.5">
+            <Label htmlFor={`co-${f.key}`} className="text-xs">
+              {f.label}
+            </Label>
+            <Input
+              id={`co-${f.key}`}
+              value={value[f.key] ?? ""}
+              placeholder={f.placeholder}
+              onChange={(e) => onChange({ ...value, [f.key]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end">
+        <Button size="sm" onClick={onSave} disabled={busy}>
+          {busy ? "Saving…" : "Save company profile"}
+        </Button>
+      </div>
+    </div>
+  );
+}

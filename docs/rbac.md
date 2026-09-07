@@ -47,7 +47,7 @@ Roles are **additive** — a user can hold multiple (e.g. `hr` + `finance`). `br
 <!-- BEGIN GENERATED MATRIX -->
 
 > **Generated** by `node scripts/gen-rbac-matrix.mjs` from `src/lib/rbac.ts`.
-> Do not edit between the markers — regenerate instead. 84 feature keys across 8 groups.
+> Do not edit between the markers — regenerate instead. 86 feature keys across 8 groups.
 
 `can(feature, roles)` controls **UI only**. RLS policies plus server-fn role checks are the actual enforcement; where a key mirrors a specific policy, the comment beside it in `rbac.ts` names that policy.
 
@@ -121,6 +121,7 @@ Legend: **●** = admitted · blank = no access
 | `org.payrollSetup` | ● |  | ● |  |  | ● |  |  |
 | `org.payslipTemplates` | ● |  | ● |  |  | ● |  |  |
 | `org.performance` | ● |  | ● | ● | ● |  | ● |  |
+| `org.policies` | ● |  | ● |  | ● |  |  |  |
 | `org.promotions` | ● |  | ● | ● | ● | ● | ● |  |
 | `org.publicHolidays` | ● | ● | ● | ● | ● |  | ● | ● |
 | `org.recruitment` | ● |  | ● | ● | ● |  |  |  |
@@ -132,6 +133,7 @@ Legend: **●** = admitted · blank = no access
 | `org.roles` | ● |  | ● |  |  |  |  |  |
 | `org.security` | ● |  | ● |  |  |  |  |  |
 | `org.setup` | ● |  | ● |  |  |  |  |  |
+| `org.setupGuide` | ● |  | ● |  |  |  |  |  |
 | `org.teamAssignments` | ● |  | ● |  | ● |  |  |  |
 | `org.teams` | ● |  | ● | ● | ● |  | ● |  |
 | `org.templatesHub` | ● |  | ● |  | ● |  |  |  |
@@ -181,14 +183,14 @@ Legend: **●** = admitted · blank = no access
 
 | Role | Feature keys admitted |
 |---|---|
-| `super_admin` | 84 of 84 |
-| `regional_admin` | 5 of 84 |
-| `org_admin` | 75 of 84 |
-| `branch_admin` | 28 of 84 |
-| `hr` | 46 of 84 |
-| `finance` | 22 of 84 |
-| `manager` | 26 of 84 |
-| `employee` | 1 of 84 |
+| `super_admin` | 86 of 86 |
+| `regional_admin` | 5 of 86 |
+| `org_admin` | 77 of 86 |
+| `branch_admin` | 28 of 86 |
+| `hr` | 47 of 86 |
+| `finance` | 22 of 86 |
+| `manager` | 26 of 86 |
+| `employee` | 1 of 86 |
 
 <!-- END GENERATED MATRIX -->
 

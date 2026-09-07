@@ -255,6 +255,13 @@ export const MY_SECTIONS: NavSection[] = [
       },
       { title: "My requests", to: "/me/requests", icon: Inbox, accent: "bg-status-pending" },
       {
+        title: "Policies to sign",
+        to: "/me/policies",
+        icon: FileSignature,
+        accent: "bg-status-pending",
+        keywords: "acknowledge code of conduct grievance whistleblower",
+      },
+      {
         title: "My documents",
         to: "/me/documents",
         icon: FileSignature,
@@ -340,6 +347,16 @@ export const ORG_ITEMS: NavItem[] = [
     icon: Settings,
     accent: "bg-status-pending",
     feature: "org.setup",
+  },
+  {
+    // W7 · The guided configuration walk-through. Distinct from the row above,
+    // which creates the organisation; this one configures it afterwards.
+    title: "Setup guide",
+    to: "/org/setup-guide",
+    icon: ListChecks,
+    accent: "bg-status-working",
+    feature: "org.setupGuide",
+    keywords: "guided onboarding checklist activate launch readiness",
   },
   {
     title: "Branches",
@@ -688,6 +705,16 @@ export const ORG_SECTIONS: NavSection[] = [
         icon: Package,
         accent: "bg-accent",
         feature: "org.onboardingPacks",
+      },
+      {
+        // W7 · The policy document library — code of conduct, whistleblower,
+        // grievance — and who has signed which version of each.
+        title: "HR policies",
+        to: "/admin/policies",
+        icon: FileText,
+        accent: "bg-status-info",
+        feature: "org.policies",
+        keywords: "code of conduct grievance whistleblower acknowledge sign",
       },
     ],
   },

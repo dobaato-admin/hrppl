@@ -1,10 +1,11 @@
 # Remaining work — what is left to call this platform finished
 
-**Written 2026-09-03**, after Wave 5 and audit A1. **Updated 2026-09-06**, after Wave 6.
+**Written 2026-09-03**, after Wave 5 and audit A1. **Updated 2026-09-07**, after Wave 7.
 
 Waves 1–5 made the product *correct* and *reachable*: no dead links, no orphan server functions,
 no unauthenticated endpoint outside the declared thirteen. Wave 6 built the LMS and closed X-07,
-the last drift axis. What is left is genuinely unbuilt, plus two pieces of debt with names.
+the last drift axis; Wave 7 built the guided setup, the policy library and Phase 3 provisioning.
+What is left is genuinely unbuilt, plus two pieces of debt with names.
 
 Each item below carries the same four things, so it can be picked up cold: **what**, **why it
 matters**, **what to build**, and **how you know it is done**.
@@ -59,46 +60,32 @@ It is **not** a leak — the direct read is still tenant-bound. It is a correctn
 
 ---
 
-## Priority 2 — Guided onboarding routes *(W6 is done, so this is next)*
+## Done in Wave 7 (2026-09-07) — guided setup and the policy library
 
-**What.** Three guided flows the product owner specified on 2026-09-03: an org admin configuring a
-tenant through seven setup segments, an employee completing their own record (TFN declaration,
-bank, super, documents), and the automatic provisioning that fires when their record goes Active.
+Former Priority 2. Full record in `docs/plan-waves.md` § Wave 7.
 
-**Why it matters.** The platform has the data and the pages; it has no *sequence* over them. An
-admin setting up a new tenant today has to find fourteen separate surfaces and know the order to
-visit them in. Nothing tells them what is still missing, and nothing stops them inviting staff
-into a half-configured org.
+- `/org/setup-guide` walks seven segments, **computing completion from the
+  tenant's data rather than storing a flag** — so a segment reopens when its
+  rows are deleted, and the Setup Lock extends `checkPayrollReadiness` instead
+  of inventing a second notion of readiness.
+- The policy document library (§9 item 4) with versioned acknowledgements, which
+  Segment 7 and Phase 3 step 4 both depended on.
+- Phase 3 provisioning: mandatory training and policy sign-offs, dated in the
+  tenant's zone. Asset allocation is left to a person on purpose; KPI assignment
+  reports itself **blocked** rather than becoming a fourth review pathway.
+- Two defects found on the way: `tenants` had **no UPDATE policy for org_admin**
+  (every profile write went through the service-role client, and a zero-row
+  UPDATE returned `ok`), and the four long-standing test failures were **stale
+  fixtures**, not a product bug. The suite is now green.
 
-**What to build.** Read `docs/onboarding-guided-routes.md` — it carries the workflow verbatim plus
-a coverage map against the live schema. The short version: **most of Phase 1 is sequencing, not
-new subsystems.** Ten things are genuinely missing, of which the guided shell itself (stepper,
-progress sidebar, auto-save, resume) is the real work.
-
-Three things to settle before writing code:
-
-- **Bank details already exist in three tables** (`employee_payroll_details`,
-  `staff_onboarding_profiles`, `employees`) and TFN in two. The spec's "split pay across multiple
-  accounts" would be a fourth shape. Reconcile the owner first — a fourth representation of an
-  employee's bank account in a payroll product is a defect waiting to happen, and a TFN in two
-  places is a privacy problem as much as a modelling one.
-- **`checkPayrollReadiness` / `checkOvertimeReadiness` already are** the "mandatory items
-  complete" concept the spec's Setup Lock needs. Extend them; do not invent a parallel notion of
-  readiness.
-- **Phase 3 step 1 auto-assigns KPIs**, which lands on the three unreconciled review systems in §5
-  below. Resolve those or this adds a fourth review pathway.
-
-**Why it waited for W6.** Segment 4 (LMS module authoring, quizzes, compliance flagging) and Phase 3
-step 2 (mandatory module enrolment with due dates) are both W6 deliverables. Building the guided
-route first would mean stepping through a segment that configures nothing.
-
-**Done when.** A new org admin can go from an empty tenant to "Finalize & Activate" without
-leaving the flow or being told to go find a page, and a new employee can complete every section of
-their own record from one link.
+**The blocked items stay blocked, and for the same reasons:** split pay across
+multiple accounts is still gated on reconciling three bank-detail shapes and two
+TFN columns; the KPI library is still gated on the three review systems; ABN
+Lookup and address autocomplete are external APIs needing a key.
 
 ---
 
-## Priority 3 — Performance, in the order it will bite
+## Priority 2 — Performance, in the order it will bite
 
 Measured 2026-09-03, not guessed. Neither item bites at demo scale; both are real at tenant scale.
 
@@ -118,7 +105,7 @@ queue, minutes for reference data, `Infinity` for a tenant's own country.
 
 ---
 
-## Priority 4 — Named debt, safe to defer
+## Priority 3 — Named debt, safe to defer
 
 - **Three unconnected review systems.** `performance_reviews`, `review_instances` and
   `duty_review_scores` share `review_templates` and never reconcile; there is no assignment table.
@@ -136,17 +123,18 @@ queue, minutes for reference data, `Infinity` for a tenant's own country.
 
 ---
 
-## How to not undo Waves 5 and 6
+## How to not undo Waves 5, 6 and 7
 
 W5 closed three of the four ways a page's permission could disagree with itself; W6 closed the
-fourth. Every one was found by a person, not by the suite, and each is now held by a test that
+fourth; W7 added two more shapes of silent success to watch for. Every one was found by a person, not by the suite, and each is now held by a test that
 fails loudly. Before changing gating, run:
 
 ```sh
 bun run test tests/nav-route-gate-parity.test.ts tests/nav-render-filter.test.ts \
              tests/nav-integrity.test.ts tests/public-endpoint-security.test.ts \
              tests/no-orphan-server-fns.test.ts tests/au-guard-coverage.test.ts \
-             tests/training-access.test.ts
+             tests/training-access.test.ts tests/postgrest-embeds.test.ts \
+             tests/setup-guide.test.ts tests/policies-and-provisioning.test.ts
 ```
 
 Three rules those tests encode, worth stating in prose because the next person will meet them:
@@ -164,11 +152,21 @@ Three rules those tests encode, worth stating in prose because the next person w
    so — `requests-inbox` already does this correctly, and it is the reason the leave outage was
    diagnosable in one page load once the inbox was looked at. Run
    `tests/postgrest-embeds.test.ts` before adding a `.select()` embed.
+5. **W7's addition: a write that changes nothing is not a success.** PostgREST answers an UPDATE
+   matching zero rows with 200 and no error, so `if (error) throw` passes and the caller reports
+   "saved". Add `.select()` and check a row came back — that is what turned an invisible RLS gap on
+   `tenants` into a legible error.
 
 ---
 
 ## Baseline
 
-A green test run reads **4 failed / 948 passed / 5 skipped**. The 4 are pre-existing failures in
-`tests/onboarding-readiness.test.ts`; `tests/rbac.test.ts` and `tests/audit-overtime.test.ts`
-cannot collect without live service-role credentials. Any *other* failure is yours.
+A green test run reads **0 failed / 995 passed / 5 skipped**.
+
+**This changed in Wave 7.** The baseline used to read "4 failed", and those four were stale
+fixtures in `tests/onboarding-readiness.test.ts` describing a table shape that no longer exists —
+not a product bug. A suite that is normally red cannot tell you when something breaks, which is the
+only reason to have one, so treat any red as yours.
+
+`tests/rbac.test.ts` and `tests/audit-overtime.test.ts` still cannot *collect* without live
+service-role credentials. That is a missing credential, not a failure.

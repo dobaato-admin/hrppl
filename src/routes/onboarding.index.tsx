@@ -9,14 +9,27 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { toggleChecklistItem, recordEmployeeDocument, getDocumentDownloadUrl, deleteEmployeeDocument } from "@/lib/onboarding.functions";
+import {
+  toggleChecklistItem,
+  recordEmployeeDocument,
+  getDocumentDownloadUrl,
+  deleteEmployeeDocument,
+} from "@/lib/onboarding.functions";
 import { computeUnlockedStages, STAGE_NONE_KEY } from "@/lib/onboarding-stage-rules";
 import { computeOnboardingCompletion } from "@/lib/onboarding-completion";
 import { AppShell } from "@/components/AppShell";
+import { OnboardingJourney } from "@/components/onboarding/OnboardingJourney";
 import { KpiTile, StatusChip, statusTone } from "@/components/monday";
 import { ListChecks, FileText, Hourglass, Award, CheckCircle2, ArrowRight } from "lucide-react";
 
@@ -25,11 +38,42 @@ export const Route = createFileRoute("/onboarding/")({
   component: OnboardingPage,
 });
 
-interface Stage { key: string; label: string; order: number }
-interface Checklist { id: string; name: string; is_default: boolean; items: { key: string; label: string; required: boolean; stage?: string | null }[]; stages?: Stage[] }
-interface Progress { id: string; checklist_id: string; item_key: string; approval_status: string; approval_notes: string | null }
-interface Doc { id: string; doc_type: string; file_name: string; mime_type: string | null; size_bytes: number | null; visibility: string; created_at: string }
-interface Assignment { id: string; checklist_id: string; due_date: string | null; status: string; signed_off_at: string | null; notes: string | null }
+interface Stage {
+  key: string;
+  label: string;
+  order: number;
+}
+interface Checklist {
+  id: string;
+  name: string;
+  is_default: boolean;
+  items: { key: string; label: string; required: boolean; stage?: string | null }[];
+  stages?: Stage[];
+}
+interface Progress {
+  id: string;
+  checklist_id: string;
+  item_key: string;
+  approval_status: string;
+  approval_notes: string | null;
+}
+interface Doc {
+  id: string;
+  doc_type: string;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  visibility: string;
+  created_at: string;
+}
+interface Assignment {
+  id: string;
+  checklist_id: string;
+  due_date: string | null;
+  status: string;
+  signed_off_at: string | null;
+  notes: string | null;
+}
 
 function OnboardingPage() {
   const { user, loading } = useAuth();
@@ -60,7 +104,9 @@ function OnboardingPage() {
   const fnDownload = useServerFn(getDocumentDownloadUrl);
   const fnDelete = useServerFn(deleteEmployeeDocument);
 
-  useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [loading, user, navigate]);
+  useEffect(() => {
+    if (!loading && !user) navigate({ to: "/auth" });
+  }, [loading, user, navigate]);
 
   // §1 #1: the page used to compute progress and do nothing at 100%, stranding
   // the employee. Once every required item is done, hand them to /dashboard,
@@ -70,8 +116,8 @@ function OnboardingPage() {
   // read-only summary instead of bouncing, so people can review what they
   // submitted. HR approval continues in the background and does not gate this;
   // a rejected item reopens the checklist and clears `redirected`.
-  const onboardingComplete = checklists.length > 0 &&
-    computeOnboardingCompletion(checklists, progress).complete;
+  const onboardingComplete =
+    checklists.length > 0 && computeOnboardingCompletion(checklists, progress).complete;
 
   useEffect(() => {
     // `loaded` is load-bearing, not a nicety. `emp` resolves from its own query
@@ -97,7 +143,11 @@ function OnboardingPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await supabase.from("employees").select("id,tenant_id").eq("user_id", user.id).maybeSingle();
+      const { data } = await supabase
+        .from("employees")
+        .select("id,tenant_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
       if (data) setEmp(data as any);
     })();
   }, [user]);
@@ -105,9 +155,20 @@ function OnboardingPage() {
   async function load() {
     if (!emp) return;
     const [aRes, pRes, dRes] = await Promise.all([
-      supabase.from("onboarding_assignments").select("*").eq("employee_id", emp.id).order("assigned_at", { ascending: true }),
-      supabase.from("onboarding_progress").select("id,checklist_id,item_key,approval_status,approval_notes").eq("employee_id", emp.id),
-      supabase.from("employee_documents").select("*").eq("employee_id", emp.id).order("created_at", { ascending: false }),
+      supabase
+        .from("onboarding_assignments")
+        .select("*")
+        .eq("employee_id", emp.id)
+        .order("assigned_at", { ascending: true }),
+      supabase
+        .from("onboarding_progress")
+        .select("id,checklist_id,item_key,approval_status,approval_notes")
+        .eq("employee_id", emp.id),
+      supabase
+        .from("employee_documents")
+        .select("*")
+        .eq("employee_id", emp.id)
+        .order("created_at", { ascending: false }),
     ]);
     const asg = (aRes.data ?? []) as Assignment[];
     setAssignments(asg);
@@ -122,15 +183,23 @@ function OnboardingPage() {
     setDocs((dRes.data ?? []) as Doc[]);
     setLoaded(true);
   }
-  useEffect(() => { load(); }, [emp]);
+  useEffect(() => {
+    load();
+  }, [emp]);
 
-
-  const doneSet = useMemo(() => new Set(progress.map((p) => `${p.checklist_id}:${p.item_key}`)), [progress]);
+  const doneSet = useMemo(
+    () => new Set(progress.map((p) => `${p.checklist_id}:${p.item_key}`)),
+    [progress],
+  );
 
   async function toggle(checklistId: string, itemKey: string, done: boolean) {
     if (!emp) return;
-    try { await fnToggle({ data: { employeeId: emp.id, checklistId, itemKey, done } }); await load(); }
-    catch (e: any) { toast.error(e.message); }
+    try {
+      await fnToggle({ data: { employeeId: emp.id, checklistId, itemKey, done } });
+      await load();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   }
 
   async function onUpload(file: File) {
@@ -139,51 +208,92 @@ function OnboardingPage() {
     try {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${emp.tenant_id}/${emp.id}/${Date.now()}-${safeName}`;
-      const { error: upErr } = await supabase.storage.from("employee-documents").upload(path, file, { upsert: false });
+      const { error: upErr } = await supabase.storage
+        .from("employee-documents")
+        .upload(path, file, { upsert: false });
       if (upErr) throw new Error(upErr.message);
-      await fnRecord({ data: {
-        employeeId: emp.id, filePath: path, fileName: file.name, mimeType: file.type,
-        sizeBytes: file.size, docType, visibility: "employee",
-      } });
+      await fnRecord({
+        data: {
+          employeeId: emp.id,
+          filePath: path,
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          docType,
+          visibility: "employee",
+        },
+      });
       toast.success("Uploaded");
       await load();
-    } catch (e: any) { toast.error(e.message); }
-    finally { setBusy(false); }
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function downloadDoc(id: string) {
     try {
       const { url, fileName } = await fnDownload({ data: { documentId: id } });
       const a = document.createElement("a");
-      a.href = url; a.download = fileName; a.target = "_blank";
-      document.body.appendChild(a); a.click(); a.remove();
-    } catch (e: any) { toast.error(e.message); }
+      a.href = url;
+      a.download = fileName;
+      a.target = "_blank";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e: any) {
+      toast.error(e.message);
+    }
   }
   async function removeDoc(id: string) {
     if (!confirm("Delete this document?")) return;
     setBusy(true);
-    try { await fnDelete({ data: { documentId: id } }); await load(); }
-    catch (e: any) { toast.error(e.message); }
-    finally { setBusy(false); }
+    try {
+      await fnDelete({ data: { documentId: id } });
+      await load();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
-  if (loading || !user) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
-  if (!emp) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">No employee record linked.</main>;
+  if (loading || !user)
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </main>
+    );
+  if (!emp)
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        No employee record linked.
+      </main>
+    );
 
   const totalItems = checklists.reduce((s, cl) => s + cl.items.length, 0);
-  const completedItems = checklists.reduce((s, cl) => s + cl.items.filter((it) => doneSet.has(`${cl.id}:${it.key}`)).length, 0);
+  const completedItems = checklists.reduce(
+    (s, cl) => s + cl.items.filter((it) => doneSet.has(`${cl.id}:${it.key}`)).length,
+    0,
+  );
   // Progress over REQUIRED items — the number that decides whether the employee
   // is finished. The all-items count above is kept for the "x/y tasks" hint.
   const completion = computeOnboardingCompletion(checklists, progress);
   const overallPct = completion.percent;
   const todayStr = new Date().toISOString().slice(0, 10);
-  const overdueCount = assignments.filter((a) => a.due_date && a.due_date < todayStr && a.status !== "signed_off").length;
+  const overdueCount = assignments.filter(
+    (a) => a.due_date && a.due_date < todayStr && a.status !== "signed_off",
+  ).length;
   const signedOffCount = assignments.filter((a) => a.status === "signed_off").length;
 
   return (
     <AppShell title="My onboarding" subtitle="Complete checklist items and upload your documents.">
-
       <section className="mx-auto max-w-6xl px-6 py-8 space-y-6">
+        {/* W7 · The one link. Everything a new starter owes, across four
+            surfaces that previously did not reference each other. */}
+        <OnboardingJourney />
+
         {/* Returning-visitor state. The redirect above only fires on the
             transition, so anyone coming back to review lands here rather than
             on a task list that implies outstanding work. */}
@@ -218,18 +328,34 @@ function OnboardingPage() {
                 : `${completion.rejected.length} items need another look`}
             </p>
             <p className="text-sm text-muted-foreground">
-              HR sent {completion.rejected.length === 1 ? "it" : "them"} back. Re-submit below to finish onboarding.
+              HR sent {completion.rejected.length === 1 ? "it" : "them"} back. Re-submit below to
+              finish onboarding.
             </p>
           </div>
         )}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <KpiTile label="Overall progress" value={`${overallPct}%`} tone="primary" icon={ListChecks} hint={`${completedItems}/${totalItems} tasks`} />
-          <KpiTile label="Checklists assigned" value={assignments.length} tone="info" icon={FileText} />
-          <KpiTile label="Overdue" value={overdueCount} tone={overdueCount > 0 ? "stuck" : "done"} icon={Hourglass} />
+          <KpiTile
+            label="Overall progress"
+            value={`${overallPct}%`}
+            tone="primary"
+            icon={ListChecks}
+            hint={`${completedItems}/${totalItems} tasks`}
+          />
+          <KpiTile
+            label="Checklists assigned"
+            value={assignments.length}
+            tone="info"
+            icon={FileText}
+          />
+          <KpiTile
+            label="Overdue"
+            value={overdueCount}
+            tone={overdueCount > 0 ? "stuck" : "done"}
+            icon={Hourglass}
+          />
           <KpiTile label="Signed off" value={signedOffCount} tone="done" icon={Award} />
         </section>
-
 
         <Tabs defaultValue="checklists">
           <TabsList>
@@ -268,21 +394,34 @@ function OnboardingPage() {
                       </div>
                     </div>
                     <div className="mt-2 h-1.5 w-full rounded bg-muted overflow-hidden">
-                      <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                      <div
+                        className="h-full bg-primary transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {(() => {
                       const stages = (cl.stages ?? []).slice().sort((a, b) => a.order - b.order);
                       const unlocked = computeUnlockedStages(stages, cl.items, progress, cl.id);
-                      const groups: Array<{ key: string; label: string | null; items: typeof cl.items }> = [];
+                      const groups: Array<{
+                        key: string;
+                        label: string | null;
+                        items: typeof cl.items;
+                      }> = [];
                       const noStage = cl.items.filter((it) => !it.stage);
-                      if (noStage.length > 0) groups.push({ key: STAGE_NONE_KEY, label: stages.length > 0 ? "General" : null, items: noStage });
+                      if (noStage.length > 0)
+                        groups.push({
+                          key: STAGE_NONE_KEY,
+                          label: stages.length > 0 ? "General" : null,
+                          items: noStage,
+                        });
                       for (const s of stages) {
                         const its = cl.items.filter((it) => it.stage === s.key);
                         if (its.length > 0) groups.push({ key: s.key, label: s.label, items: its });
                       }
-                      if (groups.length === 0) return <p className="text-sm text-muted-foreground">No items.</p>;
+                      if (groups.length === 0)
+                        return <p className="text-sm text-muted-foreground">No items.</p>;
                       return groups.map((g) => {
                         const stageUnlocked = unlocked.has(g.key);
                         return (
@@ -290,16 +429,27 @@ function OnboardingPage() {
                             {g.label && (
                               <div className="flex items-center gap-2">
                                 <h4 className="text-sm font-semibold">{g.label}</h4>
-                                {!stageUnlocked && <Badge variant="outline" className="text-xs">Locked</Badge>}
+                                {!stageUnlocked && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Locked
+                                  </Badge>
+                                )}
                               </div>
                             )}
                             {!stageUnlocked && (
-                              <p className="text-xs text-muted-foreground">Complete required items in earlier stages to unlock.</p>
+                              <p className="text-xs text-muted-foreground">
+                                Complete required items in earlier stages to unlock.
+                              </p>
                             )}
                             {g.items.map((it) => {
                               const isDone = doneSet.has(`${cl.id}:${it.key}`);
-                              const pr = progress.find((p) => p.checklist_id === cl.id && p.item_key === it.key);
-                              const locked = asg.status === "signed_off" || asg.status === "cancelled" || !stageUnlocked;
+                              const pr = progress.find(
+                                (p) => p.checklist_id === cl.id && p.item_key === it.key,
+                              );
+                              const locked =
+                                asg.status === "signed_off" ||
+                                asg.status === "cancelled" ||
+                                !stageUnlocked;
                               return (
                                 <div key={it.key} className="flex items-start gap-3">
                                   <Checkbox
@@ -309,13 +459,35 @@ function OnboardingPage() {
                                   />
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2">
-                                      <span className={isDone ? "line-through text-muted-foreground" : (!stageUnlocked ? "text-muted-foreground" : "")}>{it.label}</span>
-                                      {it.required && <Badge variant="outline" className="text-xs">Required</Badge>}
-                                      {pr?.approval_status === "approved" && <Badge className="text-xs">Approved</Badge>}
-                                      {pr?.approval_status === "rejected" && <Badge variant="destructive" className="text-xs">Rejected</Badge>}
+                                      <span
+                                        className={
+                                          isDone
+                                            ? "line-through text-muted-foreground"
+                                            : !stageUnlocked
+                                              ? "text-muted-foreground"
+                                              : ""
+                                        }
+                                      >
+                                        {it.label}
+                                      </span>
+                                      {it.required && (
+                                        <Badge variant="outline" className="text-xs">
+                                          Required
+                                        </Badge>
+                                      )}
+                                      {pr?.approval_status === "approved" && (
+                                        <Badge className="text-xs">Approved</Badge>
+                                      )}
+                                      {pr?.approval_status === "rejected" && (
+                                        <Badge variant="destructive" className="text-xs">
+                                          Rejected
+                                        </Badge>
+                                      )}
                                     </div>
                                     {pr?.approval_notes && (
-                                      <p className="text-xs text-muted-foreground mt-0.5">Manager note: {pr.approval_notes}</p>
+                                      <p className="text-xs text-muted-foreground mt-0.5">
+                                        Manager note: {pr.approval_notes}
+                                      </p>
                                     )}
                                   </div>
                                 </div>
@@ -325,13 +497,24 @@ function OnboardingPage() {
                         );
                       });
                     })()}
-                    {asg.notes && <p className="text-xs text-muted-foreground border-t pt-2 mt-2">Manager note: {asg.notes}</p>}
+                    {asg.notes && (
+                      <p className="text-xs text-muted-foreground border-t pt-2 mt-2">
+                        Manager note: {asg.notes}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               );
             })}
             {assignments.length === 0 && (
-              <Card><CardHeader><CardTitle className="text-base">No onboarding assigned</CardTitle><CardDescription>Your manager hasn't assigned any onboarding checklists yet.</CardDescription></CardHeader></Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">No onboarding assigned</CardTitle>
+                  <CardDescription>
+                    Your manager hasn't assigned any onboarding checklists yet.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
             )}
           </TabsContent>
 
@@ -346,7 +529,6 @@ function OnboardingPage() {
           </TabsContent>
         </Tabs>
 
-
         <Card>
           <CardHeader>
             <CardTitle className="text-base">My documents</CardTitle>
@@ -356,29 +538,66 @@ function OnboardingPage() {
             <div className="flex flex-wrap items-end gap-3">
               <div>
                 <Label>Document type</Label>
-                <Input value={docType} onChange={(e) => setDocType(e.target.value)} placeholder="passport, contract, ..." className="w-48" />
+                <Input
+                  value={docType}
+                  onChange={(e) => setDocType(e.target.value)}
+                  placeholder="passport, contract, ..."
+                  className="w-48"
+                />
               </div>
               <div>
                 <Label>File</Label>
-                <Input type="file" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.currentTarget.value = ""; }} />
+                <Input
+                  type="file"
+                  disabled={busy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onUpload(f);
+                    e.currentTarget.value = "";
+                  }}
+                />
               </div>
             </div>
             <Table>
-              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Size</TableHead><TableHead>Uploaded</TableHead><TableHead></TableHead></TableRow></TableHeader>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
               <TableBody>
                 {docs.map((d) => (
                   <TableRow key={d.id}>
                     <TableCell className="font-medium">{d.file_name}</TableCell>
                     <TableCell>{d.doc_type}</TableCell>
-                    <TableCell>{d.size_bytes ? `${(d.size_bytes / 1024).toFixed(1)} KB` : "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{new Date(d.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {d.size_bytes ? `${(d.size_bytes / 1024).toFixed(1)} KB` : "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {new Date(d.created_at).toLocaleDateString()}
+                    </TableCell>
                     <TableCell className="text-right space-x-1">
-                      <Button size="sm" variant="outline" onClick={() => downloadDoc(d.id)}>Download</Button>
-                      {d.visibility === "employee" && <Button size="sm" variant="outline" onClick={() => removeDoc(d.id)}>Delete</Button>}
+                      <Button size="sm" variant="outline" onClick={() => downloadDoc(d.id)}>
+                        Download
+                      </Button>
+                      {d.visibility === "employee" && (
+                        <Button size="sm" variant="outline" onClick={() => removeDoc(d.id)}>
+                          Delete
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
-                {docs.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No documents yet.</TableCell></TableRow>}
+                {docs.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      No documents yet.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -420,7 +639,9 @@ function OnboardingTimeline({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">No onboarding assigned</CardTitle>
-          <CardDescription>Your manager hasn't assigned any onboarding checklists yet.</CardDescription>
+          <CardDescription>
+            Your manager hasn't assigned any onboarding checklists yet.
+          </CardDescription>
         </CardHeader>
       </Card>
     );
@@ -435,7 +656,9 @@ function OnboardingTimeline({
         <CardContent>
           <div className="flex items-center gap-4">
             <Progress value={overall.pct} className="flex-1" />
-            <span className="text-sm font-medium shrink-0">{overall.done}/{overall.total} tasks</span>
+            <span className="text-sm font-medium shrink-0">
+              {overall.done}/{overall.total} tasks
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -453,7 +676,12 @@ function OnboardingTimeline({
 
         const groups: Array<{ key: string; label: string | null; items: typeof cl.items }> = [];
         const noStage = cl.items.filter((it) => !it.stage);
-        if (noStage.length > 0) groups.push({ key: STAGE_NONE_KEY, label: stages.length > 0 ? "General" : null, items: noStage });
+        if (noStage.length > 0)
+          groups.push({
+            key: STAGE_NONE_KEY,
+            label: stages.length > 0 ? "General" : null,
+            items: noStage,
+          });
         for (const s of stages) {
           const its = cl.items.filter((it) => it.stage === s.key);
           if (its.length > 0) groups.push({ key: s.key, label: s.label, items: its });
@@ -470,8 +698,11 @@ function OnboardingTimeline({
                       <span className={overdue ? "text-destructive" : ""}>
                         Due {new Date(asg.due_date).toLocaleDateString()} {overdue && "(overdue)"}
                       </span>
-                    ) : "No due date"}
-                    {" · "}{done}/{total} tasks
+                    ) : (
+                      "No due date"
+                    )}
+                    {" · "}
+                    {done}/{total} tasks
                   </CardDescription>
                 </div>
                 <div className="text-right shrink-0">
@@ -488,17 +719,30 @@ function OnboardingTimeline({
                     {g.label && (
                       <div className="flex items-center gap-2 pb-1">
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary border border-border">
-                          <span className="text-[10px] font-bold text-secondary-foreground">{g.label.charAt(0).toUpperCase()}</span>
+                          <span className="text-[10px] font-bold text-secondary-foreground">
+                            {g.label.charAt(0).toUpperCase()}
+                          </span>
                         </div>
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.label}</span>
-                        {!stageUnlocked && <Badge variant="outline" className="text-[10px]">Locked</Badge>}
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {g.label}
+                        </span>
+                        {!stageUnlocked && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Locked
+                          </Badge>
+                        )}
                       </div>
                     )}
                     <div className="ml-3 border-l-2 border-border pl-4 space-y-1">
                       {g.items.map((it) => {
                         const isDone = doneSet.has(`${cl.id}:${it.key}`);
-                        const pr = progress.find((p) => p.checklist_id === cl.id && p.item_key === it.key);
-                        const locked = asg.status === "signed_off" || asg.status === "cancelled" || !stageUnlocked;
+                        const pr = progress.find(
+                          (p) => p.checklist_id === cl.id && p.item_key === it.key,
+                        );
+                        const locked =
+                          asg.status === "signed_off" ||
+                          asg.status === "cancelled" ||
+                          !stageUnlocked;
                         return (
                           <div key={it.key} className="flex items-start gap-3 py-1">
                             <div className="flex flex-col items-center w-4 shrink-0 pt-1.5">
@@ -507,24 +751,38 @@ function OnboardingTimeline({
                                   isDone
                                     ? "bg-primary"
                                     : pr?.approval_status === "rejected"
-                                    ? "bg-destructive"
-                                    : locked
-                                    ? "bg-muted"
-                                    : "bg-muted ring-2 ring-primary/30"
+                                      ? "bg-destructive"
+                                      : locked
+                                        ? "bg-muted"
+                                        : "bg-muted ring-2 ring-primary/30"
                                 }`}
                               />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span className={`text-sm ${isDone ? "line-through text-muted-foreground" : locked ? "text-muted-foreground" : ""}`}>
+                                <span
+                                  className={`text-sm ${isDone ? "line-through text-muted-foreground" : locked ? "text-muted-foreground" : ""}`}
+                                >
                                   {it.label}
                                 </span>
-                                {it.required && <Badge variant="outline" className="text-[10px]">Required</Badge>}
-                                {pr?.approval_status === "approved" && <Badge className="text-[10px]">Approved</Badge>}
-                                {pr?.approval_status === "rejected" && <Badge variant="destructive" className="text-[10px]">Rejected</Badge>}
+                                {it.required && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Required
+                                  </Badge>
+                                )}
+                                {pr?.approval_status === "approved" && (
+                                  <Badge className="text-[10px]">Approved</Badge>
+                                )}
+                                {pr?.approval_status === "rejected" && (
+                                  <Badge variant="destructive" className="text-[10px]">
+                                    Rejected
+                                  </Badge>
+                                )}
                               </div>
                               {pr?.approval_notes && (
-                                <p className="text-xs text-muted-foreground mt-0.5">{pr.approval_notes}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {pr.approval_notes}
+                                </p>
                               )}
                             </div>
                             <Checkbox
@@ -540,7 +798,11 @@ function OnboardingTimeline({
                   </div>
                 );
               })}
-              {asg.notes && <p className="text-xs text-muted-foreground border-t pt-3 mt-2">Manager note: {asg.notes}</p>}
+              {asg.notes && (
+                <p className="text-xs text-muted-foreground border-t pt-3 mt-2">
+                  Manager note: {asg.notes}
+                </p>
+              )}
             </CardContent>
           </Card>
         );

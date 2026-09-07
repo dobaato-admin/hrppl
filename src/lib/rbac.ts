@@ -40,6 +40,8 @@ export type Feature =
   | "org.auAwards"
   | "org.auUnderpayment"
   | "org.setup"
+  | "org.setupGuide"
+  | "org.policies"
   | "org.branches"
   | "org.whiteLabel"
   | "org.invitations"
@@ -189,6 +191,16 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   "org.auUnderpayment": SET("super_admin", "org_admin", "hr"),
 
   "org.setup": SET("super_admin", "org_admin"),
+  // W7 · The guided configuration walk-through, separate from `org.setup`,
+  // which is the *create an organisation* wizard and is reachable before a
+  // tenant exists. Same allow-set, different job.
+  "org.setupGuide": SET("super_admin", "org_admin"),
+  // W7 · Mirrors "hr and org admin manage policies" on `policy_documents`.
+  // Deliberately excludes `manager`: a line manager rewriting the
+  // whistleblower policy is not something this product permits, and the RLS
+  // policy says the same. Widening this without widening that policy turns a
+  // hidden link into "new row violates row-level security policy".
+  "org.policies": SET("super_admin", "org_admin", "hr"),
   "org.branches": SET("super_admin", "org_admin"),
   "org.whiteLabel": SET("super_admin", "org_admin"),
   "org.invitations": SET("super_admin", "org_admin", "branch_admin", "hr"),
