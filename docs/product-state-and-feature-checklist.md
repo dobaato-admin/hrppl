@@ -427,19 +427,29 @@ happened, and which no data-level test could see.
 says "No tenant". Same switcher, same account, two different answers, page by page. Worth checking
 during §5 — it is the most likely thing to look like a broken page when it is not.
 
-### 7.3 X-07 — the nav can still disagree with RLS
+### 7.3 X-07 — closed in Wave 6 (2026-09-06)
 
-`/org/training`'s nav row and route gate admit `hr` and `branch_admin`. Every RLS policy on
-`training_courses`, `training_enrollments` and `certifications` admits only `org_admin`,
-`super_admin` and `manager`, and `assignCourse` carries no server-side role check of its own.
+`hr` now holds manage policies on `training_quiz_questions` and `certifications`, alongside the
+ones it already had on `training_courses` and `training_enrollments`. `branch_admin` stays
+**read-only** — every branch_admin policy in this domain is a `FOR SELECT` — and the client offers
+them a roster with no write controls and a "View only" marker, behind a second feature key,
+`org.trainingManage`. Every writing server fn in the domain now calls `assertTrainingAuthor` so the
+refusal is a sentence rather than a Postgres policy error.
 
-**Net effect:** HR opens the training page, selects employees, clicks Assign, and Postgres rejects
-the insert. The page loads and the database refuses — the same shape that shipped on offboarding.
-This is the last open drift axis and it needs a migration, not a component. It is scheduled with
-Wave 6.
+**To confirm:** as `hana.acme` (hr), open `/admin/training`, open any course's builder, add a
+lesson and a quiz question — all three succeed. As `bruce.acme` (branch_admin), `/org/training`
+shows the roster with "View only" and no Assign button, Manage catalog link, status control or
+Remove.
 
-**To confirm:** as `hana.acme` (hr), open `/org/training` and assign any course. Repeat as
-`bruce.acme` (branch_admin). Compare with `alice.acme` (org_admin), for whom it succeeds.
+**Two larger defects were found underneath it**, both of which had been rendering as emptiness
+rather than as errors — see `docs/plan-waves.md` § Wave 6:
+
+- The quiz view had been flipped to `security_invoker = on` by a linter-driven migration, so **no
+  learner could read a single quiz question** and therefore no employee could complete any course.
+  The screen said "No quiz questions have been set for this course yet."
+- Seven tables embedded `employees(...)` through a foreign key that had never existed. That left
+  `/org/training`'s two tabs, `/me/training`'s two tabs, and the **leave** half of both requests
+  inboxes permanently empty.
 
 ### 7.4 Three unconnected review systems
 
@@ -458,11 +468,23 @@ reconciliation cron does not know the newer WFH mismatch types; there is no tena
 work allowed" switch. The punch-time, geofence-grading and WFH-exception work is done — see
 CLAUDE.md.
 
-### 7.6 Learning is upload-a-certificate only
+### 7.6 Learning — built in Wave 6
 
-No lessons, no ordering, no content hosting, no progress inside a course. Enrollment status jumps
-straight from `assigned` to `completed`. Wave 6, tenant-scoped; the cross-tenant course library is
-parked with D-8. Do not file the absence as a defect.
+Courses can now carry lessons. Four content types (`rich_text`, `video`, `document`,
+`external_link`), ordered, with per-learner progress, hosted in a private `training-content` bucket
+read back through short-lived signed URLs.
+
+- **Author** at `/admin/training/$courseId` — Lessons, Quiz, Settings.
+- **Learn** at `/me/training/$enrollmentId` — lesson list, content pane, mark-complete, resume
+  where you left off, and the quiz locked until the required lessons are done.
+- **Track** on `/org/training` — a per-learner lessons column on the roster.
+
+`content_mode` defaults to `'external'`, so every course that existed before the wave behaves
+exactly as it did; a course only gains the player once someone switches it in Settings.
+
+**Still absent, deliberately:** SCORM (a JavaScript runtime and a content-security decision, not a
+content type — `docs/onboarding-guided-routes.md` §10) and the cross-tenant course library (parked
+with D-8). Do not file either as a defect.
 
 ### 7.7 Performance — measured, recorded, not urgent
 

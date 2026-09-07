@@ -193,6 +193,35 @@ Two consequences worth knowing:
 
 ---
 
+## 8b. A SECURITY DEFINER view can be the *only* correct answer
+
+Added 2026-09-06, after Wave 6 found the failure this describes.
+
+`training_quiz_questions_public` is a definer view (`security_invoker = off`) **on purpose**.
+Learners are denied on `training_quiz_questions` deliberately, so that nobody sitting a quiz can
+read `correct_index`; the view projects the safe columns and carries the tenant and enrollment
+predicates itself. It is their only read path. `security_findings_log` records it as
+`SECURITY_DEFINER_VIEW_quiz_public … accepted_risk`, with the reasoning.
+
+`20260613143222`, titled "Fix Security Definer view", set it to `security_invoker = on` to clear
+the Supabase linter warning — the one that had already been triaged and accepted. Under `invoker`
+the view has no privileges of its own: the caller's RLS on the base table decides, and the caller
+is denied there. Every learner read **0 rows**, silently, and since a course completes only by
+passing its quiz, **no employee could complete any course**. Nothing threw; the screen said the
+course had no quiz.
+
+Two rules come out of it:
+
+- **A linter finding that has been accepted in writing is not an open finding.** Check
+  `security_findings_log` before "fixing" one. If the acceptance is wrong, argue with the
+  acceptance, not with the ALTER.
+- **`security_invoker = on` is the right default and the wrong setting for a view that exists
+  because the base table denies its readers.** If flipping a view to invoker would empty it, the
+  view *is* the access-control mechanism, and that has to be stated where it can be found.
+  `tests/training-access.test.ts` fails if this one is flipped back.
+
+---
+
 ## 9. Verified clean in the 2026-09-03 pass
 
 - RLS enabled on **all 207 tables**.
@@ -200,6 +229,19 @@ Two consequences worth knowing:
 - No secret behind a `VITE_` prefix — anything `VITE_*` is compiled into the client bundle.
 - All 20 public hooks use `hookFailure()`.
 - No unauthenticated endpoint outside the declared 13.
+
+## 9b. Added by the Wave 6 pass (2026-09-06)
+
+- `hr` gained manage policies on `training_quiz_questions` and `certifications`; `branch_admin`
+  gained branch-scoped SELECT on `certifications` and on quiz attempts. This *widens* access, and
+  it does so to match a decision `20260613140528` had already made for the rest of the domain.
+- Seven tables gained a foreign key to `employees` (`20260906092000`, `20260906093000`) and
+  `leave_requests` / `leave_balances` gained keys to `leave_types` (`20260906094000`). These are
+  integrity fixes, not access changes: without them a request or certificate could outlive the
+  employee it belonged to. Two are `NOT VALID` because two real rows already had.
+- The `training-content` bucket is private, with a mime allow-list that admits no executable type —
+  no `text/html`, no archives. Learners never receive a bucket path; the server checks enrollment
+  on the caller's own client and then signs for ten minutes.
 
 ## 10. What is not covered
 

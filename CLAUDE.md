@@ -394,6 +394,35 @@ correlation ref. Writing `e.message` into an internal table such as
 `billing_admin_alerts` is fine and unchanged. `tests/hook-error-exposure.test.ts`
 enforces it.
 
+### Learning (LMS) — the content layer, and what it taught
+
+`src/lib/training.functions.ts` (courses, enrollments, quizzes, certificates) and
+`src/lib/training-lessons.functions.ts` (lessons, progress, the player, roster progress).
+`src/lib/training-guard.ts` is the single write guard, mirroring the RLS write policies the way
+`au-guard.ts` does for the Australian domain.
+
+- **Two feature keys.** `org.training` = may read the roster (includes `branch_admin`).
+  `org.trainingManage` = may assign, author, decide (does not). Collapsing them re-opens X-07 from
+  whichever end you collapse it.
+- **`content_mode` on `training_courses`** is `'external'` or `'lessons'`, defaulting to
+  `'external'`. Every pre-W6 course is `'external'` and behaves exactly as it did.
+- **`training_quiz_questions_public` is a SECURITY DEFINER view and must stay one.** Learners are
+  denied on the base table so they cannot read `correct_index`; the view is their only read path
+  and carries the tenant and enrollment predicates itself. Setting `security_invoker = on` — as a
+  linter-driven migration once did — empties every quiz for every employee **silently**, and
+  because a course completes only by passing its quiz, blocks all completion. See the header of
+  `20260906090000_training_x07_learner_access.sql`.
+- **A PostgREST embed needs a foreign key.** `.select("*, employees(...)")` resolves from the FK
+  graph; with no key it answers `PGRST200` and the caller's `rows ?? []` draws an empty table. Seven
+  tables were in that state, including `leave_requests`, which is why both requests inboxes
+  silently omitted leave. `tests/postgrest-embeds.test.ts` guards it.
+
+The through-line, and the reason to be suspicious of an empty page in this codebase: **all three
+of these defects rendered as emptiness rather than as an error, and none was noticed.** When a
+query can fail, the surface has to be able to say so — `requests-inbox.functions.ts` returns an
+`incomplete` list and the page prints "Could not load leave requests. This list is incomplete.",
+which is what made the leave outage diagnosable in a single page load.
+
 ### UI shell
 
 `src/components/AppShell.tsx` provides the chrome. Four layout routes (`me.tsx`, `org.tsx`,
@@ -516,11 +545,11 @@ Read the one you need; they do not repeat each other.
 | Question | Document |
 | --- | --- |
 | What is left to build, and how do I finish it? | **`docs/remaining-work.md`** — start here |
-| What are the guided onboarding flows meant to do? | `docs/onboarding-guided-routes.md` — spec + coverage map, queued after W6 |
+| What are the guided onboarding flows meant to do? | `docs/onboarding-guided-routes.md` — spec + coverage map; **next up**, W6 is done |
 | Where are the trust boundaries, and what is public? | **`docs/security-model.md`** |
 | Who may do what? | `docs/rbac.md` §3 — **generated** from `rbac.ts`, pinned by a test |
 | What exists, and how do I verify it as each role? | `docs/product-state-and-feature-checklist.md` |
-| Why is the product shaped this way? | `docs/plan-waves.md` (W1–W5 + audit A1) |
+| Why is the product shaped this way? | `docs/plan-waves.md` (W1–W6 + audit A1) |
 | Why is the navigation shaped this way? | `docs/w4-information-architecture-design.md` (+ its W5 addendum) |
 | How do I sign in as each role? | `docs/demo-accounts.md` |
 | How do I deploy? | `docs/deploy-vercel.md` |
@@ -528,12 +557,13 @@ Read the one you need; they do not repeat each other.
 
 ## Current status
 
-**Last full pass: 2026-09-03 (Wave 5 + security audit). Read this section and the Tenant
-scoping section before doing anything else; the rest of this file is stable reference.**
+**Last full pass: 2026-09-06 (Wave 6 / LMS). Read this section and the Tenant scoping section
+before doing anything else; the rest of this file is stable reference.**
 
-Runs against Supabase dev project `xnrjfrxzahmfdrqfsnnq`, 208 migrations applied.
-Scale: 166 routes, 97 `*.functions.ts` modules, 591 server fns, 119 nav destinations,
-60 unit-test files, 37 Playwright specs.
+Runs against Supabase dev project `xnrjfrxzahmfdrqfsnnq`, 213 migrations applied.
+Scale: 170 routes, 98 `*.functions.ts` modules, ~600 server fns, 119 nav destinations,
+64 unit-test files, 37 Playwright specs. A green suite reads **4 failed / 948 passed / 5 skipped**;
+the 4 are pre-existing in `tests/onboarding-readiness.test.ts`.
 
 **Demo data:** `bun --env-file=.env run scripts/demo-seed.ts` builds two tenants (Acme Global AU,
 Globex Nepal NP) and 16 accounts covering all 8 roles. Credentials in `docs/demo-accounts.md`;
@@ -552,7 +582,7 @@ and three of them had no test:
 | nav row vs route gate | 36 dead links | one key each |
 | nav row vs **inline page check** | 11 more, incl. `/org/white-label` locking out `org_admin` | converged |
 | nav row vs **no gate at all** | 23 destinations rendered for anyone with the URL | gated |
-| nav row vs **RLS policy** | — | the one axis still open, see X-07 below |
+| nav row vs **RLS policy** | HR could assign a course, not author its quiz | closed in W6 — see below |
 
 Also landed: `src/lib/nav-tree.ts` (nav is data, not markup — sidebar, GlobalSearch and tests all
 read it); the per-role **"Your work"** shortcut group; the AU compliance domain given a UI
@@ -570,6 +600,8 @@ invisible in review, in the browser, or both:
 
 | Test | Catches |
 | --- | --- |
+| `training-access` | the quiz view flipped back to `security_invoker = on`; a training write with no guard |
+| `postgrest-embeds` | a table embedding `employees(...)` with no foreign key to `employees` |
 | `nav-route-gate-parity` | a nav row and its page disagreeing, in any of four gate forms |
 | `nav-render-filter` | the sidebar computing a filtered list and rendering the unfiltered one |
 | `nav-integrity` | duplicate/dead nav destinations, role shortcuts a role cannot open |
@@ -600,33 +632,72 @@ before converting.
 
 ### Known gaps, in priority order
 
-1. **Acting-tenant coverage: 13 of 97 modules.** `TenantSwitcher` and `platform_acting_tenant`
+1. **Acting-tenant coverage: 14 of 97 modules.** `TenantSwitcher` and `platform_acting_tenant`
    exist and work, but only the modules using `requireTenantId()` / `getTenantId()` honour them.
    The rest read `profiles.tenant_id` directly, which is `NULL` for a platform account — so a
    `super_admin` acting as a tenant gets a working page from one module and "No tenant" from the
-   next. **This is the single biggest architectural inconsistency left.**
+   next. **This is the single biggest architectural inconsistency left.** (W6 converted
+   `training.functions.ts` and wrote `training-lessons.functions.ts` this way from the start.)
 2. **Three unconnected review systems** share `review_templates` and never reconcile:
    `performance_reviews` (whole-tenant fan-out), `review_instances` (schedule-generated), and
    `duty_review_scores`. There is no assignment table. Both fns now have callers and targeting
    works, so this is a modelling gap rather than a dead feature.
-3. **X-07 — the nav can still disagree with RLS.** `/org/training` admits `hr` and `branch_admin`
-   by nav and route; every RLS policy on `training_courses` / `training_enrollments` /
-   `certifications` admits only `org_admin`, `super_admin`, `manager`. HR opens the page, clicks
-   Assign, and **Postgres refuses**. Closing it needs a migration, not a component. This is P6.
+3. **Two `NOT VALID` foreign keys.** `leave_requests` and `timesheets` each hold one row pointing
+   at a deleted employee (both `1649efd6-b59e-4b59-875e-31e81bb1764b`, from 2026-08-21). The keys
+   are in place and enforced for new writes; run `VALIDATE CONSTRAINT` once someone decides what
+   those two records are. Deleting them to satisfy a constraint would destroy a record of
+   somebody's absence and hours.
 4. **Attendance leftovers:** `clockOut` records position but does not validate it; WFH decisions
    notify in-app only; the 24h reconciliation cron does not know the new WFH mismatch types;
    there is no tenant-level "remote work allowed" switch.
 5. **Performance, measured not guessed:** 36 loop-with-query sites remain (`payroll.functions.ts`
-   has 8, the hottest path); 194 `useQuery` sites but only 19 declare `staleTime`, so most refetch
-   on every mount. Neither is urgent at demo scale; both are the next real perf work.
+   has 8, the hottest path); ~200 `useQuery` sites but only ~20 declare `staleTime`, so most
+   refetch on every mount. Neither is urgent at demo scale; both are the next real perf work.
 
 Fixed in the audit: the N+1 in `generateSuperContributionsForRun`, which resolved a fund choice
 per payslip — 500 sequential round trips on a 500-employee run, now one `.in()`.
 
-**Not started: P6 / LMS.** Training is upload-a-certificate only. The plan is a tenant-scoped
-content layer (lessons, ordering, progress, a course player) with managers and below as the
-audience; the regional/cross-tenant course library is **parked with D-8**. Fixing X-07 belongs
-here. See `docs/plan-waves.md`.
+### Wave 6 — Learning (complete, merged 2026-09-06)
+
+The LMS content layer shipped and **X-07 closed**. Courses can carry ordered lessons
+(`rich_text | video | document | external_link`) in a private `training-content` bucket, with
+per-learner progress, a builder at `/admin/training/$courseId`, a player at
+`/me/training/$enrollmentId`, and roster progress on `/org/training`. `content_mode` defaults to
+`'external'`, so no course already assigned to anyone changed underneath them.
+
+**Two feature keys, not one.** `org.training` is the view key (admits `branch_admin`);
+`org.trainingManage` is the write key (does not). The database grants read and write to different
+sets, so one key could only have been wrong in one direction. `src/lib/training-guard.ts` mirrors
+the write key server-side.
+
+**Three silent failures were found under X-07, and all three rendered as emptiness.** This is the
+domain's defining lesson and the reason `tests/training-access.test.ts` and
+`tests/postgrest-embeds.test.ts` exist:
+
+1. **No learner could read a quiz question.** `training_quiz_questions_public` is a SECURITY
+   DEFINER view *on purpose* — learners are denied on the base table so they cannot read
+   `correct_index`, and the view is their only read path. `20260613143222`, "Fix Security Definer
+   view", set `security_invoker = on` to clear a linter warning **that `20260609120840` had
+   already recorded as an accepted risk**. Enforcement went back to the base table's deny; every
+   learner read 0 rows; and since a course completes only by passing its quiz, **no employee could
+   complete any course.** The screen said "No quiz questions have been set for this course yet."
+   Restored by `20260906090000`. Do not flip it back — a test now fails if you do.
+2. **Seven tables embedded `employees(...)` through a foreign key that never existed.** PostgREST
+   resolves an embed from the FK graph; with no key it answers `PGRST200`, and every caller renders
+   `rows ?? []`. `/org/training`'s two tabs, `/me/training`'s two tabs and the **leave** half of
+   both requests inboxes had therefore been empty since they shipped. Fixed by `20260906092000`,
+   `20260906093000`, `20260906094000`. **Before adding a `.select()` embed, check the FK exists.**
+3. **`hr` had no policy at all** on `training_quiz_questions` or `certifications`, despite holding
+   manage rights on courses and enrollments since `20260613140528`.
+
+Also fixed: `listEnrollments` never selected `pass_score` / `max_attempts` (so the learner's quiz
+dialog always showed 70%); the overdue sweep and the expiry horizon both took "today" from UTC;
+and the quiz dialog said "no questions have been set" *while still loading*.
+
+**Next: W7 / guided onboarding routes**, specified in `docs/onboarding-guided-routes.md` and
+scheduled after W6, which is now done. **SCORM and the cross-tenant course library are both
+parked** — SCORM because it is a JavaScript runtime and a content-security decision rather than a
+content type (§10 of that doc), the library with D-8.
 
 `scripts/qa-sweep.mjs` walks every nav destination as each seeded role and writes
 `docs/qa-sweep-report.md`. Re-run it after structural changes — the committed report is **stale**
