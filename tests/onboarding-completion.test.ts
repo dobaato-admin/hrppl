@@ -219,3 +219,99 @@ describe("the nav stops advertising finished work", () => {
     expect(SHELL).toMatch(/staleTime: 5 \* 60_000/);
   });
 });
+
+describe("profile-backed items are derived, not looked up", () => {
+  /**
+   * The reported bug, in one sentence: an employee fills in their profile, HR
+   * assigns the checklist the next day, and the item asks for data the system
+   * already holds — with the form prefilled from that very data.
+   *
+   * `saveMyOnboardingProfile` writes `onboarding_progress` rows for profile
+   * sections, but only for checklists assigned *at the moment of the save*, and
+   * nothing re-runs it afterwards. So the tick depended on the order two
+   * unrelated people did things in.
+   */
+  const bankItem = { key: "bank", required: true, profile_section: "banking" };
+  const taxItem = { key: "tax", required: true, profile_section: "tax_government" };
+  const lists = [{ id: "c1", items: [bankItem, taxItem] }];
+
+  it("counts an item complete when its profile section is filled and no row exists", () => {
+    const r = computeOnboardingCompletion(lists, [], ["banking", "tax_government"]);
+    expect(r.doneRequired).toBe(2);
+    expect(r.complete).toBe(true);
+  });
+
+  it("still asks for a section that is not filled", () => {
+    const r = computeOnboardingCompletion(lists, [], ["banking"]);
+    expect(r.doneRequired).toBe(1);
+    expect(r.complete).toBe(false);
+  });
+
+  it("is unchanged when no sections are passed — the old behaviour", () => {
+    const r = computeOnboardingCompletion(lists, []);
+    expect(r.doneRequired).toBe(0);
+    expect(r.complete).toBe(false);
+  });
+
+  it("does not let a filled profile override an item HR bounced back", () => {
+    // The rejection is a statement about the content, not its absence: HR
+    // saying "these bank details are wrong" must reopen the item even though
+    // the fields are populated.
+    const r = computeOnboardingCompletion(
+      lists,
+      [{ checklist_id: "c1", item_key: "bank", approval_status: "rejected" }],
+      ["banking", "tax_government"],
+    );
+    expect(r.rejected).toEqual([{ checklistId: "c1", itemKey: "bank" }]);
+    expect(r.complete).toBe(false);
+    expect(r.doneRequired).toBe(1);
+  });
+
+  it("ignores a section that no item references", () => {
+    const r = computeOnboardingCompletion(
+      [{ id: "c1", items: [{ key: "photo", required: true }] }],
+      [],
+      ["banking"],
+    );
+    expect(r.doneRequired).toBe(0);
+  });
+
+  it("does not double-count an item that has both a row and a filled section", () => {
+    const r = computeOnboardingCompletion(
+      lists,
+      [{ checklist_id: "c1", item_key: "bank", approval_status: "approved" }],
+      ["banking", "tax_government"],
+    );
+    expect(r.doneRequired).toBe(2);
+    expect(r.totalRequired).toBe(2);
+  });
+});
+
+describe("every caller passes the profile sections", () => {
+  /**
+   * The helper is only as good as its inputs. A call site that forgets the
+   * third argument silently reintroduces the ordering bug for that surface,
+   * and would look completely fine in review.
+   */
+  const { readFileSync } = require("fs");
+  const CALL_SITES = [
+    "src/lib/onboarding.functions.ts",
+    "src/lib/onboarding-journey.functions.ts",
+    "src/routes/onboarding.index.tsx",
+  ];
+
+  it.each(CALL_SITES)("%s passes a sections argument", (file) => {
+    const src = readFileSync(file, "utf8");
+    const calls = src.split("computeOnboardingCompletion(").slice(1);
+    expect(calls.length, `${file} should call it`).toBeGreaterThan(0);
+    for (const call of calls) {
+      const head = call.slice(0, 400);
+      expect(
+        /completeSections|profileSections|computeCompleteSections/.test(head),
+        `a computeOnboardingCompletion call in ${file} omits the profile sections, ` +
+          "so a profile-backed item there stays outstanding forever once the " +
+          "checklist is assigned after the profile is filled.",
+      ).toBe(true);
+    }
+  });
+});

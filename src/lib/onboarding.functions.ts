@@ -512,18 +512,28 @@ export const getMyOnboardingCompletion = createServerFn({ method: "GET" })
     const checklistIds = [...new Set((assignments ?? []).map((a: { checklist_id: string }) => a.checklist_id))];
     if (checklistIds.length === 0) return { hasOnboarding: false, complete: false };
 
-    const [{ data: checklists }, { data: progress }] = await Promise.all([
+    // Third query added in parallel, not in series: an item satisfied by a
+    // profile section must read as done here too, or the shell keeps offering
+    // an "Onboarding" link to someone who has finished.
+    const [{ data: checklists }, { data: progress }, { data: profile }] = await Promise.all([
       supabase.from("onboarding_checklists").select("id,items").in("id", checklistIds),
       supabase
         .from("onboarding_progress")
         .select("checklist_id,item_key,approval_status")
         .eq("employee_id", emp.id),
+      supabase
+        .from("staff_onboarding_profiles")
+        .select("*")
+        .eq("employee_id", emp.id)
+        .maybeSingle(),
     ]);
 
     const { computeOnboardingCompletion } = await import("@/lib/onboarding-completion");
+    const { computeCompleteSections } = await import("@/lib/onboarding-profile-sections");
     const result = computeOnboardingCompletion(
       (checklists ?? []) as never,
       (progress ?? []) as never,
+      computeCompleteSections(profile as never),
     );
     return { hasOnboarding: true, complete: result.complete };
   });
