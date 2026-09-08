@@ -73,7 +73,11 @@ function DangerZonePage() {
           </Alert>
         )}
 
-        {allowed && !tenantId && (
+        {/* `profileQ.isLoading` is the difference between "you are not scoped to
+            an organisation" and "we have not found out yet". Without it this
+            alert accused every org admin of the former for the duration of the
+            latter. */}
+        {allowed && !tenantId && !profileQ.isLoading && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>No organization</AlertTitle>

@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useMyTenant } from "@/hooks/use-tenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,14 +97,20 @@ interface Employee {
 interface Tenant {
   id: string;
   name: string;
-  currency_code: string;
-  status: string;
+  // Nullable to match the `tenants` row as `useMyTenant` reads it: the column
+  // is nullable in the schema, and the dialog already falls back when it is
+  // absent. Declaring it non-null here only moved the lie to compile time.
+  currency_code?: string | null;
+  status?: string | null;
 }
 
 function EmployeesPage() {
   const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  // Shared and cached. This page used to read profiles, then tenants, then its
+  // own data — three round trips deep before a row appeared — and rendered
+  // "No tenant assigned" for the whole of the first two.
+  const { tenant, tenantId, isLoading: tenantLoading } = useMyTenant();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [search, setSearch] = useState("");
@@ -127,26 +134,14 @@ function EmployeesPage() {
   }, [loading, user, navigate]);
 
   async function loadAll() {
-    if (!user) return;
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (!prof?.tenant_id) return;
-    const { data: t } = await supabase
-      .from("tenants")
-      .select("*")
-      .eq("id", prof.tenant_id)
-      .maybeSingle();
-    if (t) setTenant(t as Tenant);
+    if (!tenantId) return;
     const [{ data: emps }, { data: deps }] = await Promise.all([
       supabase
         .from("employees")
         .select("*")
-        .eq("tenant_id", prof.tenant_id)
+        .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false }),
-      supabase.from("departments").select("id,name").eq("tenant_id", prof.tenant_id).order("name"),
+      supabase.from("departments").select("id,name").eq("tenant_id", tenantId).order("name"),
     ]);
     setEmployees((emps ?? []) as Employee[]);
     setDepartments((deps ?? []) as Department[]);
@@ -167,7 +162,11 @@ function EmployeesPage() {
 
   useEffect(() => {
     loadAll();
-  }, [user]);
+    // Keyed on the tenant, not the user: the first render has no tenant yet, so
+    // depending on `user` alone ran loadAll before there was anything to scope
+    // it to and never ran it again once there was.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -207,7 +206,9 @@ function EmployeesPage() {
     );
   }
 
-  if (!tenant) {
+  // Only once we actually know. Rendering this while the lookup is in flight is
+  // how the page told org admins they had no organisation.
+  if (!tenant && !tenantLoading) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Card>
@@ -223,6 +224,15 @@ function EmployeesPage() {
             </Link>
           </CardContent>
         </Card>
+      </main>
+    );
+  }
+
+  // Still finding out. Distinct from the branch above, which is the answer.
+  if (!tenant) {
+    return (
+      <main className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
       </main>
     );
   }
