@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/supabase/client";
+import { useMyTenant } from "@/hooks/use-tenant";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -18,44 +18,22 @@ export const Route = createFileRoute("/org/")({
   ),
 });
 
-interface Tenant {
-  id: string;
-  name: string;
-  country_code: string;
-  currency_code: string;
-  status: string;
-  plan: string;
-}
-
 function OrgPage() {
   const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  // Shared and cached (staleTime: Infinity). This used to be a local
+  // `useState<Tenant | null>(null)` filled by a two-query effect, which meant
+  // the page rendered "No tenant assigned" and "Your account isn't linked to an
+  // organization yet" for ~400ms on every visit — measured — before the answer
+  // arrived. `tenantLoading` is what separates "we do not know yet" from "there
+  // isn't one", and both branches below now respect it.
+  const { tenant, isLoading: tenantLoading } = useMyTenant();
 
   const canAccess = roles.includes("org_admin") || roles.includes("super_admin");
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth", search: { redirect: "/org/setup" } });
   }, [loading, user, navigate]);
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (prof?.tenant_id) {
-        const { data } = await supabase
-          .from("tenants")
-          .select("*")
-          .eq("id", prof.tenant_id)
-          .maybeSingle();
-        if (data) setTenant(data as Tenant);
-      }
-    })();
-  }, [user]);
 
   if (loading || !user) {
     return (
@@ -69,12 +47,14 @@ function OrgPage() {
     <AppShell
       title={tenant?.name ?? "Organization"}
       subtitle={
-        tenant
-          ? `${tenant.country_code} · ${tenant.currency_code} · ${tenant.plan}`
-          : "No tenant assigned"
+        tenantLoading
+          ? "Loading your organization…"
+          : tenant
+            ? `${tenant.country_code} · ${tenant.currency_code} · ${tenant.plan}`
+            : "No tenant assigned"
       }
       actions={
-        tenant ? (
+        tenant && !tenantLoading ? (
           <Badge variant={tenant.status === "active" ? "default" : "secondary"}>
             {tenant.status}
           </Badge>
@@ -82,7 +62,7 @@ function OrgPage() {
       }
     >
       <section className="mx-auto grid max-w-6xl gap-6 px-6 py-8 md:grid-cols-2 lg:grid-cols-3">
-        {!tenant && (
+        {!tenant && !tenantLoading && (
           <Card className="md:col-span-2 lg:col-span-3">
             <CardHeader>
               <CardTitle>Let's set up your organization</CardTitle>

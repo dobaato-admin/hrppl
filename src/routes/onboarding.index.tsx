@@ -28,6 +28,7 @@ import {
 } from "@/lib/onboarding.functions";
 import { computeUnlockedStages, STAGE_NONE_KEY } from "@/lib/onboarding-stage-rules";
 import { computeOnboardingCompletion } from "@/lib/onboarding-completion";
+import { computeCompleteSections } from "@/lib/onboarding-profile-sections";
 import { AppShell } from "@/components/AppShell";
 import { OnboardingJourney } from "@/components/onboarding/OnboardingJourney";
 import { KpiTile, StatusChip, statusTone } from "@/components/monday";
@@ -83,6 +84,10 @@ function OnboardingPage() {
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
+  // The employee's own profile, so an item backed by a profile section reads as
+  // done because the data exists — not because a write-side sync happened to
+  // run while this checklist was already assigned. See onboarding-completion.ts.
+  const [profileSections, setProfileSections] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [docType, setDocType] = useState("other");
   // True once load() has actually returned. Distinguishes "no checklists" from
@@ -117,7 +122,8 @@ function OnboardingPage() {
   // submitted. HR approval continues in the background and does not gate this;
   // a rejected item reopens the checklist and clears `redirected`.
   const onboardingComplete =
-    checklists.length > 0 && computeOnboardingCompletion(checklists, progress).complete;
+    checklists.length > 0 &&
+    computeOnboardingCompletion(checklists, progress, profileSections).complete;
 
   useEffect(() => {
     // `loaded` is load-bearing, not a nicety. `emp` resolves from its own query
@@ -154,7 +160,7 @@ function OnboardingPage() {
 
   async function load() {
     if (!emp) return;
-    const [aRes, pRes, dRes] = await Promise.all([
+    const [aRes, pRes, dRes, profRes] = await Promise.all([
       supabase
         .from("onboarding_assignments")
         .select("*")
@@ -169,7 +175,13 @@ function OnboardingPage() {
         .select("*")
         .eq("employee_id", emp.id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("staff_onboarding_profiles")
+        .select("*")
+        .eq("employee_id", emp.id)
+        .maybeSingle(),
     ]);
+    setProfileSections(computeCompleteSections(profRes.data as never));
     const asg = (aRes.data ?? []) as Assignment[];
     setAssignments(asg);
     if (asg.length > 0) {
@@ -279,7 +291,7 @@ function OnboardingPage() {
   );
   // Progress over REQUIRED items — the number that decides whether the employee
   // is finished. The all-items count above is kept for the "x/y tasks" hint.
-  const completion = computeOnboardingCompletion(checklists, progress);
+  const completion = computeOnboardingCompletion(checklists, progress, profileSections);
   const overallPct = completion.percent;
   const todayStr = new Date().toISOString().slice(0, 10);
   const overdueCount = assignments.filter(

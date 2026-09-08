@@ -98,13 +98,19 @@ export const upsertMyOnboardingProfile = createServerFn({ method: "POST" })
         .eq("employee_id", emp.id);
       const nowIso = new Date().toISOString();
 
+      // Collected, then written in two statements. This used to issue one
+      // round trip *per checklist item* inside nested loops, all awaited in
+      // series, on every "Save & continue" — which on a free-tier database is
+      // most of the time the button spends spinning.
+      const toTick: any[] = [];
+      const incompleteSections = new Set<string>();
       for (const a of (assignments ?? []) as any[]) {
         const items = (a.checklist?.items ?? []) as Array<{ key: string; profile_section?: string | null }>;
         for (const it of items) {
           const section = it.profile_section;
           if (!section || !(section in PROFILE_SECTIONS)) continue;
           if (completedSections.has(section as any)) {
-            await admin.from("onboarding_progress").upsert({
+            toTick.push({
               tenant_id: emp.tenant_id,
               employee_id: emp.id,
               checklist_id: a.checklist_id,
@@ -112,17 +118,35 @@ export const upsertMyOnboardingProfile = createServerFn({ method: "POST" })
               completed_by: userId,
               completed_at: nowIso,
               profile_section: section,
-            }, { onConflict: "employee_id,checklist_id,item_key" } as any);
+            });
           } else {
-            // Section regressed (a required field was cleared) — untick only rows we previously auto-ticked.
-            await admin.from("onboarding_progress").delete()
-              .eq("employee_id", emp.id)
-              .eq("checklist_id", a.checklist_id)
-              .eq("item_key", it.key)
-              .eq("profile_section", section);
+            incompleteSections.add(section);
           }
         }
       }
+
+      // Keyed on the SECTION, not on (checklist, item) pairs. Section
+      // completeness is a property of the employee's profile, so an item is
+      // ticked exactly when its section is filled, whichever checklist it sits
+      // in — and filtering by section avoids the cross-product a pair of
+      // `.in()` clauses would produce, which would untick rows belonging to a
+      // different checklist that are legitimately complete.
+      await Promise.all([
+        toTick.length
+          ? admin
+              .from("onboarding_progress")
+              .upsert(toTick, { onConflict: "employee_id,checklist_id,item_key" } as any)
+          : Promise.resolve(),
+        // Only rows this sync itself wrote carry a profile_section, so a
+        // manually ticked item is never removed here.
+        incompleteSections.size
+          ? admin
+              .from("onboarding_progress")
+              .delete()
+              .eq("employee_id", emp.id)
+              .in("profile_section", [...incompleteSections])
+          : Promise.resolve(),
+      ]);
     } catch (e) {
       // Sync is best-effort; the profile save itself succeeded.
       console.error("[onboarding] profile_section sync failed", e);

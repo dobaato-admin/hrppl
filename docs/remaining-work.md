@@ -157,10 +157,39 @@ mechanical and was already applied to the sharpest instance
 (`generateSuperContributionsForRun`: 500 sequential round trips on a 500-employee run, now one
 query). Work through `payroll.functions.ts` first.
 
-**4b. 194 `useQuery` sites, 19 with `staleTime`.** The default is `0`, so most refetch on every
-mount and every window focus. The shell re-renders on every navigation, which is how the
-`listNotifications` storm happened before. Add `staleTime` per query class: seconds for a live
-queue, minutes for reference data, `Infinity` for a tenant's own country.
+**4b. ~~194 `useQuery` sites, 19 with `staleTime`~~ — this was wrong.** `src/router.tsx` sets a
+**60-second `staleTime` and `refetchOnWindowFocus: false` as the client default**, so the queries
+without an explicit `staleTime` were never refetching on every mount. Corrected 2026-09-08.
+
+**4c. What the 2026-09-08 scan actually found**, in descending order of measured impact:
+
+- **RLS re-deciding per row — fixed.** 606 of 690 policies called `auth.uid()` unwrapped, so each
+  row re-parsed the JWT and re-ran `has_role` / `user_tenant_id` (SECURITY DEFINER functions with
+  their own subqueries). `select count(*)` on a **54-row** table took **49ms**. Cumulative stats
+  told the same story: 873,534 sequential scans of the 20-row `profiles` table, 8.36M rows read.
+  Hoisting into scalar subqueries took that query to ~21ms and `tests/rbac.test.ts` from 28.46s to
+  14.15s. See `20260908090000_rls_hoist_auth_uid.sql`.
+- **The two-query tenant waterfall — 2 of 16 pages fixed.** Every page reading `profiles.tenant_id`
+  then `tenants` pays two round trips *in series before its own query*, uncached, on every mount.
+  `useMyTenantId()` / `useMyTenant()` already hold that value with `staleTime: Infinity`.
+  `tests/tenant-loading-state.test.ts` lists the 14 remaining, and the list may only shrink.
+- **39 `useEffect` blocks issue 77 direct Supabase queries**, 15 of them sequential waterfalls of
+  2–6 queries (`admin.holiday-calendar`, `admin.holidays`, `admin.overtime-rates`,
+  `admin.payroll-settings` are 6 each). These bypass React Query entirely: no caching, no
+  `isLoading`, refetched on every mount. Converting them is the single largest remaining
+  client-side win, and it fixes correctness as well as speed — see below.
+- **Indexes are NOT the current bottleneck.** 69 tenant-scoped tables lack a leading `tenant_id`
+  index, but every one is small enough that Postgres correctly prefers a sequential scan, and the
+  RLS hot path (`profiles`, `user_roles`, `role_scope`, `platform_acting_tenant`) is already
+  properly indexed. Revisit when a tenant's transactional tables reach thousands of rows; adding
+  them now would cost writes for no measurable read gain.
+
+**4d. `null` rendered as an answer — the "it fixes itself on refresh" class.** A page holding
+`useState(null)` filled by an effect cannot distinguish "still loading" from "there is none", and
+several rendered the second while in the first. `/org` told a signed-in org admin *"Your account
+isn't linked to an organization yet"* for 400ms on every visit. Fixed on `/org`, `/org/employees`,
+`/org/danger` and `/org/branches`; pinned by `tests/tenant-loading-state.test.ts`. The same shape
+is latent in every one of the 39 effect-based loaders above.
 
 **Done when.** No query inside a loop in `payroll.functions.ts`, and a documented default
 `staleTime` on the query client with per-query overrides where they matter.

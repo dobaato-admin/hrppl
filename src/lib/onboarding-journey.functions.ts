@@ -101,6 +101,10 @@ export const getMyOnboardingJourney = createServerFn({ method: "GET" })
       const result = computeOnboardingCompletion(
         (checklists ?? []) as never,
         (progress ?? []) as never,
+        // An item backed by a profile section is done because the data is
+        // there, not because the write-side sync happened to run while this
+        // checklist was already assigned. See onboarding-completion.ts.
+        completeSections,
       );
       // Deliberately the helper's own numbers and its own verdict, not a
       // second opinion. `computeOnboardingCompletion` counts REQUIRED items

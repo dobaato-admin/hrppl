@@ -95,3 +95,69 @@ export function useMyTenantCountry(): {
   if (!tenantId) return { country: null, isLoading: false };
   return { country: data, isLoading };
 }
+
+/**
+ * The signed-in user's tenant **record**, not just its id.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this exists
+ * ---------------------------------------------------------------------------
+ *
+ * Sixteen pages hand-rolled this: read `profiles.tenant_id`, then read
+ * `tenants` with it, both inside a `useEffect`, into a `useState` that starts
+ * as `null`. That shape has two costs, and the second is worse than the first.
+ *
+ * **It is two sequential round trips**, on every mount, uncached — before the
+ * page's own query has even started. On a free-tier database that is most of
+ * the time the user spends looking at a blank panel.
+ *
+ * **And `null` ends up meaning two different things**: "still loading" and
+ * "this account genuinely has no tenant". Rendered directly, the first
+ * masquerades as the second. `/org` told a signed-in org admin *"Your account
+ * isn't linked to an organization yet"* for 400ms on every visit — measured,
+ * not theorised — because the effect had not resolved. On a real network that
+ * is seconds, and the user reasonably believes it.
+ *
+ * So this returns `isLoading` as a first-class value, and callers **must**
+ * branch on it before treating a null tenant as an answer. Distinguishing the
+ * two states is the entire point; a caller that renders "no organisation" while
+ * `isLoading` is true has reintroduced the bug.
+ *
+ * Cached with `staleTime: Infinity` on the shared tenant id, so the second page
+ * a user visits pays nothing at all.
+ */
+export function useMyTenant(): {
+  tenant: TenantRecord | null | undefined;
+  tenantId: string | null | undefined;
+  isLoading: boolean;
+} {
+  const { tenantId, isLoading: idLoading } = useMyTenantId();
+  const { data, isLoading } = useQuery({
+    queryKey: ["my-tenant", tenantId],
+    enabled: !!tenantId,
+    staleTime: Infinity,
+    queryFn: async () => {
+      const { data: tenant } = await supabase
+        .from("tenants")
+        .select("*")
+        .eq("id", tenantId!)
+        .maybeSingle();
+      return (tenant as TenantRecord | null) ?? null;
+    },
+  });
+  if (idLoading) return { tenant: undefined, tenantId: undefined, isLoading: true };
+  if (!tenantId) return { tenant: null, tenantId: null, isLoading: false };
+  return { tenant: data, tenantId, isLoading };
+}
+
+/** Shape of a `tenants` row as the client reads it. */
+export type TenantRecord = {
+  id: string;
+  name: string;
+  slug?: string | null;
+  country_code?: string | null;
+  currency_code?: string | null;
+  status?: string | null;
+  plan?: string | null;
+  [key: string]: unknown;
+};

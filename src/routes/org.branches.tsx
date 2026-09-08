@@ -122,6 +122,8 @@ function BranchesPage() {
   const canManage = can("org.branches", roles);
 
   const [tenantId, setTenantId] = useState<string | null>(null);
+  /** False until the lookup has answered — see the guard in save(). */
+  const [tenantLoaded, setTenantLoaded] = useState(false);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
   const [holidayCats, setHolidayCats] = useState<HolidayCategory[]>([]);
@@ -143,6 +145,7 @@ function BranchesPage() {
       .maybeSingle();
     const tid = prof?.tenant_id ?? null;
     setTenantId(tid);
+    setTenantLoaded(true);
     const [b, c, h] = await Promise.all([
       tid
         ? supabase
@@ -193,6 +196,11 @@ function BranchesPage() {
   }
 
   async function save() {
+    // `tenantId` is null both before the lookup finishes and when there really
+    // is no organisation. Saying "No organization found" for the first is a
+    // false accusation the user can only resolve by refreshing — the same
+    // defect /org and /org/employees had. `tenantLoaded` separates them.
+    if (!tenantLoaded) return toast.error("Still loading your organization — try again in a moment");
     if (!tenantId) return toast.error("No organization found");
     if (!form.name || !form.code || !form.country_code || !form.currency_code) {
       return toast.error("Name, code, country and currency are required");
