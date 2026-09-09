@@ -206,13 +206,17 @@ describe("the nav stops advertising finished work", () => {
     const entry = NAV_DESTINATIONS.find((d) => d.to === "/onboarding");
     expect(entry, "no nav entry for /onboarding").toBeDefined();
     expect(NAV_TREE_SRC).toMatch(/hideWhen: "onboardingComplete"/);
-    expect(SHELL).toMatch(/!\(i\.hideWhen && hidden\?\.\[i\.hideWhen\]\)/);
+    // Lives in the shared `isNavItemVisible` predicate since 2026-09-09 —
+    // inline copies had drifted, and one group applied only two of the three
+    // filters.
+    expect(SHELL).toMatch(/item\.hideWhen && hidden\?\.\[item\.hideWhen\]/);
   });
 
   it("keeps role visibility and completion state as separate filters", () => {
     // Conflating them would let a completed task look like a permissions
     // problem, or vice versa.
-    expect(SHELL).toMatch(/`feature` is role visibility, `hideWhen` is/);
+    expect(SHELL).toMatch(/feature\s+— role visibility/);
+    expect(SHELL).toMatch(/hideWhen — a milestone has passed/);
   });
 
   it("caches the lookup — the shell renders on every navigation", () => {

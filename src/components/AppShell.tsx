@@ -16,6 +16,7 @@ import { ClockWidget } from "@/components/ClockWidget";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyOnboardingCompletion } from "@/lib/onboarding.functions";
+import { getMyGateStatus } from "@/lib/org-signup.functions";
 import { can, type Feature } from "@/lib/rbac";
 import { supabase } from "@/integrations/supabase/client";
 import hrpplIcon from "@/assets/hrppl-icon.webp";
@@ -112,6 +113,34 @@ function NavLinkButton({ item, onNavigate }: { item: NavItem; onNavigate?: () =>
  * answers "Forbidden" if the user is quick enough to click it. Hiding until
  * certain is the only direction that cannot produce a dead link.
  */
+/**
+ * The three independent reasons a nav row may not be shown, in one place.
+ *
+ *   feature  — role visibility (`can`)
+ *   hideWhen — a milestone has passed, so the row is spent
+ *   country  — the tenant does not operate where this row applies
+ *
+ * Extracted because it had drifted: FlyoutNavGroup applied all three,
+ * PlainNavGroup applied two (it never took `hidden` at all), and the
+ * Organization flyout — the largest group in the product — was never passed
+ * `hidden` by its caller. `hidden` being an optional prop meant every
+ * `hideWhen` on an org row was silently ignored and nothing failed.
+ *
+ * One predicate, used by both components, so a filter added here cannot apply
+ * to some groups and not others.
+ */
+export function isNavItemVisible(
+  item: NavItem,
+  roles: import("@/lib/rbac").AppRole[],
+  hidden: Record<string, boolean> | undefined,
+  tenantCountry: string | null | undefined,
+): boolean {
+  if (item.feature && !can(item.feature, roles)) return false;
+  if (item.hideWhen && hidden?.[item.hideWhen]) return false;
+  if (!appliesToCountry(item.country, tenantCountry)) return false;
+  return true;
+}
+
 function appliesToCountry(country: string[] | undefined, tenantCountry: string | null | undefined) {
   if (!country) return true;
   if (!tenantCountry) return false;
@@ -122,16 +151,16 @@ function PlainNavGroup({
   label,
   items,
   roles,
+  hidden,
   tenantCountry,
 }: {
   label: string;
   items: NavItem[];
   roles: import("@/lib/rbac").AppRole[];
+  hidden?: Record<string, boolean>;
   tenantCountry?: string | null;
 }) {
-  const visible = items.filter(
-    (i) => (!i.feature || can(i.feature, roles)) && appliesToCountry(i.country, tenantCountry),
-  );
+  const visible = items.filter((i) => isNavItemVisible(i, roles, hidden, tenantCountry));
   if (visible.length === 0) return null;
   return (
     <SidebarGroup>
@@ -196,13 +225,9 @@ function FlyoutNavGroup({
   const [open, setOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
-  // Three independent filters: `feature` is role visibility, `hideWhen` is
-  // completion state, `country` is where the tenant operates. An item must
-  // pass all three.
-  const isVisible = (i: NavItem) =>
-    (!i.feature || can(i.feature, roles)) &&
-    !(i.hideWhen && hidden?.[i.hideWhen]) &&
-    appliesToCountry(i.country, tenantCountry);
+  // The same predicate PlainNavGroup uses. It was duplicated here, and the copy
+  // drifted — see isNavItemVisible.
+  const isVisible = (i: NavItem) => isNavItemVisible(i, roles, hidden, tenantCountry);
 
   // These two are what the popover renders. They used to be computed and then
   // used only for "should this group appear at all" and the active highlight,
@@ -435,7 +460,20 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
     enabled: !!user,
     staleTime: 5 * 60_000,
   });
-  const hiddenNavItems = { onboardingComplete: !!onboarding?.complete };
+  // Same five-minute cache and the same reason: the shell re-renders on every
+  // navigation and these answers change roughly once in an organisation's life.
+  const fetchGate = useServerFn(getMyGateStatus);
+  const { data: gate } = useQuery({
+    queryKey: ["nav-gate-status", user?.id],
+    queryFn: () => fetchGate(),
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
+  const hiddenNavItems = {
+    onboardingComplete: !!onboarding?.complete,
+    orgCreated: !!gate?.orgCreated,
+    orgActivated: !!gate?.orgActivated,
+  };
   // Drives `country` on nav items and sections. Follows the acting tenant for
   // platform accounts, so switching tenant switches which compliance domain
   // the sidebar offers.
@@ -504,6 +542,7 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             accent="bg-status-working"
             roles={roles}
             items={PRACTICE_ITEMS}
+            hidden={hiddenNavItems}
             tenantCountry={tenantCountry}
           />
 
@@ -530,6 +569,7 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             roles={roles}
             items={ORG_ITEMS}
             sections={ORG_SECTIONS}
+            hidden={hiddenNavItems}
             tenantCountry={tenantCountry}
           />
 
@@ -537,24 +577,28 @@ function ShellInner({ title, subtitle, actions, children }: AppShellProps) {
             label="Regional"
             items={REGIONAL_ITEMS}
             roles={roles}
+            hidden={hiddenNavItems}
             tenantCountry={tenantCountry}
           />
           <PlainNavGroup
             label="Super admin"
             items={SUPER_ADMIN_ITEMS}
             roles={roles}
+            hidden={hiddenNavItems}
             tenantCountry={tenantCountry}
           />
           <PlainNavGroup
             label="Account"
             items={ACCOUNT_ITEMS}
             roles={roles}
+            hidden={hiddenNavItems}
             tenantCountry={tenantCountry}
           />
           <PlainNavGroup
             label="Help"
             items={HELP_ITEMS}
             roles={roles}
+            hidden={hiddenNavItems}
             tenantCountry={tenantCountry}
           />
         </SidebarContent>

@@ -100,8 +100,10 @@ describe("org.danger route + RBAC wiring", () => {
     const entry = NAV_DESTINATIONS.find((d) => d.to === "/org/danger");
     expect(entry, "no nav entry for /org/danger").toBeDefined();
     expect(entry!.feature).toBe("org.danger");
-    // AppShell still resolves every entry's feature through can().
-    expect(shellFile).toMatch(/can\(i\.feature, roles\)/);
+    // AppShell still resolves every entry's feature through can(). Since
+    // 2026-09-09 that happens in the shared `isNavItemVisible` predicate rather
+    // than inline in each group component.
+    expect(shellFile).toMatch(/can\(item\.feature, roles\)/);
   });
 
   it("route file calls every destructive server fn through useServerFn", () => {

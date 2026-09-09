@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { SetupGuideBanner } from "@/components/setup/SetupGuideBanner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -202,6 +203,11 @@ function Dashboard() {
   return (
     <AppShell title="Home" subtitle="Your workspace at a glance">
       <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+        {/* Above the greeting on purpose: while an organisation is
+            unconfigured, this is the most important thing on the page. It
+            renders nothing once activated, and nothing at all for roles that
+            cannot act on it. */}
+        <SetupGuideBanner roles={roles} />
         <PageHeader
           eyebrow={greeting}
           title={

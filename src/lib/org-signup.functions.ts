@@ -146,7 +146,8 @@ export const getMyGateStatus = createServerFn({ method: "GET" })
         actingTenantId: null,
         isPlatformAdmin: false,
         roles: [] as string[],
-        setupCompleted: false,
+        orgCreated: false,
+        orgActivated: false,
         pendingTrialInvitation: null,
         suspended: true,
         suspensionReason: account.reason,
@@ -168,14 +169,37 @@ export const getMyGateStatus = createServerFn({ method: "GET" })
       !homeTenantId && isPlatformAdmin ? await getActingTenantId(supabase, userId) : null;
     const tenantId = homeTenantId ?? actingTenantId;
 
-    let setupCompleted = false;
+    // Two distinct milestones, deliberately named apart.
+    //
+    //   orgCreated   — the five-step wizard at /org/setup finished: the tenant
+    //                  row exists, with a country, a currency and departments.
+    //   orgActivated — /org/setup-guide's "Finalize & activate" ran: payroll,
+    //                  leave and policies are actually configured, re-derived
+    //                  server-side from the tenant's own data.
+    //
+    // These were previously one idea called `setupCompleted`, which is why a
+    // new admin finished the wizard and was dropped on the dashboard with a
+    // half-configured organisation and no sign that a guide existed.
+    //
+    // Both reads run in parallel. `getMyGateStatus` fires on every protected
+    // navigation, so this must not add a serial round trip.
+    let orgCreated = false;
+    let orgActivated = false;
     if (tenantId) {
-      const { data: setupProgress } = await supabase
-        .from("organization_setup_progress")
-        .select("completed_at")
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-      setupCompleted = !!setupProgress?.completed_at;
+      const [{ data: setupProgress }, { data: setupState }] = await Promise.all([
+        supabase
+          .from("organization_setup_progress")
+          .select("completed_at")
+          .eq("tenant_id", tenantId)
+          .maybeSingle(),
+        supabase
+          .from("tenant_setup_state")
+          .select("activated_at")
+          .eq("tenant_id", tenantId)
+          .maybeSingle(),
+      ]);
+      orgCreated = !!setupProgress?.completed_at;
+      orgActivated = !!setupState?.activated_at;
     }
 
     let pendingTrialInvitation: any = null;
@@ -194,7 +218,7 @@ export const getMyGateStatus = createServerFn({ method: "GET" })
     }
 
     return {
-      userId, tenantId, actingTenantId, isPlatformAdmin, roles, setupCompleted, pendingTrialInvitation,
+      userId, tenantId, actingTenantId, isPlatformAdmin, roles, orgCreated, orgActivated, pendingTrialInvitation,
       suspended: false, suspensionReason: null, suspendedScope: null,
     };
   });

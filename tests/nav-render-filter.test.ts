@@ -82,12 +82,49 @@ describe("the sidebar renders what it filtered", () => {
     expect(BODY).toMatch(/\{visibleSections\.length \?/);
   });
 
-  it("filters on all three axes", () => {
+  it("filters on all three axes, in one shared predicate", () => {
     // feature (role), hideWhen (completion state), country (where the tenant
     // operates). Dropping any one silently widens the sidebar.
-    expect(BODY).toMatch(/can\(i\.feature, roles\)/);
-    expect(BODY).toMatch(/i\.hideWhen/);
-    expect(BODY).toMatch(/appliesToCountry\(i\.country, tenantCountry\)/);
+    //
+    // These live in `isNavItemVisible` rather than inline, because when they
+    // were inline the copy in PlainNavGroup only had two of them.
+    const from = SRC.indexOf("export function isNavItemVisible(");
+    expect(from, "the shared visibility predicate must exist").toBeGreaterThan(-1);
+    const fn = SRC.slice(from, SRC.indexOf("\n}", from));
+    expect(fn).toMatch(/can\(item\.feature, roles\)/);
+    expect(fn).toMatch(/item\.hideWhen/);
+    expect(fn).toMatch(/appliesToCountry\(item\.country, tenantCountry\)/);
+  });
+
+  it("both group components use that predicate, not their own copy", () => {
+    for (const component of ["function FlyoutNavGroup(", "function PlainNavGroup("]) {
+      const from = SRC.indexOf(component);
+      expect(from, `${component} should exist`).toBeGreaterThan(-1);
+      const body = SRC.slice(from, from + 2000);
+      expect(
+        body,
+        `${component} must filter through isNavItemVisible. A second copy of ` +
+          "the rules is how PlainNavGroup ended up applying two of the three.",
+      ).toContain("isNavItemVisible(");
+    }
+  });
+
+  it("every nav group is passed the hideWhen flags", () => {
+    // The bug this catches, found 2026-09-09: `hidden` is an optional prop, and
+    // the Organization flyout — the largest group in the product — was never
+    // given it. Every `hideWhen` on an org row was therefore ignored, silently,
+    // with nothing failing. An optional prop that disables a filter when
+    // omitted needs a test, because the type system will not ask for it.
+    const calls = [...SRC.matchAll(/<(FlyoutNavGroup|PlainNavGroup)\b([\s\S]*?)\/>/g)];
+    expect(calls.length, "expected to find the sidebar's group elements").toBeGreaterThan(4);
+    const missing = calls
+      .filter(([, , props]) => !/hidden=\{/.test(props))
+      .map(([, name, props]) => props.match(/label="([^"]+)"/)?.[1] ?? name);
+    expect(
+      missing,
+      "These sidebar groups are not passed `hidden`, so any hideWhen on their " +
+        "rows does nothing. Pass hidden={hiddenNavItems}.",
+    ).toEqual([]);
   });
 
   it("hides a country-scoped subgroup as a whole", () => {

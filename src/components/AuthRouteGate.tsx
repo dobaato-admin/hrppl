@@ -70,6 +70,30 @@ const MFA_ALLOWED = new Set<string>(["/me/security", "/auth", "/signup", "/forgo
 // The only in-app destination a suspended account may render.
 const SUSPENDED_ROUTE = "/suspended";
 
+/** Where a signed-in user lands when they have not asked for anywhere. */
+function isLandingPath(pathname: string): boolean {
+  return pathname === "/dashboard" || pathname === "/" || pathname === "/welcome";
+}
+
+/**
+ * True if this key has already fired in this browser session.
+ *
+ * Keeps the setup-guide nudge to once per session so it never becomes a trap:
+ * navigate away and it does not drag you back. sessionStorage rather than
+ * useState because the gate remounts on every navigation, which is precisely
+ * what made the onboarding redirect fire repeatedly before.
+ */
+function oncePerSession(key: string): boolean {
+  try {
+    if (sessionStorage.getItem(key)) return true;
+    sessionStorage.setItem(key, "1");
+    return false;
+  } catch {
+    // Private mode or blocked storage: skip the nudge rather than loop.
+    return true;
+  }
+}
+
 /**
  * Local-development escape from the mandatory MFA gate.
  *
@@ -224,7 +248,8 @@ export function AuthRouteGate({ children }: { children: ReactNode }) {
         }
 
         const hasTenant = !!status.tenantId;
-        const setupDone = !!status.setupCompleted;
+        const orgCreated = !!status.orgCreated;
+        const orgActivated = !!status.orgActivated;
         const roles = status.roles ?? [];
         const isOrgAdmin = roles.includes("org_admin");
         const isPlatformAdmin =
@@ -249,13 +274,28 @@ export function AuthRouteGate({ children }: { children: ReactNode }) {
             return;
           }
           return;
-        } else if (isOrgAdmin && !setupDone) {
-          // Org admin must complete the setup wizard before anything else.
+        } else if (isOrgAdmin && !orgCreated) {
+          // Org admin must complete the creation wizard before anything else.
+          // This one IS a hard gate: without a country, a currency and a tenant
+          // row there is nothing for the rest of the product to operate on.
           if (pathname !== "/org/setup") {
             navigate({ to: "/org/setup" });
             return;
           }
           return;
+        } else if (isOrgAdmin && !orgActivated && isLandingPath(pathname)) {
+          // The organisation exists but has never been configured. Send them to
+          // the guide the first time they land on the dashboard in a session.
+          //
+          // Deliberately NOT a gate. They finished the wizard, so the product is
+          // usable and trapping them would be wrong — but dropping them on a
+          // dashboard with no mention of the seven things still unconfigured is
+          // how an org ends up running payroll it never set up. The dashboard
+          // card carries it from here; this is just the first nudge.
+          if (!oncePerSession(`setup-guide-nudge:${userId}`)) {
+            navigate({ to: "/org/setup-guide" });
+            return;
+          }
         }
 
         // MFA enforcement (mandatory for everyone).
