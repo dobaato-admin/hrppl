@@ -83,7 +83,15 @@ export type NavItem = {
    * Hide once a piece of work is finished, so completed tasks stop looking
    * outstanding. Role gating uses `feature`; this is for state.
    */
-  hideWhen?: "onboardingComplete";
+  /**
+   * Hide this row once a milestone is reached. The flags are supplied by
+   * AppShell; see `hiddenNavItems` there.
+   *
+   *   onboardingComplete — the employee has finished their own onboarding.
+   *   orgCreated         — the tenant exists, so the creation wizard is spent.
+   *   orgActivated       — setup is finished, so the guide is no longer urgent.
+   */
+  hideWhen?: "onboardingComplete" | "orgCreated" | "orgActivated";
   /**
    * Render only for tenants in these ISO country codes. Omitted means every
    * country. Country-specific compliance surfaces (Australian STP2 and Payday
@@ -342,21 +350,25 @@ export const ORG_ITEMS: NavItem[] = [
     feature: "org.console",
   },
   {
-    title: "Setup wizard",
+    // A once-only wizard: it CREATES the organisation. Once one exists there is
+    // nothing here to come back for, and leaving it in the nav beside "Setup
+    // guide" left two similarly-named rows where only one was ever actionable.
+    title: "Create organization",
     to: "/org/setup",
     icon: Settings,
     accent: "bg-status-pending",
     feature: "org.setup",
+    hideWhen: "orgCreated",
   },
   {
-    // W7 · The guided configuration walk-through. Distinct from the row above,
-    // which creates the organisation; this one configures it afterwards.
+    // W7 · The guided configuration walk-through — the row that matters, and
+    // the only one of the two visible once the organisation exists.
     title: "Setup guide",
     to: "/org/setup-guide",
     icon: ListChecks,
     accent: "bg-status-working",
     feature: "org.setupGuide",
-    keywords: "guided onboarding checklist activate launch readiness",
+    keywords: "guided onboarding checklist activate launch readiness configure",
   },
   {
     title: "Branches",
@@ -1117,7 +1129,10 @@ export const SUPER_ADMIN_ITEMS: NavItem[] = [
 export const ACCOUNT_ITEMS: NavItem[] = [
   { title: "Profile", to: "/settings/profile", icon: UserCircle, accent: "bg-status-info" },
   {
-    title: "Organization",
+    // Named for what the page calls itself. As plain "Organization" it was the
+    // third row with that word in one sidebar — beside the Organization group
+    // and its console — and the only one of the three that meant *settings*.
+    title: "Organization settings",
     to: "/settings/organization",
     icon: Building2,
     accent: "bg-primary",
@@ -1268,7 +1283,9 @@ export const ROLE_PRIMARY: Partial<Record<AppRole, string[]>> = {
   super_admin: ["/admin", "/platform/tenants", "/org/employees", "/org/payroll"],
   regional_admin: ["/regional", "/admin/holiday-calendar"],
   // The broadest tenant role — the four things an owner opens most.
-  org_admin: ["/org", "/org/employees", "/org/payroll", "/org/roles"],
+  // No "/org" here: the Organization group sits directly below this one and
+  // opens on the console anyway, so a shortcut to it was the same row twice.
+  org_admin: ["/org/employees", "/org/payroll", "/org/roles"],
   // org_admin minus the org-defining powers, so no /org/roles here.
   branch_admin: ["/org/employees", "/admin/requests", "/org/timesheets", "/admin/assets"],
   // People operations: hiring, records, time off, joiners.
