@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Textarea } from "@/components/ui/textarea";
 import {
   createOrganization,
   getMyOrgStatus,
@@ -34,6 +33,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { validateBusinessRegistrationNumber } from "@/lib/payroll-validation";
 import { useFormErrors, FieldError } from "@/hooks/use-form-errors";
+import { DepartmentPicker } from "@/components/setup/DepartmentPicker";
+import { StepNote, SetupGuideHandoff } from "@/components/setup/StepNote";
 
 export const Route = createFileRoute("/org/setup")({
   head: () => ({ meta: [{ title: "Set up your organization — hrppl" }] }),
@@ -46,7 +47,10 @@ const STEPS: { key: StepKey; title: string; subtitle: string }[] = [
   { key: "details", title: "Organization details", subtitle: "Name, country, contact" },
   { key: "branding", title: "Address & branding", subtitle: "Where you operate" },
   { key: "departments", title: "Departments", subtitle: "Starter org structure" },
-  { key: "defaults", title: "Leave & payroll", subtitle: "Country-aware defaults" },
+  // Named for what it does. It seeds leave types and nothing else — payroll is
+  // configured in the Setup guide afterwards, and calling this step "Leave &
+  // payroll" implied an admin had dealt with payroll when they had not.
+  { key: "defaults", title: "Leave defaults", subtitle: "So people can book time off" },
   { key: "invites", title: "Invite your team", subtitle: "Optional — do it later" },
 ];
 
@@ -794,6 +798,14 @@ function OrgSetupPage() {
                     onChange={(e) => setDetails({ ...details, tax_id_number: e.target.value })}
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <StepNote editLabel="Organization settings" editTo="/settings/organization">
+                    Creates your organisation and makes you its admin. <b>Country is permanent</b> —
+                    it decides your currency, tax rules, public holidays and payroll engine, and
+                    changing it later would invalidate anything already recorded against it.
+                    Everything else on this step is editable afterwards.
+                  </StepNote>
+                </div>
                 <div className="md:col-span-2 flex justify-end">
                   <Button onClick={saveDetails} disabled={busy}>
                     {busy ? "Saving…" : "Save & continue"} <ArrowRight className="ml-2 h-4 w-4" />
@@ -862,6 +874,12 @@ function OrgSetupPage() {
                     onChange={(e) => setBranding({ ...branding, tagline: e.target.value })}
                   />
                 </div>
+                <div className="md:col-span-2">
+                  <StepNote editLabel="Organization settings" editTo="/settings/organization">
+                    Used on payslips, invoices and the public careers page candidates see. None of
+                    it is required to continue, and all of it is editable later.
+                  </StepNote>
+                </div>
                 <div className="md:col-span-2 flex justify-between">
                   <Button variant="ghost" onClick={() => setStepIdx(0)}>
                     Back
@@ -878,15 +896,18 @@ function OrgSetupPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Departments</CardTitle>
-                <CardDescription>Starter org structure — you can edit later.</CardDescription>
+                <CardDescription>
+                  The teams people belong to. Managers are scoped to a department, and leave and
+                  timesheet approvals follow that scoping.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Textarea
-                  rows={6}
-                  value={departments.join("\n")}
-                  onChange={(e) => setDepartments(e.target.value.split("\n"))}
-                  placeholder="One per line"
-                />
+                <DepartmentPicker value={departments} onChange={setDepartments} />
+                <StepNote editLabel="Departments" editTo="/admin/departments">
+                  Each one becomes a department you can assign employees and managers to. Add or
+                  rename them at any time — but an employee already attached to a department keeps
+                  that link, so deleting one later is more work than adding one now.
+                </StepNote>
                 <div className="flex justify-between">
                   <Button variant="ghost" onClick={() => setStepIdx(1)}>
                     Back
@@ -903,21 +924,56 @@ function OrgSetupPage() {
           {stepIdx === 3 && (
             <Card>
               <CardHeader>
-                <CardTitle>Leave & payroll defaults</CardTitle>
+                <CardTitle>Leave defaults</CardTitle>
                 <CardDescription>
-                  We'll seed Annual, Sick, and Unpaid leave for you. Payroll runs use your country's
-                  settings.
+                  A starting set of leave types so people can request time off from day one.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex items-start gap-2.5 rounded-lg border p-3 text-sm">
                   <input
                     type="checkbox"
+                    className="mt-0.5"
                     checked={defaults.withLeaveTypes}
                     onChange={(e) => setDefaults({ withLeaveTypes: e.target.checked })}
                   />
-                  Create the three default leave types
+                  <span>
+                    <span className="font-medium">Create these three leave types</span>
+                    <span className="mt-2 block overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="text-muted-foreground">
+                          <tr>
+                            <th className="py-1 pr-3 text-left font-medium">Type</th>
+                            <th className="py-1 pr-3 text-right font-medium">Days / year</th>
+                            <th className="py-1 pr-3 text-right font-medium">Accrues / month</th>
+                            <th className="py-1 text-left font-medium">Paid</th>
+                          </tr>
+                        </thead>
+                        <tbody className="tabular-nums">
+                          {[
+                            ["Annual Leave", "21", "1.75", "Yes"],
+                            ["Sick Leave", "10", "0.83", "Yes"],
+                            ["Unpaid Leave", "—", "—", "No"],
+                          ].map(([name, quota, accrual, paid]) => (
+                            <tr key={name} className="border-t">
+                              <td className="py-1 pr-3">{name}</td>
+                              <td className="py-1 pr-3 text-right">{quota}</td>
+                              <td className="py-1 pr-3 text-right">{accrual}</td>
+                              <td className="py-1">{paid}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </span>
+                  </span>
                 </label>
+                <StepNote editLabel="Leave types" editTo="/admin/leave-types">
+                  Quotas and accrual rates are editable per type, and you can add your own — long
+                  service, study, parental. Skipping this leaves you with no leave types, which
+                  means nobody can submit a leave request until you create one. It is only applied
+                  if your organisation has none yet, so coming back here cannot duplicate them.
+                </StepNote>
+                <SetupGuideHandoff />
                 <div className="flex justify-between">
                   <Button variant="ghost" onClick={() => setStepIdx(2)}>
                     Back
@@ -943,6 +999,11 @@ function OrgSetupPage() {
               <CardContent className="space-y-6">
                 {invites.map((row, idx) => (
                   <div key={idx} className="rounded-lg border p-4 space-y-3 bg-background">
+                    <StepNote editLabel="Employees" editTo="/org/employees">
+                      Each invite emails a link that lets the person set their own password and
+                      complete their own record — you do not enter their bank or tax details for
+                      them. Skipping this is fine; invite people whenever you are ready.
+                    </StepNote>
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-medium">Invitee {idx + 1}</div>
                       <div className="flex items-center gap-2">
