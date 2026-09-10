@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { resolveApprovalScope, scopeCovers, refusalReason } from "@/lib/approval-scope";
+import { recordApprovalAction } from "@/lib/approval-audit";
 
 // ---------- Notification helpers ----------
 async function loadLeaveContext(admin: any, requestId: string) {
@@ -261,9 +263,9 @@ export async function assertApproverForRequest(
   ctxSupabase: any,
   userId: string,
   req: { tenant_id: string; employee_id: string; leave_type_id: string; current_tier: number },
-): Promise<{ isFinalTier: boolean }> {
+): Promise<{ isFinalTier: boolean; roleUsed: string }> {
   const rs = await getRoles(ctxSupabase, userId);
-  if (rs.includes("super_admin")) return { isFinalTier: true };
+  if (rs.includes("super_admin")) return { isFinalTier: true, roleUsed: "super_admin" };
 
   const { data: profile } = await ctxSupabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
   if (!profile || profile.tenant_id !== req.tenant_id) throw new Error("Forbidden: tenant mismatch");
@@ -273,23 +275,26 @@ export async function assertApproverForRequest(
     throw new Error("Forbidden: you cannot decide your own leave request");
   }
 
+  // T6 · Approval is a property of the role, with a scope, rather than a
+  // hardcoded pair of role names. This check used to be
+  // `manager || org_admin`, which left HR and branch admins — both expected to
+  // approve — unable to action anything at all.
+  const scope = await resolveApprovalScope(ctxSupabase, userId, req.tenant_id, "leave");
+  if (!scopeCovers(scope, req.employee_id)) {
+    throw new Error(refusalReason(scope, req.employee_id));
+  }
+
   const maxTier = await getMaxApprovalTier(ctxSupabase, req.tenant_id, req.leave_type_id);
   if (maxTier === 0) {
-    if (!rs.includes("manager") && !rs.includes("org_admin")) {
-      throw new Error("Forbidden: manager or org admin role required");
-    }
-    return { isFinalTier: true };
+    return { isFinalTier: true, roleUsed: scope.roleUsed ?? "manager" };
   }
 
   const route = await getTierRoute(ctxSupabase, req.tenant_id, req.leave_type_id, req.current_tier);
   if (!route) {
     // Tiers are configured but none exists at this exact tier (a gap in the
     // chain) — fall back rather than stranding the request with no possible
-    // approver.
-    if (!rs.includes("manager") && !rs.includes("org_admin")) {
-      throw new Error("Forbidden: manager or org admin role required");
-    }
-    return { isFinalTier: true };
+    // approver. The scope check above already ran.
+    return { isFinalTier: true, roleUsed: scope.roleUsed ?? "manager" };
   }
 
   const matchesRoute =
@@ -299,7 +304,7 @@ export async function assertApproverForRequest(
     throw new Error(`Forbidden: this request is awaiting its tier ${req.current_tier} approver`);
   }
 
-  return { isFinalTier: req.current_tier >= maxTier };
+  return { isFinalTier: req.current_tier >= maxTier, roleUsed: scope.roleUsed ?? "manager" };
 }
 
 // ---------- Submit leave request ----------
@@ -497,7 +502,15 @@ export const cancelLeaveRequest = createServerFn({ method: "POST" })
 // ---------- Approve ----------
 export const approveLeaveRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ requestId: z.string().uuid() }).parse(d))
+  .inputValidator((d) =>
+    // T2 · An approval may carry a comment. Optional, unlike a rejection —
+    // "approved" needs no justification, but an approver often wants to note a
+    // condition, and the submitter should see it.
+    z.object({
+      requestId: z.string().uuid(),
+      comment: z.string().trim().max(2000).optional(),
+    }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const sendInternalEmail = await loadEmailSender();
@@ -505,7 +518,7 @@ export const approveLeaveRequest = createServerFn({ method: "POST" })
     const { data: req } = await admin.from("leave_requests").select("*").eq("id", data.requestId).maybeSingle();
     if (!req) throw new Error("Request not found");
     if (req.status !== "pending") throw new Error("Only pending requests can be approved");
-    const { isFinalTier } = await assertApproverForRequest(supabase, userId, req);
+    const { isFinalTier, roleUsed } = await assertApproverForRequest(supabase, userId, req);
 
     if (!isFinalTier) {
       // A configured chain has more tiers to go: advance without finalising —
@@ -518,6 +531,11 @@ export const approveLeaveRequest = createServerFn({ method: "POST" })
       await admin.from("audit_log").insert({
         actor_id: userId, entity_type: "leave_request", entity_id: req.id,
         action: "approve_tier", metadata: { tier: req.current_tier, next_tier: nextTier },
+      });
+      await recordApprovalAction(supabase, {
+        tenantId: req.tenant_id, itemType: "leave", itemId: req.id,
+        employeeId: req.employee_id, approverId: userId, roleUsed,
+        action: "approved", reason: data.comment ?? `Advanced to tier ${nextTier}`,
       });
 
       try {
@@ -553,6 +571,11 @@ export const approveLeaveRequest = createServerFn({ method: "POST" })
 
     await admin.from("audit_log").insert({
       actor_id: userId, entity_type: "leave_request", entity_id: req.id, action: "approve", metadata: { days: req.days },
+    });
+    await recordApprovalAction(supabase, {
+      tenantId: req.tenant_id, itemType: "leave", itemId: req.id,
+      employeeId: req.employee_id, approverId: userId, roleUsed,
+      action: "approved", reason: data.comment ?? null,
     });
 
     // Notify employee of approval
@@ -592,7 +615,13 @@ export const approveLeaveRequest = createServerFn({ method: "POST" })
 export const rejectLeaveRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ requestId: z.string().uuid(), reason: z.string().max(2000).optional() }).parse(d),
+    // T2 · A rejection reason is required. It is shown to the submitter, who
+    // otherwise has to guess what to change before resubmitting, and it is the
+    // field an audit is most often read for.
+    z.object({
+      requestId: z.string().uuid(),
+      reason: z.string().trim().min(1, "A reason is required when rejecting").max(2000),
+    }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -603,11 +632,11 @@ export const rejectLeaveRequest = createServerFn({ method: "POST" })
     if (req.status !== "pending") throw new Error("Only pending requests can be rejected");
     // A reject at any tier ends the chain outright — there is no "advance
     // past a rejection" the way an approval advances past a tier.
-    await assertApproverForRequest(supabase, userId, req);
+    const { roleUsed } = await assertApproverForRequest(supabase, userId, req);
 
     const { error } = await admin.from("leave_requests").update({
       status: "rejected", approved_by: userId, approved_at: new Date().toISOString(),
-      rejection_reason: data.reason ?? null,
+      rejection_reason: data.reason,
     }).eq("id", req.id);
     if (error) { console.error("[leave.reject]", error.message, error.code); throw new Error("Failed to reject request."); }
 
@@ -616,7 +645,12 @@ export const rejectLeaveRequest = createServerFn({ method: "POST" })
 
     await admin.from("audit_log").insert({
       actor_id: userId, entity_type: "leave_request", entity_id: req.id, action: "reject",
-      metadata: { reason: data.reason ?? null },
+      metadata: { reason: data.reason },
+    });
+    await recordApprovalAction(supabase, {
+      tenantId: req.tenant_id, itemType: "leave", itemId: req.id,
+      employeeId: req.employee_id, approverId: userId, roleUsed,
+      action: "rejected", reason: data.reason,
     });
 
     // Notify employee of rejection

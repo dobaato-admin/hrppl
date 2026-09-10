@@ -162,6 +162,73 @@ export type Database = {
           },
         ]
       }
+      approval_actions: {
+        Row: {
+          action: string
+          approver_id: string
+          approver_role: string
+          created_at: string
+          employee_id: string | null
+          escalated_from: string | null
+          escalation_reason: string | null
+          id: string
+          item_id: string
+          item_type: string
+          reason: string | null
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          approver_id: string
+          approver_role: string
+          created_at?: string
+          employee_id?: string | null
+          escalated_from?: string | null
+          escalation_reason?: string | null
+          id?: string
+          item_id: string
+          item_type: string
+          reason?: string | null
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          approver_id?: string
+          approver_role?: string
+          created_at?: string
+          employee_id?: string | null
+          escalated_from?: string | null
+          escalation_reason?: string | null
+          id?: string
+          item_id?: string
+          item_type?: string
+          reason?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_actions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_actions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "approval_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       asset_assignments: {
         Row: {
           acknowledged_at: string | null

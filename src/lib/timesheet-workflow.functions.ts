@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { resolveApprovalScope, scopeCovers, refusalReason } from "@/lib/approval-scope";
+import { recordApprovalAction } from "@/lib/approval-audit";
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -143,6 +145,24 @@ export const listMyTimesheets = createServerFn({ method: "GET" })
     return { timesheets: data ?? [] };
   });
 
+/**
+ * The caller's approval scope for one timesheet, or a refusal explaining why
+ * they cannot action it. Loads the sheet as well, since every caller needs it.
+ */
+async function assertTimesheetApprover(supabase: any, userId: string, timesheetId: string) {
+  const { data: sheet } = await supabase
+    .from("timesheets")
+    .select("id, tenant_id, employee_id, status")
+    .eq("id", timesheetId)
+    .maybeSingle();
+  if (!sheet) throw new Error("Timesheet not found");
+  const scope = await resolveApprovalScope(supabase, userId, sheet.tenant_id, "timesheet");
+  if (!scopeCovers(scope, sheet.employee_id)) {
+    throw new Error(refusalReason(scope, sheet.employee_id));
+  }
+  return { scope, sheet };
+}
+
 // ---------- Manager: list timesheets awaiting approval ----------
 export const listPendingTimesheets = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -168,9 +188,16 @@ export const listPendingTimesheets = createServerFn({ method: "GET" })
 // ---------- Manager: approve ----------
 export const approveTimesheet = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid(), comment: z.string().trim().max(1000).optional() }).parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
+    // T6 · These two carried no role check at all — they relied entirely on
+    // RLS, which is a security boundary but not a scoping one, and which had
+    // nothing to say about approving your own timesheet.
+    const { scope, sheet } = await assertTimesheetApprover(supabase, userId, data.id);
+
     const { error } = await supabase
       .from("timesheets")
       .update({
@@ -181,6 +208,12 @@ export const approveTimesheet = createServerFn({ method: "POST" })
       })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordApprovalAction(supabase, {
+      tenantId: sheet.tenant_id, itemType: "timesheet", itemId: sheet.id,
+      employeeId: sheet.employee_id, approverId: userId,
+      roleUsed: scope.roleUsed ?? "manager", action: "approved",
+      reason: data.comment ?? null,
+    });
     await notifyTimesheet({ supabase, userId, timesheet_id: data.id, action: "approved" });
     return { ok: true };
   });
@@ -196,6 +229,8 @@ export const rejectTimesheet = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
+    const { scope, sheet } = await assertTimesheetApprover(supabase, userId, data.id);
+
     const { error } = await supabase
       .from("timesheets")
       .update({
@@ -206,6 +241,11 @@ export const rejectTimesheet = createServerFn({ method: "POST" })
       })
       .eq("id", data.id);
     if (error) throw new Error(error.message);
+    await recordApprovalAction(supabase, {
+      tenantId: sheet.tenant_id, itemType: "timesheet", itemId: sheet.id,
+      employeeId: sheet.employee_id, approverId: userId,
+      roleUsed: scope.roleUsed ?? "manager", action: "rejected", reason: data.reason,
+    });
     await notifyTimesheet({ supabase, userId, timesheet_id: data.id, action: "rejected", reason: data.reason });
     return { ok: true };
   });
