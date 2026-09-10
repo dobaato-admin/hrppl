@@ -88,6 +88,36 @@ describe("the forms that had the bug now use it", () => {
     expect(src, "must map server refusals onto fields").toContain("fromServer");
   });
 
+  it("the org creation wizard marks the fields it validates", () => {
+    // The first form a new customer ever touches. It already had specific
+    // messages, but every one of them was a bare toast on a two-column layout —
+    // the reader was told a rule had failed without being told which box.
+    const src = read("src/routes/org.setup.tsx");
+    expect(src).toContain("useFormErrors");
+    expect(src).toContain("FieldError");
+    for (const field of [
+      "name",
+      "country_code",
+      "contact_phone",
+      "contact_email",
+      "registration_number",
+    ]) {
+      expect(src, `${field} must be registered`).toContain(`form.register("${field}")`);
+    }
+  });
+
+  it("checks fields in rendered order, not state-object order", () => {
+    // `check` focuses the first failure, so "first" has to mean highest on
+    // screen. Phone renders above email in this layout; listing email first
+    // sent the cursor past a field the reader could see was wrong.
+    const src = read("src/routes/org.setup.tsx");
+    const phone = src.indexOf('name: "contact_phone"');
+    const email = src.indexOf('name: "contact_email"');
+    expect(phone).toBeGreaterThan(-1);
+    expect(email).toBeGreaterThan(-1);
+    expect(phone, "contact_phone must be checked before contact_email").toBeLessThan(email);
+  });
+
   it("the setup guide's company schema accepts null, not just absent", () => {
     // The form prefills straight from the stored row, and that row holds null
     // for every column nobody has filled in. `.optional()` permits a missing
