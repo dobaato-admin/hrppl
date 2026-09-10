@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { resolveApprovalScope, scopeCovers, refusalReason } from "@/lib/approval-scope";
+import { recordApprovalAction } from "@/lib/approval-audit";
 import { getTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
@@ -316,12 +318,19 @@ export const saveExpenseClaim = createServerFn({ method: "POST" })
   });
 
 
-const DecisionSchema = z.object({
-  id: z.string().uuid(),
-  action: z.enum(["recommend", "withdraw_recommendation", "approve", "reject", "pay"]),
-  comment: z.string().max(1000).optional(),
-  payment_reference: z.string().max(200).optional(),
-});
+const DecisionSchema = z
+  .object({
+    id: z.string().uuid(),
+    action: z.enum(["recommend", "withdraw_recommendation", "approve", "reject", "pay"]),
+    comment: z.string().trim().max(1000).optional(),
+    payment_reference: z.string().max(200).optional(),
+  })
+  // T4 · A rejection reason is required, as it is for leave. The claimant is
+  // out of pocket and has to know what to fix before resubmitting.
+  .refine((d) => d.action !== "reject" || !!d.comment?.trim(), {
+    message: "A reason is required when rejecting a claim",
+    path: ["comment"],
+  });
 
 async function isOrgAdmin(supabase: any, userId: string) {
   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId).in("role", ["org_admin", "super_admin"]);
@@ -336,6 +345,16 @@ export const decideExpenseClaim = createServerFn({ method: "POST" })
     const { data: claim } = await supabase.from("expense_claims").select("*").eq("id", data.id).single();
     if (!claim) throw new Error("Claim not found");
     const admin = await isOrgAdmin(supabase, userId);
+
+    // T6 · Deciding used to require org_admin, so HR, finance, branch admins
+    // and line managers could not action a claim at all. Now it is the role's
+    // approval right plus its scope, and the same self-approval block that
+    // leave has.
+    const scope = await resolveApprovalScope(supabase, userId, claim.tenant_id, "expense");
+    const decides = ["approve", "reject", "pay"].includes(data.action);
+    if (decides && !scopeCovers(scope, claim.employee_id)) {
+      throw new Error(refusalReason(scope, claim.employee_id));
+    }
     const updates: any = {};
     const now = new Date().toISOString();
     let auditAction: string = data.action;
@@ -356,12 +375,10 @@ export const decideExpenseClaim = createServerFn({ method: "POST" })
       auditAction = "recommendation_withdrawn";
     } else if (data.action === "approve") {
       if (!["submitted", "recommended"].includes(claim.status)) throw new Error("Only submitted or recommended claims can be approved");
-      if (!admin) throw new Error("Only org admins can approve");
       updates.status = "approved"; updates.approved_at = now; updates.approved_by = userId;
       auditAction = "approved";
     } else if (data.action === "reject") {
       if (!["submitted", "recommended", "approved"].includes(claim.status)) throw new Error("Cannot reject from this status");
-      if (!admin) throw new Error("Only org admins can reject");
       updates.status = "rejected"; updates.rejected_reason = data.comment ?? null;
       auditAction = "rejected";
     } else if (data.action === "pay") {
@@ -373,6 +390,16 @@ export const decideExpenseClaim = createServerFn({ method: "POST" })
     }
     const { error } = await supabase.from("expense_claims").update(updates).eq("id", data.id);
     if (error) throw error;
+
+    if (data.action === "approve" || data.action === "reject") {
+      await recordApprovalAction(supabase, {
+        tenantId: claim.tenant_id, itemType: "expense", itemId: claim.id,
+        employeeId: claim.employee_id, approverId: userId,
+        roleUsed: scope.roleUsed ?? "org_admin",
+        action: data.action === "approve" ? "approved" : "rejected",
+        reason: data.comment ?? null,
+      });
+    }
     await supabase.from("expense_approvals").insert({
       claim_id: data.id, tenant_id: claim.tenant_id, approver_id: userId,
       action: auditAction,

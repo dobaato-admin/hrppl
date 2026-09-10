@@ -35,6 +35,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AttendanceRouteImport } from './routes/attendance'
+import { Route as ApprovalsRouteImport } from './routes/approvals'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OrgIndexRouteImport } from './routes/org.index'
@@ -79,6 +80,7 @@ import { Route as OrgEmployeesRouteImport } from './routes/org.employees'
 import { Route as OrgDocumentsRouteImport } from './routes/org.documents'
 import { Route as OrgDangerRouteImport } from './routes/org.danger'
 import { Route as OrgBranchesRouteImport } from './routes/org.branches'
+import { Route as OrgApprovalActivityRouteImport } from './routes/org.approval-activity'
 import { Route as OrgAnalyticsRouteImport } from './routes/org.analytics'
 import { Route as OnboardingProfileRouteImport } from './routes/onboarding.profile'
 import { Route as MeWfhRouteImport } from './routes/me.wfh'
@@ -348,6 +350,11 @@ const AttendanceRoute = AttendanceRouteImport.update({
   path: '/attendance',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApprovalsRoute = ApprovalsRouteImport.update({
+  id: '/approvals',
+  path: '/approvals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -566,6 +573,11 @@ const OrgDangerRoute = OrgDangerRouteImport.update({
 const OrgBranchesRoute = OrgBranchesRouteImport.update({
   id: '/branches',
   path: '/branches',
+  getParentRoute: () => OrgRoute,
+} as any)
+const OrgApprovalActivityRoute = OrgApprovalActivityRouteImport.update({
+  id: '/approval-activity',
+  path: '/approval-activity',
   getParentRoute: () => OrgRoute,
 } as any)
 const OrgAnalyticsRoute = OrgAnalyticsRouteImport.update({
@@ -1294,6 +1306,7 @@ const ApiPublicBlogPostsSlugRoute = ApiPublicBlogPostsSlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/approvals': typeof ApprovalsRoute
   '/attendance': typeof AttendanceRoute
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
@@ -1406,6 +1419,7 @@ export interface FileRoutesByFullPath {
   '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
+  '/org/approval-activity': typeof OrgApprovalActivityRoute
   '/org/branches': typeof OrgBranchesRoute
   '/org/danger': typeof OrgDangerRoute
   '/org/documents': typeof OrgDocumentsRouteWithChildren
@@ -1503,6 +1517,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/approvals': typeof ApprovalsRoute
   '/attendance': typeof AttendanceRoute
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
@@ -1611,6 +1626,7 @@ export interface FileRoutesByTo {
   '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
+  '/org/approval-activity': typeof OrgApprovalActivityRoute
   '/org/branches': typeof OrgBranchesRoute
   '/org/danger': typeof OrgDangerRoute
   '/org/employees': typeof OrgEmployeesRoute
@@ -1708,6 +1724,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/approvals': typeof ApprovalsRoute
   '/attendance': typeof AttendanceRoute
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
@@ -1820,6 +1837,7 @@ export interface FileRoutesById {
   '/me/wfh': typeof MeWfhRoute
   '/onboarding/profile': typeof OnboardingProfileRoute
   '/org/analytics': typeof OrgAnalyticsRoute
+  '/org/approval-activity': typeof OrgApprovalActivityRoute
   '/org/branches': typeof OrgBranchesRoute
   '/org/danger': typeof OrgDangerRoute
   '/org/documents': typeof OrgDocumentsRouteWithChildren
@@ -1920,6 +1938,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/approvals'
     | '/attendance'
     | '/auth'
     | '/contact'
@@ -2032,6 +2051,7 @@ export interface FileRouteTypes {
     | '/me/wfh'
     | '/onboarding/profile'
     | '/org/analytics'
+    | '/org/approval-activity'
     | '/org/branches'
     | '/org/danger'
     | '/org/documents'
@@ -2129,6 +2149,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/approvals'
     | '/attendance'
     | '/auth'
     | '/contact'
@@ -2237,6 +2258,7 @@ export interface FileRouteTypes {
     | '/me/wfh'
     | '/onboarding/profile'
     | '/org/analytics'
+    | '/org/approval-activity'
     | '/org/branches'
     | '/org/danger'
     | '/org/employees'
@@ -2333,6 +2355,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/approvals'
     | '/attendance'
     | '/auth'
     | '/contact'
@@ -2445,6 +2468,7 @@ export interface FileRouteTypes {
     | '/me/wfh'
     | '/onboarding/profile'
     | '/org/analytics'
+    | '/org/approval-activity'
     | '/org/branches'
     | '/org/danger'
     | '/org/documents'
@@ -2544,6 +2568,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
+  ApprovalsRoute: typeof ApprovalsRoute
   AttendanceRoute: typeof AttendanceRoute
   AuthRoute: typeof AuthRoute
   ContactRoute: typeof ContactRoute
@@ -2817,6 +2842,13 @@ declare module '@tanstack/react-router' {
       path: '/attendance'
       fullPath: '/attendance'
       preLoaderRoute: typeof AttendanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/approvals': {
+      id: '/approvals'
+      path: '/approvals'
+      fullPath: '/approvals'
+      preLoaderRoute: typeof ApprovalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -3125,6 +3157,13 @@ declare module '@tanstack/react-router' {
       path: '/branches'
       fullPath: '/org/branches'
       preLoaderRoute: typeof OrgBranchesRouteImport
+      parentRoute: typeof OrgRoute
+    }
+    '/org/approval-activity': {
+      id: '/org/approval-activity'
+      path: '/approval-activity'
+      fullPath: '/org/approval-activity'
+      preLoaderRoute: typeof OrgApprovalActivityRouteImport
       parentRoute: typeof OrgRoute
     }
     '/org/analytics': {
@@ -4331,6 +4370,7 @@ const OrgRecruitmentRouteWithChildren = OrgRecruitmentRoute._addFileChildren(
 
 interface OrgRouteChildren {
   OrgAnalyticsRoute: typeof OrgAnalyticsRoute
+  OrgApprovalActivityRoute: typeof OrgApprovalActivityRoute
   OrgBranchesRoute: typeof OrgBranchesRoute
   OrgDangerRoute: typeof OrgDangerRoute
   OrgDocumentsRoute: typeof OrgDocumentsRouteWithChildren
@@ -4362,6 +4402,7 @@ interface OrgRouteChildren {
 
 const OrgRouteChildren: OrgRouteChildren = {
   OrgAnalyticsRoute: OrgAnalyticsRoute,
+  OrgApprovalActivityRoute: OrgApprovalActivityRoute,
   OrgBranchesRoute: OrgBranchesRoute,
   OrgDangerRoute: OrgDangerRoute,
   OrgDocumentsRoute: OrgDocumentsRouteWithChildren,
@@ -4407,6 +4448,7 @@ const ApiPublicBlogPostsRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
+  ApprovalsRoute: ApprovalsRoute,
   AttendanceRoute: AttendanceRoute,
   AuthRoute: AuthRoute,
   ContactRoute: ContactRoute,

@@ -26,6 +26,14 @@ const initialState: AuthState = {
 let authState: AuthState = initialState;
 let initialized = false;
 let roleRequestId = 0;
+/**
+ * Which user the roles currently in `authState` belong to.
+ *
+ * Tracked separately from `authState.user` because `onAuthStateChange` sets the
+ * user *before* calling `refreshRoles`, so by then the two always agree and
+ * cannot be used to tell a genuine account change from a revalidation.
+ */
+let rolesForUserId: string | null = null;
 let roleRefreshHandler: (() => void) | null = null;
 let focusHandler: (() => void) | null = null;
 let visibilityHandler: (() => void) | null = null;
@@ -59,13 +67,37 @@ async function refreshRoles(nextUserId?: string | null) {
   const requestId = ++roleRequestId;
 
   if (!nextUserId) {
+    rolesForUserId = null;
     setAuthState({ roles: [], rolesLoaded: true, loading: false });
     return;
   }
 
-  setAuthState({ rolesLoaded: false });
+  // ---------------------------------------------------------------------
+  // A revalidation must not tear the page down.
+  // ---------------------------------------------------------------------
+  //
+  // This used to open with an unconditional `setAuthState({ rolesLoaded: false })`.
+  // `AdminGate` renders `if (!rolesLoaded) return <div>Loading…</div>`, so every
+  // role refresh unmounted the whole page beneath it — and with it any open
+  // modal and everything typed into it.
+  //
+  // That fires more often than it sounds. Supabase emits SIGNED_IN when it
+  // recovers a session on tab focus, `requestRoleRefresh()` is called after
+  // several flows, and each one silently discarded a half-filled form. It was
+  // reported as "switching tabs loses my data", which is the symptom rather
+  // than the cause.
+  //
+  // So: only blank the roles when we do not already hold a trustworthy answer
+  // for THIS user. When we do, refetch quietly and swap the result in. The
+  // window where stale roles are shown is one request long, and the roles are
+  // a UI hint — `rbac.ts` is not the security boundary; RLS and the server-fn
+  // guards are, and they re-check on every call.
+  const haveRolesForThisUser = rolesForUserId === nextUserId && authState.rolesLoaded;
+  if (!haveRolesForThisUser) setAuthState({ rolesLoaded: false });
+
   const nextRoles = await fetchRoles(nextUserId);
   if (requestId !== roleRequestId) return;
+  rolesForUserId = nextUserId;
   setAuthState({ roles: nextRoles, rolesLoaded: true, loading: false });
 }
 
@@ -144,6 +176,7 @@ export function useAuth(): AuthState {
         focusHandler = null;
         visibilityHandler = null;
         unsubscribeAuth = null;
+        rolesForUserId = null;
         initialized = false;
       }
     };

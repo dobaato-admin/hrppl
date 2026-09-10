@@ -53,16 +53,24 @@ const baseTables = (extra: Partial<Record<string, Row[]>> = {}) => ({
     { id: "hr-1", tenant_id: TENANT },
     { id: "outsider", tenant_id: OTHER_TENANT },
     { id: "requester", tenant_id: TENANT },
+    { id: "stranger", tenant_id: TENANT },
   ],
   user_roles: [
     { user_id: "manager-1", role: "manager" },
     { user_id: "hr-1", role: "hr" },
     { user_id: "requester", role: "manager" },
+    { user_id: "stranger", role: "manager" },
   ],
   employees: [
-    { id: "emp-requester", user_id: "requester", tenant_id: TENANT },
-    { id: "emp-manager", user_id: "manager-1", tenant_id: TENANT },
+    // T6 · `manager_id` is now load-bearing: a line manager's approval scope is
+    // their direct reports, not the whole tenant. Before that change any
+    // manager could decide any request in the organisation.
+    { id: "emp-requester", user_id: "requester", tenant_id: TENANT, manager_id: "emp-manager" },
+    { id: "emp-manager", user_id: "manager-1", tenant_id: TENANT, manager_id: null },
+    { id: "emp-hr", user_id: "hr-1", tenant_id: TENANT, manager_id: null },
+    { id: "emp-stranger", user_id: "stranger", tenant_id: TENANT, manager_id: null },
   ],
+  role_scope: [],
   leave_approval_routes: [],
   ...extra,
 });
@@ -81,12 +89,45 @@ describe("assertApproverForRequest — no routes configured (old behaviour)", ()
   it("allows a manager in the tenant and finalises immediately", async () => {
     const sb = makeFakeSupabase(baseTables());
     const result = await assertApproverForRequest(sb as any, "manager-1", req());
-    expect(result).toEqual({ isFinalTier: true });
+    expect(result).toMatchObject({ isFinalTier: true });
   });
 
-  it("rejects a role that isn't manager or org_admin", async () => {
+  it("T6 · HR can now decide, org-wide — this used to be refused", async () => {
+    // The defect this replaces: the fallback check was
+    // `manager || org_admin`, so HR — who is expected to approve, and who in
+    // small organisations is often the only person available — could not
+    // action anything at all. HR's scope is the whole organisation, so no
+    // manager_id relationship is needed.
     const sb = makeFakeSupabase(baseTables());
-    await expect(assertApproverForRequest(sb as any, "hr-1", req())).rejects.toThrow(/manager or org admin/);
+    await expect(assertApproverForRequest(sb as any, "hr-1", req())).resolves.toMatchObject({
+      isFinalTier: true,
+      roleUsed: "hr",
+    });
+  });
+
+  it("T6 · a manager may decide only for their own direct reports", async () => {
+    // The other half of the same change. Approval used to be tenant-wide for
+    // anyone holding `manager`, so any manager could decide any request in the
+    // organisation. `stranger` holds manager but is nobody's line manager.
+    const sb = makeFakeSupabase(baseTables());
+    await expect(assertApproverForRequest(sb as any, "stranger", req())).rejects.toThrow(
+      /not one of your direct reports/,
+    );
+  });
+
+  it("T6 · a role with no approval right is refused, and told so plainly", async () => {
+    const sb = makeFakeSupabase(
+      baseTables({
+        profiles: [
+          { id: "clerk", tenant_id: TENANT },
+          { id: "requester", tenant_id: TENANT },
+        ],
+        user_roles: [{ user_id: "clerk", role: "employee" }],
+      }),
+    );
+    await expect(assertApproverForRequest(sb as any, "clerk", req())).rejects.toThrow(
+      /role does not include approving/,
+    );
   });
 
   it("rejects a caller in a different tenant", async () => {
@@ -111,13 +152,13 @@ describe("assertApproverForRequest — configured multi-tier chain", () => {
   it("a tier-1 approver advances rather than finalises when more tiers exist", async () => {
     const sb = makeFakeSupabase(baseTables({ leave_approval_routes: routes }));
     const result = await assertApproverForRequest(sb as any, "manager-1", req({ current_tier: 1 }));
-    expect(result).toEqual({ isFinalTier: false });
+    expect(result).toMatchObject({ isFinalTier: false });
   });
 
   it("the named tier-2 approver finalises", async () => {
     const sb = makeFakeSupabase(baseTables({ leave_approval_routes: routes }));
     const result = await assertApproverForRequest(sb as any, "hr-1", req({ current_tier: 2 }));
-    expect(result).toEqual({ isFinalTier: true });
+    expect(result).toMatchObject({ isFinalTier: true });
   });
 
   it("a manager cannot act at tier 2 — that tier names a specific person", async () => {
@@ -145,7 +186,7 @@ describe("assertApproverForRequest — configured multi-tier chain", () => {
       assertApproverForRequest(sb as any, "manager-1", req({ leave_type_id: LEAVE_TYPE, current_tier: 1 })),
     ).rejects.toThrow(/tier 1 approver/);
     const result = await assertApproverForRequest(sb as any, "hr-1", req({ leave_type_id: LEAVE_TYPE, current_tier: 1 }));
-    expect(result).toEqual({ isFinalTier: true });
+    expect(result).toMatchObject({ isFinalTier: true });
   });
 
   it("a request for an unrouted leave type falls back to the old behaviour", async () => {
@@ -163,7 +204,7 @@ describe("assertApproverForRequest — configured multi-tier chain", () => {
       "manager-1",
       req({ leave_type_id: OTHER_LEAVE_TYPE, current_tier: 1 }),
     );
-    expect(result).toEqual({ isFinalTier: true });
+    expect(result).toMatchObject({ isFinalTier: true });
   });
 
   it("an inactive route does not count", async () => {
@@ -175,7 +216,7 @@ describe("assertApproverForRequest — configured multi-tier chain", () => {
       }),
     );
     const result = await assertApproverForRequest(sb as any, "manager-1", req());
-    expect(result).toEqual({ isFinalTier: true }); // treated as unrouted
+    expect(result).toMatchObject({ isFinalTier: true }); // treated as unrouted
   });
 
   it("super_admin bypasses tenant, self-decision, and route checks", async () => {
@@ -186,6 +227,6 @@ describe("assertApproverForRequest — configured multi-tier chain", () => {
       }),
     );
     const result = await assertApproverForRequest(sb as any, "super-1", req({ current_tier: 1 }));
-    expect(result).toEqual({ isFinalTier: true });
+    expect(result).toMatchObject({ isFinalTier: true });
   });
 });

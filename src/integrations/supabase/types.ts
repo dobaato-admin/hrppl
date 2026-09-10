@@ -162,6 +162,73 @@ export type Database = {
           },
         ]
       }
+      approval_actions: {
+        Row: {
+          action: string
+          approver_id: string
+          approver_role: string
+          created_at: string
+          employee_id: string | null
+          escalated_from: string | null
+          escalation_reason: string | null
+          id: string
+          item_id: string
+          item_type: string
+          reason: string | null
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          approver_id: string
+          approver_role: string
+          created_at?: string
+          employee_id?: string | null
+          escalated_from?: string | null
+          escalation_reason?: string | null
+          id?: string
+          item_id: string
+          item_type: string
+          reason?: string | null
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          approver_id?: string
+          approver_role?: string
+          created_at?: string
+          employee_id?: string | null
+          escalated_from?: string | null
+          escalation_reason?: string | null
+          id?: string
+          item_id?: string
+          item_type?: string
+          reason?: string | null
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_actions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approval_actions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "approval_actions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       asset_assignments: {
         Row: {
           acknowledged_at: string | null
@@ -4754,6 +4821,8 @@ export type Database = {
           currency: string
           description: string | null
           employee_id: string
+          escalated_at: string | null
+          escalated_reason: string | null
           id: string
           paid_at: string | null
           paid_by: string | null
@@ -4777,6 +4846,8 @@ export type Database = {
           currency?: string
           description?: string | null
           employee_id: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           paid_at?: string | null
           paid_by?: string | null
@@ -4800,6 +4871,8 @@ export type Database = {
           currency?: string
           description?: string | null
           employee_id?: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           paid_at?: string | null
           paid_by?: string | null
@@ -6145,6 +6218,8 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          escalated_at: string | null
+          escalated_reason: string | null
           half_day_end: boolean
           half_day_start: boolean
           id: string
@@ -6164,6 +6239,8 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           half_day_end?: boolean
           half_day_start?: boolean
           id?: string
@@ -6183,6 +6260,8 @@ export type Database = {
           days?: number
           employee_id?: string
           end_date?: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           half_day_end?: boolean
           half_day_start?: boolean
           id?: string
@@ -12116,6 +12195,7 @@ export type Database = {
         Row: {
           address_line1: string | null
           address_line2: string | null
+          approval_escalation_days: number
           approved_at: string | null
           approved_by: string | null
           city: string | null
@@ -12151,6 +12231,7 @@ export type Database = {
         Insert: {
           address_line1?: string | null
           address_line2?: string | null
+          approval_escalation_days?: number
           approved_at?: string | null
           approved_by?: string | null
           city?: string | null
@@ -12186,6 +12267,7 @@ export type Database = {
         Update: {
           address_line1?: string | null
           address_line2?: string | null
+          approval_escalation_days?: number
           approved_at?: string | null
           approved_by?: string | null
           city?: string | null
@@ -12442,6 +12524,8 @@ export type Database = {
           consumed_by_run_id: string | null
           created_at: string
           employee_id: string
+          escalated_at: string | null
+          escalated_reason: string | null
           id: string
           notes: string | null
           overtime_breakdown: Json
@@ -12463,6 +12547,8 @@ export type Database = {
           consumed_by_run_id?: string | null
           created_at?: string
           employee_id: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           notes?: string | null
           overtime_breakdown?: Json
@@ -12484,6 +12570,8 @@ export type Database = {
           consumed_by_run_id?: string | null
           created_at?: string
           employee_id?: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           notes?: string | null
           overtime_breakdown?: Json

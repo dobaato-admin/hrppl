@@ -41,6 +41,8 @@ export type Feature =
   | "org.auUnderpayment"
   | "org.setup"
   | "org.setupGuide"
+  | "org.approvals"
+  | "org.approvalActivity"
   | "org.policies"
   | "org.branches"
   | "org.whiteLabel"
@@ -195,6 +197,15 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   // which is the *create an organisation* wizard and is reachable before a
   // tenant exists. Same allow-set, different job.
   "org.setupGuide": SET("super_admin", "org_admin"),
+  // T1/T6 · The action-items queue. Mirrors the roles that can actually decide
+  // something — see APPROVER_ROLES in src/lib/approval-scope.ts. `finance` is
+  // here because it may action expense claims; the page shows only the tabs a
+  // given role can act on rather than offering three and refusing two.
+  "org.approvals": SET("super_admin", "org_admin", "hr", "branch_admin", "manager", "finance"),
+  // T11 · The org-wide log. Same rows as the personal one, wider lens, so it
+  // needs the roles holding organisation-wide scope plus the narrower ones,
+  // which see only their own scope's employees.
+  "org.approvalActivity": SET("super_admin", "org_admin", "hr", "branch_admin", "manager"),
   // W7 · Mirrors "hr and org admin manage policies" on `policy_documents`.
   // Deliberately excludes `manager`: a line manager rewriting the
   // whistleblower policy is not something this product permits, and the RLS
