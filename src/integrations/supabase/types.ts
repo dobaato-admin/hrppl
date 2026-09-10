@@ -4821,6 +4821,8 @@ export type Database = {
           currency: string
           description: string | null
           employee_id: string
+          escalated_at: string | null
+          escalated_reason: string | null
           id: string
           paid_at: string | null
           paid_by: string | null
@@ -4844,6 +4846,8 @@ export type Database = {
           currency?: string
           description?: string | null
           employee_id: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           paid_at?: string | null
           paid_by?: string | null
@@ -4867,6 +4871,8 @@ export type Database = {
           currency?: string
           description?: string | null
           employee_id?: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           paid_at?: string | null
           paid_by?: string | null
@@ -6212,6 +6218,8 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          escalated_at: string | null
+          escalated_reason: string | null
           half_day_end: boolean
           half_day_start: boolean
           id: string
@@ -6231,6 +6239,8 @@ export type Database = {
           days: number
           employee_id: string
           end_date: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           half_day_end?: boolean
           half_day_start?: boolean
           id?: string
@@ -6250,6 +6260,8 @@ export type Database = {
           days?: number
           employee_id?: string
           end_date?: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           half_day_end?: boolean
           half_day_start?: boolean
           id?: string
@@ -12183,6 +12195,7 @@ export type Database = {
         Row: {
           address_line1: string | null
           address_line2: string | null
+          approval_escalation_days: number
           approved_at: string | null
           approved_by: string | null
           city: string | null
@@ -12218,6 +12231,7 @@ export type Database = {
         Insert: {
           address_line1?: string | null
           address_line2?: string | null
+          approval_escalation_days?: number
           approved_at?: string | null
           approved_by?: string | null
           city?: string | null
@@ -12253,6 +12267,7 @@ export type Database = {
         Update: {
           address_line1?: string | null
           address_line2?: string | null
+          approval_escalation_days?: number
           approved_at?: string | null
           approved_by?: string | null
           city?: string | null
@@ -12509,6 +12524,8 @@ export type Database = {
           consumed_by_run_id: string | null
           created_at: string
           employee_id: string
+          escalated_at: string | null
+          escalated_reason: string | null
           id: string
           notes: string | null
           overtime_breakdown: Json
@@ -12530,6 +12547,8 @@ export type Database = {
           consumed_by_run_id?: string | null
           created_at?: string
           employee_id: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           notes?: string | null
           overtime_breakdown?: Json
@@ -12551,6 +12570,8 @@ export type Database = {
           consumed_by_run_id?: string | null
           created_at?: string
           employee_id?: string
+          escalated_at?: string | null
+          escalated_reason?: string | null
           id?: string
           notes?: string | null
           overtime_breakdown?: Json

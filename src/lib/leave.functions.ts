@@ -427,11 +427,45 @@ export const submitLeaveRequest = createServerFn({ method: "POST" })
           kind: "leave_submitted",
           title: "Leave request",
           body: `${ctx?.employeeName ?? "An employee"} requested ${computedDays} day(s) of ${ctx?.leaveTypeName ?? "leave"} from ${data.startDate} to ${data.endDate}.`,
-          link: "/org/leave",
+          link: "/approvals",
         });
         return Promise.all([email, inApp]);
       }));
     } catch (e) { console.error("[leave.submit] notify failed", e); }
+
+    // T9 · Route onward if the line manager is already unavailable, so the
+    // request never lands in a queue nobody is reading. Best-effort: an
+    // escalation that fails must not fail the submission — the employee has
+    // done their part, and the ageing sweep will catch it.
+    try {
+      const { resolveEscalation, applyEscalation } = await import("@/lib/approval-escalation");
+      const target = await resolveEscalation(admin, emp.tenant_id, emp.id, data.startDate);
+      if (target) {
+        // Re-read rather than widening getEmployeeForUser's projection, which
+        // several other callers depend on being narrow.
+        const { data: full } = await admin
+          .from("employees")
+          .select("manager_id, first_name, last_name")
+          .eq("id", emp.id)
+          .maybeSingle();
+        const { data: mgrRow } = (full as any)?.manager_id
+          ? await admin.from("employees").select("user_id").eq("id", (full as any).manager_id).maybeSingle()
+          : { data: null };
+        await applyEscalation(admin, {
+          table: "leave_requests",
+          itemType: "leave",
+          itemId: req.id,
+          tenantId: emp.tenant_id,
+          employeeId: emp.id,
+          employeeName:
+            `${(full as any)?.first_name ?? ""} ${(full as any)?.last_name ?? ""}`.trim() ||
+            "An employee",
+          target,
+          originalApproverUserId: (mgrRow as any)?.user_id ?? null,
+          link: "/approvals",
+        });
+      }
+    } catch (e) { console.error("[leave.submit] escalation check failed", e); }
 
     return { request: req };
   });
@@ -489,7 +523,7 @@ export const cancelLeaveRequest = createServerFn({ method: "POST" })
           kind: "leave_cancelled",
           title: "Leave request withdrawn",
           body: `${ctx?.employeeName ?? "An employee"} withdrew their request for ${req.start_date} to ${req.end_date}.`,
-          link: "/org/leave",
+          link: "/approvals",
         });
         return Promise.all([email, inApp]);
       }));
@@ -552,7 +586,7 @@ export const approveLeaveRequest = createServerFn({ method: "POST" })
           kind: "leave_submitted",
           title: "Leave request awaiting your approval",
           body: `${ctx?.employeeName ?? "An employee"}'s ${ctx?.leaveTypeName ?? "leave"} request needs your sign-off (tier ${nextTier}).`,
-          link: "/org/leave",
+          link: "/approvals",
         })));
       } catch (e) { console.error("[leave.approve] tier notify failed", e); }
 

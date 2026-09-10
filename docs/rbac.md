@@ -47,7 +47,7 @@ Roles are **additive** — a user can hold multiple (e.g. `hr` + `finance`). `br
 <!-- BEGIN GENERATED MATRIX -->
 
 > **Generated** by `node scripts/gen-rbac-matrix.mjs` from `src/lib/rbac.ts`.
-> Do not edit between the markers — regenerate instead. 86 feature keys across 8 groups.
+> Do not edit between the markers — regenerate instead. 88 feature keys across 8 groups.
 
 `can(feature, roles)` controls **UI only**. RLS policies plus server-fn role checks are the actual enforcement; where a key mirrors a specific policy, the comment beside it in `rbac.ts` names that policy.
 
@@ -78,6 +78,8 @@ Legend: **●** = admitted · blank = no access
 | Feature key | `super_admin` | `regional_admin` | `org_admin` | `branch_admin` | `hr` | `finance` | `manager` | `employee` |
 |---|---|---|---|---|---|---|---|---|
 | `org.analytics` | ● |  | ● | ● | ● | ● |  |  |
+| `org.approvalActivity` | ● |  | ● | ● | ● |  | ● |  |
+| `org.approvals` | ● |  | ● | ● | ● | ● | ● |  |
 | `org.assets` | ● |  | ● | ● | ● | ● |  |  |
 | `org.auAwards` | ● |  | ● |  |  |  |  |  |
 | `org.auditHistory` | ● |  | ● |  |  |  |  |  |
@@ -183,14 +185,14 @@ Legend: **●** = admitted · blank = no access
 
 | Role | Feature keys admitted |
 |---|---|
-| `super_admin` | 86 of 86 |
-| `regional_admin` | 5 of 86 |
-| `org_admin` | 77 of 86 |
-| `branch_admin` | 28 of 86 |
-| `hr` | 47 of 86 |
-| `finance` | 22 of 86 |
-| `manager` | 26 of 86 |
-| `employee` | 1 of 86 |
+| `super_admin` | 88 of 88 |
+| `regional_admin` | 5 of 88 |
+| `org_admin` | 79 of 88 |
+| `branch_admin` | 30 of 88 |
+| `hr` | 49 of 88 |
+| `finance` | 23 of 88 |
+| `manager` | 28 of 88 |
+| `employee` | 1 of 88 |
 
 <!-- END GENERATED MATRIX -->
 

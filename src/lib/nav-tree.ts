@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardCheck,
+  ScrollText,
   Clock,
   CreditCard,
   DollarSign,
@@ -371,6 +372,17 @@ export const ORG_ITEMS: NavItem[] = [
     keywords: "guided onboarding checklist activate launch readiness configure",
   },
   {
+    // T1 · The action-items queue. Top level on purpose: it is the thing an
+    // approver opens every morning, and it was previously three separate pages
+    // none of which answered "is anything waiting for me".
+    title: "Approvals",
+    to: "/approvals",
+    icon: ClipboardCheck,
+    accent: "bg-status-pending",
+    feature: "org.approvals",
+    keywords: "approve reject queue pending leave expense timesheet action items",
+  },
+  {
     title: "Branches",
     to: "/org/branches",
     icon: Building2,
@@ -701,6 +713,16 @@ export const ORG_SECTIONS: NavSection[] = [
         accent: "bg-status-info",
         feature: "org.onboardingAdmin",
         keywords: "checklist",
+      },
+      {
+        // T11 · The org-wide approval log — same rows as the personal one on
+        // /approvals, wider lens.
+        title: "Approval activity",
+        to: "/org/approval-activity",
+        icon: ScrollText,
+        accent: "bg-status-info",
+        feature: "org.approvalActivity",
+        keywords: "audit who approved history log export",
       },
       {
         title: "Onboarding tracker",
