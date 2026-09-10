@@ -111,6 +111,16 @@ function EmployeesPage() {
   // own data — three round trips deep before a row appeared — and rendered
   // "No tenant assigned" for the whole of the first two.
   const { tenant, tenantId, isLoading: tenantLoading } = useMyTenant();
+  /**
+   * Set when the employee read actually failed, as opposed to returning nothing.
+   *
+   * The two used to be indistinguishable: `const { data: emps }` discarded the
+   * error and `emps ?? []` drew the same empty table either way, so a
+   * permissions failure, a dropped connection and a genuinely empty
+   * organisation all rendered as "No employees yet." Nobody could tell which
+   * they were looking at, and the page gave no reason to retry.
+   */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [search, setSearch] = useState("");
@@ -135,7 +145,7 @@ function EmployeesPage() {
 
   async function loadAll() {
     if (!tenantId) return;
-    const [{ data: emps }, { data: deps }] = await Promise.all([
+    const [empRes, depRes] = await Promise.all([
       supabase
         .from("employees")
         .select("*")
@@ -143,8 +153,20 @@ function EmployeesPage() {
         .order("created_at", { ascending: false }),
       supabase.from("departments").select("id,name").eq("tenant_id", tenantId).order("name"),
     ]);
-    setEmployees((emps ?? []) as Employee[]);
-    setDepartments((deps ?? []) as Department[]);
+
+    if (empRes.error) {
+      // Logged as well as shown: "the list was empty" and "the request failed"
+      // have to be distinguishable in the console too, not just on screen.
+      console.error("[employees] list failed", empRes.error);
+      setLoadError(empRes.error.message);
+      return;
+    }
+    setLoadError(null);
+    setEmployees((empRes.data ?? []) as Employee[]);
+    // Departments failing is not fatal — the list still renders, rows just show
+    // "—" for the department. Worth a log, not worth blocking on.
+    if (depRes.error) console.error("[employees] departments failed", depRes.error);
+    setDepartments((depRes.data ?? []) as Department[]);
     await loadSuspended();
   }
 
@@ -306,13 +328,36 @@ function EmployeesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.length === 0 && (
+                {loadError && (
+                  <TableRow>
+                    <TableCell colSpan={canManage ? 8 : 7} className="py-8 text-center">
+                      <p className="font-medium text-destructive">
+                        Could not load employees for this organisation.
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{loadError}</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-3"
+                        onClick={() => {
+                          setLoadError(null);
+                          void loadAll();
+                        }}
+                      >
+                        Try again
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )}
+                {!loadError && filtered.length === 0 && (
                   <TableRow>
                     <TableCell
                       colSpan={canManage ? 8 : 7}
                       className="text-center text-muted-foreground py-8"
                     >
-                      No employees yet.
+                      {employees.length === 0
+                        ? "No employees yet."
+                        : "No employees match your search."}
                     </TableCell>
                   </TableRow>
                 )}
