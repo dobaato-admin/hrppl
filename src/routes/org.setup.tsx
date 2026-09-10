@@ -32,6 +32,8 @@ import { getMyTrialInvitation, redeemMyTrialInvitation } from "@/lib/super-invit
 import { inviteStaff } from "@/lib/staff-invitations.functions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { validateBusinessRegistrationNumber } from "@/lib/payroll-validation";
+import { useFormErrors, FieldError } from "@/hooks/use-form-errors";
 
 export const Route = createFileRoute("/org/setup")({
   head: () => ({ meta: [{ title: "Set up your organization — hrppl" }] }),
@@ -68,6 +70,7 @@ function OrgSetupPage() {
   const trialInviteFn = useServerFn(getMyTrialInvitation);
   const redeemTrialFn = useServerFn(redeemMyTrialInvitation);
 
+  const form = useFormErrors();
   const [stepIdx, setStepIdx] = useState(0);
   const [stepInitialized, setStepInitialized] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -242,24 +245,63 @@ function OrgSetupPage() {
     const phone = details.contact_phone.trim();
     const reg = details.registration_number.trim();
     const hasTrialInvitation = !!trialInvitation;
-    if (!name || name.length < 2)
-      return toast.error("Organization name must be at least 2 characters.");
-    if (country.length !== 2) return toast.error("Please choose a country.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      return toast.error("Please enter a valid contact email.");
-    if (!hasTrialInvitation && phone.replace(/\D+/g, "").length < 6)
-      return toast.error("Contact phone is required.");
 
+    // Same rules and the same wording as before; what is new is that the field
+    // in question is marked, focused and named. Previously each of these was a
+    // bare toast, so on a two-column form the reader was told a rule had failed
+    // without being told which box it belonged to.
+    //
+    // A trial invitee is excused the phone and the registration number: they
+    // are mid-signup and those arrive later.
+    // Order matches the rendered layout, not the shape of the state object:
+    // `check` focuses the first failure, and "first" has to mean the one
+    // highest on screen or the cursor jumps past a field the reader can see is
+    // wrong. Phone renders above email here.
+    const ok = form.check([
+      {
+        name: "name",
+        value: name,
+        label: "Organization name",
+        rule: (v) => (v.length < 2 ? "Organization name must be at least 2 characters." : null),
+      },
+      {
+        name: "country_code",
+        value: country,
+        label: "Country",
+        rule: (v) => (v.length !== 2 ? "Please choose a country." : null),
+      },
+      {
+        name: "contact_phone",
+        value: phone,
+        label: "Contact phone",
+        required: !hasTrialInvitation,
+        rule: (v) => (v.replace(/\D+/g, "").length < 6 ? "Contact phone is required." : null),
+      },
+      {
+        name: "contact_email",
+        value: email,
+        label: "Contact email",
+        rule: (v) =>
+          /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : "Please enter a valid contact email.",
+      },
+      {
+        name: "registration_number",
+        value: reg,
+        label: country === "AU" ? "ABN" : "Business registration number",
+        required: !hasTrialInvitation,
+        rule: (v) => {
+          const r = validateBusinessRegistrationNumber(v, country);
+          return r.ok ? null : (r.error ?? "Not a valid registration number");
+        },
+      },
+    ]);
+    if (!ok) return;
+
+    // Already validated above; this only normalises the accepted value.
     let normalizedRegistrationNumber = reg;
     if (reg) {
-      const { validateBusinessRegistrationNumber } = await import("@/lib/payroll-validation");
-      const regCheck = validateBusinessRegistrationNumber(reg, country);
-      if (!regCheck.ok) return toast.error(regCheck.error);
-      normalizedRegistrationNumber = regCheck.value;
-    } else if (!hasTrialInvitation) {
-      return toast.error(
-        country === "AU" ? "ABN is required." : "Business registration number is required.",
-      );
+      const r = validateBusinessRegistrationNumber(reg, country);
+      if (r.ok) normalizedRegistrationNumber = r.value;
     }
 
     setBusy(true);
@@ -626,12 +668,20 @@ function OrgSetupPage() {
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Organization name</Label>
+                  <Label htmlFor="os-name">
+                    Organization name <span className="text-destructive">*</span>
+                  </Label>
                   <Input
+                    id="os-name"
                     value={details.name}
-                    onChange={(e) => setDetails({ ...details, name: e.target.value })}
+                    onChange={(e) => {
+                      form.clearField("name");
+                      setDetails({ ...details, name: e.target.value });
+                    }}
                     disabled={hasTenant}
+                    {...(form.register("name") as object)}
                   />
+                  <FieldError name="name" errors={form.errors} />
                 </div>
                 <div className="space-y-2">
                   <Label>Legal business name</Label>
@@ -657,10 +707,13 @@ function OrgSetupPage() {
                   </Label>
                   <Select
                     value={details.country_code}
-                    onValueChange={(v) => setDetails({ ...details, country_code: v })}
+                    onValueChange={(v) => {
+                      form.clearField("country_code");
+                      setDetails({ ...details, country_code: v });
+                    }}
                     disabled={hasTenant}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger {...(form.register("country_code") as object)}>
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                     <SelectContent>
@@ -671,6 +724,7 @@ function OrgSetupPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FieldError name="country_code" errors={form.errors} />
                 </div>
                 <div className="space-y-2">
                   <Label>
@@ -678,10 +732,16 @@ function OrgSetupPage() {
                     {trialInvitation ? null : <span className="text-destructive">*</span>}
                   </Label>
                   <Input
+                    id="os-contact_phone"
                     value={details.contact_phone}
-                    onChange={(e) => setDetails({ ...details, contact_phone: e.target.value })}
+                    onChange={(e) => {
+                      form.clearField("contact_phone");
+                      setDetails({ ...details, contact_phone: e.target.value });
+                    }}
                     placeholder="+61 4xx xxx xxx"
+                    {...(form.register("contact_phone") as object)}
                   />
+                  <FieldError name="contact_phone" errors={form.errors} />
                 </div>
                 <div className="space-y-2">
                   <Label>Your title</Label>
@@ -696,10 +756,16 @@ function OrgSetupPage() {
                     Contact email <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="os-contact_email"
                     type="email"
                     value={details.contact_email}
-                    onChange={(e) => setDetails({ ...details, contact_email: e.target.value })}
+                    onChange={(e) => {
+                      form.clearField("contact_email");
+                      setDetails({ ...details, contact_email: e.target.value });
+                    }}
+                    {...(form.register("contact_email") as object)}
                   />
+                  <FieldError name="contact_email" errors={form.errors} />
                 </div>
                 <div className="space-y-2">
                   <Label>
@@ -709,13 +775,17 @@ function OrgSetupPage() {
                     {trialInvitation ? null : <span className="text-destructive">*</span>}
                   </Label>
                   <Input
+                    id="os-registration_number"
                     value={details.registration_number}
-                    onChange={(e) =>
-                      setDetails({ ...details, registration_number: e.target.value })
-                    }
+                    onChange={(e) => {
+                      form.clearField("registration_number");
+                      setDetails({ ...details, registration_number: e.target.value });
+                    }}
                     placeholder={details.country_code.toUpperCase() === "AU" ? "11 digits" : ""}
                     inputMode={details.country_code.toUpperCase() === "AU" ? "numeric" : "text"}
+                    {...(form.register("registration_number") as object)}
                   />
+                  <FieldError name="registration_number" errors={form.errors} />
                 </div>
                 <div className="space-y-2">
                   <Label>Tax ID / TFN / EIN</Label>

@@ -550,14 +550,20 @@ export const updateCompanyProfile = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z
       .object({
-        legal_name: z.string().trim().max(200).optional(),
-        trading_name: z.string().trim().max(200).optional(),
-        address_line1: z.string().trim().max(200).optional(),
-        address_line2: z.string().trim().max(200).optional(),
-        city: z.string().trim().max(120).optional(),
-        region: z.string().trim().max(120).optional(),
-        postal_code: z.string().trim().max(30).optional(),
-        registration_number: z.string().trim().max(60).optional(),
+        // `nullish`, not `optional`. These mirror nullable columns, and the
+        // form prefills straight from the row — so a tenant with no trading
+        // name put `null` into the field and the whole submit was refused with
+        // "Expected string, received null" for every empty column at once. A
+        // null here means "clear it", which is a thing an admin may legitimately
+        // want to do.
+        legal_name: z.string().trim().max(200).nullish(),
+        trading_name: z.string().trim().max(200).nullish(),
+        address_line1: z.string().trim().max(200).nullish(),
+        address_line2: z.string().trim().max(200).nullish(),
+        city: z.string().trim().max(120).nullish(),
+        region: z.string().trim().max(120).nullish(),
+        postal_code: z.string().trim().max(30).nullish(),
+        registration_number: z.string().trim().max(60).nullish(),
       })
       .parse(d),
   )
@@ -569,7 +575,8 @@ export const updateCompanyProfile = createServerFn({ method: "POST" })
     const patch: Record<string, string | null> = {};
     for (const [k, v] of Object.entries(data)) {
       if (v === undefined) continue;
-      patch[k] = String(v).trim() === "" ? null : String(v).trim();
+      // null and "" both mean "clear this column".
+      patch[k] = v === null || String(v).trim() === "" ? null : String(v).trim();
     }
     if (Object.keys(patch).length === 0) return { ok: true };
 

@@ -23,6 +23,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { useMyTenantCountry } from "@/hooks/use-tenant";
+import { validateBusinessRegistrationNumber } from "@/lib/payroll-validation";
+import { useFormErrors, FieldError, type FieldSpec } from "@/hooks/use-form-errors";
 import {
   getSetupGuide,
   setSetupSegmentSkipped,
@@ -62,6 +65,10 @@ function SetupGuidePage() {
     registration_number: "",
   });
   const [companyLoaded, setCompanyLoaded] = useState(false);
+  // Field-level validation for the Segment 1 form. Lives in the page rather
+  // than the child so a server refusal (an ABN the ATO checksum rejects) can be
+  // mapped back onto the same fields the client-side check uses.
+  const form = useFormErrors();
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["setup-guide"],
@@ -113,9 +120,23 @@ function SetupGuidePage() {
     try {
       await companyFn({ data: company });
       await qc.invalidateQueries({ queryKey: ["setup-guide"] });
+      form.reset();
       toast.success("Company profile saved");
     } catch (e: any) {
-      toast.error(e?.message ?? "Could not save");
+      // A refusal the client could not have predicted — an ABN that fails the
+      // ATO checksum, or a schema issue — lands on the field it names rather
+      // than as a JSON blob in a toast. Falls back to a plain message when the
+      // error is not field-shaped.
+      const shown = form.fromServer(e, {
+        legal_name: "Registered legal entity name",
+        trading_name: "Trading name",
+        registration_number: "Registration number",
+        address_line1: "Head office address",
+        city: "City",
+        region: "State / region",
+        postal_code: "Postcode",
+      });
+      if (!shown) toast.error(e?.message ?? "Could not save");
     } finally {
       setBusy(false);
     }
@@ -327,6 +348,10 @@ function SetupGuidePage() {
                   onLoad={() => setCompanyLoaded(true)}
                   onSave={saveCompany}
                   busy={busy}
+                  errors={form.errors}
+                  register={form.register}
+                  check={form.check}
+                  clearField={form.clearField}
                 />
               )}
             </SectionCard>
@@ -344,6 +369,10 @@ function CompanyForm({
   onLoad,
   onSave,
   busy,
+  errors,
+  register,
+  check,
+  clearField,
 }: {
   value: Record<string, string>;
   onChange: (v: any) => void;
@@ -351,28 +380,78 @@ function CompanyForm({
   onLoad: () => void;
   onSave: () => void;
   busy: boolean;
+  errors: Record<string, string>;
+  register: (name: string) => Record<string, unknown>;
+  check: (fields: FieldSpec[]) => boolean;
+  clearField: (name: string) => void;
 }) {
   const guideFn = useServerFn(getSetupGuide);
   const { data } = useQuery({ queryKey: ["setup-guide"], queryFn: () => guideFn() });
+  const { country } = useMyTenantCountry();
 
   // Prefill once from whatever is already stored, so an admin editing one field
   // does not blank the rest.
+  //
+  // Nulls are coerced to "". The stored row has null for every column nobody
+  // has filled in, and spreading those straight into form state did two bad
+  // things: React switched the inputs from controlled to uncontrolled, and the
+  // submit sent `null` where the schema wanted a string — which is the
+  // "Expected string, received null" refusal this form used to answer with.
   useEffect(() => {
     if (loaded || !data) return;
-    const t = (data as any).tenantProfile;
-    if (t) onChange({ ...value, ...t });
+    const t = (data as any).tenantProfile as Record<string, unknown> | null;
+    if (t) {
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(t)) clean[k] = v == null ? "" : String(v);
+      onChange({ ...value, ...clean });
+    }
     onLoad();
   }, [data, loaded]);
 
-  const FIELDS: { key: string; label: string; placeholder?: string }[] = [
-    { key: "legal_name", label: "Registered legal entity name" },
-    { key: "trading_name", label: "Trading name (DBA)", placeholder: "Optional" },
-    { key: "registration_number", label: "ABN / registration number" },
-    { key: "address_line1", label: "Head office address" },
-    { key: "city", label: "City" },
-    { key: "region", label: "State / region" },
-    { key: "postal_code", label: "Postcode" },
+  const FIELDS: {
+    key: string;
+    label: string;
+    placeholder?: string;
+    required?: boolean;
+    rule?: (v: string) => string | null;
+  }[] = [
+    { key: "legal_name", label: "Registered legal entity name", required: true },
+    {
+      key: "trading_name",
+      label: "Trading name (DBA)",
+      placeholder: "Optional — leave blank if you trade under the legal name",
+      required: false,
+    },
+    {
+      key: "registration_number",
+      label: country === "AU" ? "ABN" : "Business registration number",
+      required: true,
+      // Checked here as well as on the server, so a mistyped ABN lands on the
+      // field instead of arriving as a thrown string after a round trip.
+      rule: (v) => {
+        const res = validateBusinessRegistrationNumber(v, country ?? "");
+        return res.ok ? null : (res.error ?? "Not a valid registration number");
+      },
+    },
+    { key: "address_line1", label: "Head office address", required: true },
+    { key: "city", label: "City", required: true },
+    { key: "region", label: "State / region", placeholder: "Optional", required: false },
+    { key: "postal_code", label: "Postcode", required: true },
   ];
+
+  function submit() {
+    const ok = check(
+      FIELDS.map((f) => ({
+        name: f.key,
+        value: value[f.key],
+        label: f.label,
+        required: f.required,
+        rule: f.rule,
+      })),
+    );
+    if (!ok) return;
+    onSave();
+  }
 
   return (
     <div className="mt-4 space-y-3 rounded-lg border bg-muted/20 p-4">
@@ -382,18 +461,24 @@ function CompanyForm({
           <div key={f.key} className="space-y-1.5">
             <Label htmlFor={`co-${f.key}`} className="text-xs">
               {f.label}
+              {f.required !== false && <span className="ml-0.5 text-destructive">*</span>}
             </Label>
             <Input
               id={`co-${f.key}`}
               value={value[f.key] ?? ""}
               placeholder={f.placeholder}
-              onChange={(e) => onChange({ ...value, [f.key]: e.target.value })}
+              {...(register(f.key) as object)}
+              onChange={(e) => {
+                clearField(f.key);
+                onChange({ ...value, [f.key]: e.target.value });
+              }}
             />
+            <FieldError name={f.key} errors={errors} />
           </div>
         ))}
       </div>
       <div className="flex justify-end">
-        <Button size="sm" onClick={onSave} disabled={busy}>
+        <Button size="sm" onClick={submit} disabled={busy}>
           {busy ? "Saving…" : "Save company profile"}
         </Button>
       </div>

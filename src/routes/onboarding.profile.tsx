@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useFormErrors, FieldError } from "@/hooks/use-form-errors";
 import {
   getCountrySchema, getPersonalFields, getAddressFields, getEmergencyFields,
   type FieldDef,
@@ -60,25 +61,64 @@ function OnboardingProfilePage() {
     }
   }, [data]);
 
+  // Validation applies to "Submit profile" only. "Save progress" is the resume
+  // feature — demanding a complete form to save a partial one would defeat it.
+  const fieldErrors = useFormErrors();
+
   const country = form.country_of_residence || form.country_code || data?.profile?.country_code;
   const schema = useMemo(() => getCountrySchema(country), [country]);
 
   function field<K extends string>(def: FieldDef, type: string = "text") {
     return (
       <div className="space-y-2" key={def.key}>
-        <Label>{def.label}{def.required && <span className="text-destructive">*</span>}</Label>
+        <Label htmlFor={`ob-${def.key}`}>
+          {def.label}
+          {def.required && <span className="text-destructive">*</span>}
+        </Label>
         <Input
+          id={`ob-${def.key}`}
           type={type}
           value={form[def.key] ?? ""}
-          onChange={(e) => setForm({ ...form, [def.key]: e.target.value })}
+          onChange={(e) => {
+            fieldErrors.clearField(def.key);
+            setForm({ ...form, [def.key]: e.target.value });
+          }}
           placeholder={def.placeholder}
-          required={def.required}
+          {...(fieldErrors.register(def.key) as object)}
         />
+        <FieldError name={def.key} errors={fieldErrors.errors} />
       </div>
     );
   }
 
+  /**
+   * Every field on the page, in render order, so the first unfilled one is the
+   * topmost one rather than whichever section happened to be built first.
+   */
+  function allFieldDefs(): FieldDef[] {
+    return [
+      ...getPersonalFields(),
+      ...schema.identifiers,
+      ...getAddressFields().filter((f) => f.key !== "country_of_residence"),
+      ...getEmergencyFields(),
+      ...schema.bank,
+      ...schema.statutory,
+    ];
+  }
+
   async function save(submit: boolean) {
+    if (submit) {
+      if (!country) {
+        toast.error("Choose your country of residence — it decides which tax and bank details we ask for");
+        return;
+      }
+      const ok = fieldErrors.check(
+        allFieldDefs()
+          .filter((d) => d.required)
+          .map((d) => ({ name: d.key, value: form[d.key], label: d.label })),
+      );
+      if (!ok) return;
+    }
     setBusy(true);
     try {
       await saveFn({ data: { ...form, country_code: country, submit } });
@@ -89,7 +129,10 @@ function OnboardingProfilePage() {
         toast.success("Progress saved");
       }
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to save");
+      // A server-side refusal lands on the field it names rather than as a
+      // JSON blob; falls back to a plain message when it is not field-shaped.
+      const labels = Object.fromEntries(allFieldDefs().map((d) => [d.key, d.label]));
+      if (!fieldErrors.fromServer(e, labels)) toast.error(e?.message ?? "Failed to save");
     } finally { setBusy(false); }
   }
 
