@@ -37,12 +37,37 @@ export const getPayrollSetup = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { tenantId } = await assertOrgAdmin(context);
     const { supabase } = context as any;
-    const [{ data: settings }, { data: components }, { data: departments }] = await Promise.all([
-      supabase.from("tenant_payroll_settings").select("*").eq("tenant_id", tenantId).maybeSingle(),
-      supabase.from("payroll_components").select("*").eq("tenant_id", tenantId).order("sort_order").order("label"),
-      supabase.from("departments").select("id, name").eq("tenant_id", tenantId).order("name"),
-    ]);
-    return { settings: settings ?? null, components: components ?? [], departments: departments ?? [] };
+    // The wizard needs to show what is already configured at each step, not
+    // just a count of it — an admin returning to "9 pay items configured"
+    // cannot tell whether the one they meant to add is among them.
+    const [{ data: settings }, { data: components }, { data: departments }, { data: tenant }] =
+      await Promise.all([
+        supabase.from("tenant_payroll_settings").select("*").eq("tenant_id", tenantId).maybeSingle(),
+        supabase.from("payroll_components").select("*").eq("tenant_id", tenantId).order("sort_order").order("label"),
+        supabase.from("departments").select("id, name").eq("tenant_id", tenantId).order("name"),
+        supabase.from("tenants").select("currency_code, country_code").eq("id", tenantId).maybeSingle(),
+      ]);
+
+    // Overtime and penalty rates are keyed by COUNTRY, not tenant — they are
+    // shared reference data, the same way public holidays are. Fetched here so
+    // the wizard's overtime step can list them instead of reporting a boolean.
+    const countryCode = (tenant as any)?.country_code ?? null;
+    const { data: overtimeRates } = countryCode
+      ? await supabase
+          .from("overtime_penalty_rates")
+          .select("id, code, name, applies_to, rate_multiplier, is_active")
+          .eq("country_code", countryCode)
+          .order("code")
+      : { data: [] as any[] };
+
+    return {
+      settings: settings ?? null,
+      components: components ?? [],
+      departments: departments ?? [],
+      overtimeRates: overtimeRates ?? [],
+      currencyCode: (tenant as any)?.currency_code ?? null,
+      countryCode,
+    };
   });
 
 const SettingsSchema = z.object({
@@ -361,5 +386,17 @@ export const getOvertimeReadiness = createServerFn({ method: "GET" })
     const { supabase, userId } = context as any;
     const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
     if (!profile?.tenant_id) throw new Error("No organisation");
-    return checkOvertimeReadiness(supabase, profile.tenant_id as string);
+    const readiness = await checkOvertimeReadiness(supabase, profile.tenant_id as string);
+    // The wizard reported "N rate(s) configured" and nothing else, so an admin
+    // could not tell whether the multiplier they needed was among them.
+    const { data: tenant } = await supabase
+      .from("tenants").select("country_code").eq("id", profile.tenant_id).maybeSingle();
+    const { data: rates } = (tenant as any)?.country_code
+      ? await supabase
+          .from("overtime_penalty_rates")
+          .select("id, code, name, applies_to, rate_multiplier, is_active")
+          .eq("country_code", (tenant as any).country_code)
+          .order("code")
+      : { data: [] as any[] };
+    return { ...readiness, rates: rates ?? [] };
   });

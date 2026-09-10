@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
+import { ExistingList } from "@/components/setup/ExistingList";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -101,6 +102,23 @@ function OvertimeWizard() {
                 </Button>
               )}
             </div>
+            <ExistingList
+              title="Rates configured for your country"
+              items={readinessQ.data?.rates ?? []}
+              keyOf={(r: any, idx) => r.id ?? String(idx)}
+              emptyTitle="No overtime or penalty rates yet."
+              emptyHint="Payroll cannot price overtime without at least one multiplier."
+              renderItem={(r: any) => (
+                <>
+                  <span className="font-mono text-xs font-medium">{r.code}</span>
+                  <span className="flex-1">{r.name}</span>
+                  <span className="text-xs text-muted-foreground">{r.applies_to}</span>
+                  <span className="text-xs font-medium tabular-nums">
+                    ×{Number(r.rate_multiplier ?? 1).toFixed(2)}
+                  </span>
+                </>
+              )}
+            />
           </CardContent>
         </Card>
 

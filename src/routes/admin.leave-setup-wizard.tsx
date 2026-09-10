@@ -30,6 +30,7 @@ import {
 import { Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
+import { ExistingList } from "@/components/setup/ExistingList";
 
 export const Route = createFileRoute("/admin/leave-setup-wizard")({
   head: () => ({ meta: [{ title: "Leave Setup Wizard — hrppl" }] }),
@@ -168,7 +169,7 @@ function LeaveWizard() {
           </CardHeader>
           <CardContent>
             {active.key === "leaveTypes" && (
-              <LeaveTypeStep hasType={steps.leaveTypes} onSaved={refresh} />
+              <LeaveTypeStep types={readinessQ.data?.types ?? []} onSaved={refresh} />
             )}
             {active.key === "accruals" && <AccrualsStep ok={steps.accruals} onSaved={refresh} />}
             {active.key === "approvalRouting" && <ApprovalStep ok={steps.approvalRouting} />}
@@ -203,7 +204,7 @@ function LeaveWizard() {
   );
 }
 
-function LeaveTypeStep({ hasType, onSaved }: { hasType: boolean; onSaved: () => void }) {
+function LeaveTypeStep({ types, onSaved }: { types: any[]; onSaved: () => void }) {
   const save = useServerFn(upsertLeaveTypeQuick);
   const [code, setCode] = useState("ANNUAL");
   const [name, setName] = useState("Annual leave");
@@ -241,15 +242,32 @@ function LeaveTypeStep({ hasType, onSaved }: { hasType: boolean; onSaved: () => 
 
   return (
     <div className="space-y-4">
-      {hasType ? (
-        <div className="rounded-md border bg-muted/40 p-3 text-sm">
-          At least one active leave type is configured. Add another, or move on.
-        </div>
-      ) : (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          No active leave types yet. Add at least one to continue.
-        </div>
-      )}
+      {/* "At least one is configured" told an admin nothing about which, so
+          the safe move was to add another — which is how a tenant ends up with
+          two Annual Leave types. */}
+      <ExistingList
+        title="Leave types already configured"
+        items={types}
+        keyOf={(t: any, i) => t.id ?? String(i)}
+        emptyTitle="No active leave types yet."
+        emptyHint="Add at least one to continue — nobody can submit a leave request without one."
+        renderItem={(t: any) => (
+          <>
+            <span className="font-mono text-xs font-medium">{t.code}</span>
+            <span className="flex-1">{t.name}</span>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {Number(t.annual_quota_days ?? 0)} days/yr
+            </span>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {Number(t.accrual_per_month ?? 0)}/mo
+            </span>
+            <span className="text-xs text-muted-foreground">{t.is_paid ? "paid" : "unpaid"}</span>
+            {t.is_active === false && (
+              <span className="text-xs text-muted-foreground">(inactive)</span>
+            )}
+          </>
+        )}
+      />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label>Code</Label>

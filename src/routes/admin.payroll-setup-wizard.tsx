@@ -27,6 +27,7 @@ import {
   upsertOvertimeRateQuick,
 } from "@/lib/payroll-setup.functions";
 import { CURRENCIES } from "@/lib/currencies";
+import { ExistingList, CurrentSettings } from "@/components/setup/ExistingList";
 import { AdminGate } from "@/components/AdminGate";
 import { ORG_ADMIN_ONLY } from "@/lib/rbac";
 
@@ -186,7 +187,6 @@ function WizardPage() {
           <CardContent>
             {active.key === "payItems" && (
               <PayItemsStep
-                hasItems={steps.payItems}
                 components={setupQ.data?.components ?? []}
                 onSaved={refresh}
               />
@@ -195,9 +195,11 @@ function WizardPage() {
               <PayDatesStep existing={setupQ.data?.settings ?? null} onSaved={refresh} />
             )}
             {active.key === "overtimeRates" && (
-              <OvertimeStep hasRates={steps.overtimeRates} onSaved={refresh} />
+              <OvertimeStep rates={setupQ.data?.overtimeRates ?? []} onSaved={refresh} />
             )}
-            {active.key === "currency" && <CurrencyStep onSaved={refresh} />}
+            {active.key === "currency" && (
+              <CurrencyStep current={setupQ.data?.currencyCode ?? null} onSaved={refresh} />
+            )}
           </CardContent>
         </Card>
 
@@ -229,15 +231,7 @@ function WizardPage() {
   );
 }
 
-function PayItemsStep({
-  hasItems,
-  components,
-  onSaved,
-}: {
-  hasItems: boolean;
-  components: any[];
-  onSaved: () => void;
-}) {
+function PayItemsStep({ components, onSaved }: { components: any[]; onSaved: () => void }) {
   const save = useServerFn(upsertPayrollComponent);
   const [code, setCode] = useState("BASIC");
   const [label, setLabel] = useState("Basic salary");
@@ -273,16 +267,31 @@ function PayItemsStep({
 
   return (
     <div className="space-y-4">
-      {hasItems ? (
-        <div className="rounded-md border bg-muted/40 p-3 text-sm">
-          {components.length} pay item{components.length === 1 ? "" : "s"} configured. Add another
-          below or move to the next step.
-        </div>
-      ) : (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          No active pay items yet. Add at least one to continue.
-        </div>
-      )}
+      {/* The components array was already in hand; only the rendering was
+          missing. A count alone cannot tell an admin whether the item they
+          meant to add is among the nine. */}
+      <ExistingList
+        title="Pay items already configured"
+        items={components}
+        keyOf={(c: any, i) => c.id ?? String(i)}
+        emptyTitle="No active pay items yet."
+        emptyHint="Add at least one earning or deduction so payslips can render."
+        renderItem={(c: any) => (
+          <>
+            <span className="font-mono text-xs font-medium">{c.code}</span>
+            <span className="flex-1">{c.label}</span>
+            <span className="text-xs text-muted-foreground">{c.kind}</span>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {c.calc_type === "flat"
+                ? Number(c.rate ?? 0).toFixed(2)
+                : `${Number(c.rate ?? 0)}% ${c.calc_type === "pct_of_basic" ? "of basic" : "of gross"}`}
+            </span>
+            {c.is_active === false && (
+              <span className="text-xs text-muted-foreground">(inactive)</span>
+            )}
+          </>
+        )}
+      />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label>Code</Label>
@@ -334,6 +343,8 @@ function PayItemsStep({
 }
 
 function PayDatesStep({ existing, onSaved }: { existing: any; onSaved: () => void }) {
+  // The form prefills from `existing`, but a prefilled field looks identical to
+  // a default — so what is actually stored is stated separately.
   const save = useServerFn(upsertPayrollSettings);
   const [period, setPeriod] = useState<"weekly" | "fortnightly" | "semimonthly" | "monthly">(
     existing?.pay_period ?? "monthly",
@@ -382,6 +393,18 @@ function PayDatesStep({ existing, onSaved }: { existing: any; onSaved: () => voi
 
   return (
     <div className="space-y-4">
+      {existing?.pay_period && (
+        <CurrentSettings
+          title="Currently saved"
+          rows={[
+            { label: "Pay period", value: existing.pay_period },
+            { label: "Hours per day", value: existing.standard_hours_per_day ?? "—" },
+            { label: "Days per week", value: existing.standard_days_per_week ?? "—" },
+            { label: "Meal break", value: `${existing.meal_break_minutes ?? 0} min` },
+            { label: "Rest break", value: `${existing.rest_break_minutes ?? 0} min` },
+          ]}
+        />
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label>Pay period</Label>
@@ -429,7 +452,7 @@ function PayDatesStep({ existing, onSaved }: { existing: any; onSaved: () => voi
   );
 }
 
-function OvertimeStep({ hasRates, onSaved }: { hasRates: boolean; onSaved: () => void }) {
+function OvertimeStep({ rates, onSaved }: { rates: any[]; onSaved: () => void }) {
   const save = useServerFn(upsertOvertimeRateQuick);
   const [code, setCode] = useState("OT15");
   const [name, setName] = useState("Weekday overtime ×1.5");
@@ -454,11 +477,29 @@ function OvertimeStep({ hasRates, onSaved }: { hasRates: boolean; onSaved: () =>
 
   return (
     <div className="space-y-4">
-      {!hasRates && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          Add at least one overtime or penalty rate to continue.
-        </div>
-      )}
+      {/* These are country-scoped shared reference data, so this is what your
+          country already has — not what this tenant added. Saying so avoids an
+          admin adding a second ×1.5 weekday rate that already existed. */}
+      <ExistingList
+        title="Overtime & penalty rates for your country"
+        items={rates}
+        keyOf={(r: any, i) => r.id ?? String(i)}
+        emptyTitle="No overtime or penalty rates yet."
+        emptyHint="Add at least one to continue — payroll cannot price overtime without a multiplier."
+        renderItem={(r: any) => (
+          <>
+            <span className="font-mono text-xs font-medium">{r.code}</span>
+            <span className="flex-1">{r.name}</span>
+            <span className="text-xs text-muted-foreground">{r.applies_to}</span>
+            <span className="text-xs font-medium tabular-nums">
+              ×{Number(r.rate_multiplier ?? 1).toFixed(2)}
+            </span>
+            {r.is_active === false && (
+              <span className="text-xs text-muted-foreground">(inactive)</span>
+            )}
+          </>
+        )}
+      />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <Label>Code</Label>
@@ -499,9 +540,11 @@ function OvertimeStep({ hasRates, onSaved }: { hasRates: boolean; onSaved: () =>
   );
 }
 
-function CurrencyStep({ onSaved }: { onSaved: () => void }) {
+function CurrencyStep({ current, onSaved }: { current: string | null; onSaved: () => void }) {
   const save = useServerFn(updateTenantCurrency);
-  const [code, setCode] = useState("USD");
+  // Was hardcoded to "USD", so a tenant already trading in AUD saw the wizard
+  // proposing to change it — and the step gave no sign of what was set.
+  const [code, setCode] = useState(current ?? "USD");
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
@@ -519,6 +562,24 @@ function CurrencyStep({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="space-y-4">
+      {current ? (
+        <CurrentSettings
+          title="Currently set"
+          rows={[
+            {
+              label: "Default currency",
+              value: CURRENCIES.find((c) => c.code === current)?.label ?? current,
+            },
+          ]}
+        />
+      ) : (
+        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <p className="font-medium">No currency set.</p>
+          <p className="mt-0.5 text-xs opacity-90">
+            Payroll cannot produce a payslip without one.
+          </p>
+        </div>
+      )}
       <div className="max-w-sm">
         <Label>Default currency</Label>
         <Select value={code} onValueChange={setCode}>

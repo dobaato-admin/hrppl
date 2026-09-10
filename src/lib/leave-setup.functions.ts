@@ -65,7 +65,17 @@ export const getLeaveReadiness = createServerFn({ method: "GET" })
     const { supabase, userId } = context as any;
     const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
     if (!profile?.tenant_id) throw new Error("No organisation");
-    return checkLeaveReadiness(supabase, profile.tenant_id as string);
+    const readiness = await checkLeaveReadiness(supabase, profile.tenant_id as string);
+    // The wizard shows what already exists at each step rather than only a
+    // count — an admin returning to "leave types configured" cannot otherwise
+    // tell whether the one they meant to add is among them, and the safe move
+    // is to add it again.
+    const { data: types } = await supabase
+      .from("leave_types")
+      .select("id, code, name, annual_quota_days, accrual_per_month, is_paid, requires_approval, is_active")
+      .eq("tenant_id", profile.tenant_id)
+      .order("name");
+    return { ...readiness, types: types ?? [] };
   });
 
 const QuickLeaveTypeSchema = z.object({
