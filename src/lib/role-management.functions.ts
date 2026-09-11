@@ -91,11 +91,48 @@ export const listTenantMembers = createServerFn({ method: "GET" })
       .eq("tenant_id", tenantId)
       .order("name");
 
+    // T23 · Why a row cannot be given a role.
+    //
+    // A role is granted to a *user*, and an employee whose invitation was
+    // never accepted has no user to grant it to. The page used to express that
+    // as a disabled button with a tooltip, which reads as a broken control —
+    // the reported symptom was "the + Role button appears inactive" with no
+    // explanation and nothing to do about it. Carrying the invitation here
+    // lets the row say which of the three states it is in (never invited,
+    // invited and waiting, invitation expired) and act on it in place.
+    const pendingEmails = (emps ?? [])
+      .filter((e: any) => !e.user_id && e.email)
+      .map((e: any) => String(e.email).toLowerCase());
+    const invitationByEmail = new Map<string, { id: string; status: string; expires_at: string | null }>();
+    if (pendingEmails.length > 0) {
+      const { data: invites } = await admin
+        .from("staff_invitations")
+        .select("id,email,status,expires_at,created_at")
+        .eq("tenant_id", tenantId)
+        .in("email", pendingEmails)
+        .order("created_at", { ascending: false });
+      for (const inv of invites ?? []) {
+        const key = String(inv.email).toLowerCase();
+        // Ordered newest-first, so the first one seen is the current one.
+        if (!invitationByEmail.has(key)) {
+          invitationByEmail.set(key, {
+            id: inv.id as string,
+            status: inv.status as string,
+            expires_at: (inv.expires_at as string | null) ?? null,
+          });
+        }
+      }
+    }
+
     return {
       members: (emps ?? []).map((e: any) => ({
         ...e,
         roles: e.user_id ? rolesByUser[e.user_id] ?? [] : [],
         scopes: e.user_id ? scopeByUser[e.user_id] ?? [] : [],
+        invitation:
+          !e.user_id && e.email
+            ? invitationByEmail.get(String(e.email).toLowerCase()) ?? null
+            : null,
       })),
       branches: branches ?? [],
     };
