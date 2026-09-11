@@ -27,6 +27,8 @@ import { useMyTenantCountry } from "@/hooks/use-tenant";
 import { validateBusinessRegistrationNumber } from "@/lib/payroll-validation";
 import { useFormErrors, FieldError, type FieldSpec } from "@/hooks/use-form-errors";
 import {
+  SEGMENT_KEYS,
+  type SegmentKey,
   getSetupGuide,
   setSetupSegmentSkipped,
   setSetupLastSegment,
@@ -37,6 +39,20 @@ import {
 
 export const Route = createFileRoute("/org/setup-guide")({
   head: () => ({ meta: [{ title: "Setup guide — hrppl" }] }),
+  /**
+   * `?segment=payroll` opens the guide on that segment.
+   *
+   * T19 · "Skip & finish" on the setup wizard's invite step sends an admin
+   * whose payroll setup is unfinished straight here, rather than dropping them
+   * on the dashboard with nothing to act on. An unrecognised value is ignored
+   * rather than refused — a stale link should open the guide, not an error.
+   */
+  validateSearch: (search: Record<string, unknown>): { segment?: SegmentKey } => {
+    const seg = search.segment;
+    return typeof seg === "string" && (SEGMENT_KEYS as readonly string[]).includes(seg)
+      ? { segment: seg as SegmentKey }
+      : {};
+  },
   component: () => (
     <AdminGate feature="org.setupGuide">
       <SetupGuidePage />
@@ -53,6 +69,7 @@ function SetupGuidePage() {
   const reopenFn = useServerFn(reopenSetup);
   const companyFn = useServerFn(updateCompanyProfile);
 
+  const { segment: requestedSegment } = Route.useSearch();
   const [active, setActive] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [company, setCompany] = useState({
@@ -84,6 +101,12 @@ function SetupGuidePage() {
   // time, which is the behaviour a checklist is supposed to remove.
   useEffect(() => {
     if (active || segments.length === 0) return;
+    // An explicit ?segment= wins over what was remembered: somebody following
+    // a link that names a segment is asking for that segment.
+    if (requestedSegment && segments.some((s: any) => s.key === requestedSegment)) {
+      setActive(requestedSegment);
+      return;
+    }
     const remembered = data?.state?.last_segment as string | undefined;
     if (remembered && segments.some((s: any) => s.key === remembered)) {
       setActive(remembered);
@@ -91,7 +114,7 @@ function SetupGuidePage() {
     }
     const next = segments.find((s: any) => !s.done && !s.skipped) ?? segments[0];
     setActive(next.key);
-  }, [segments, data, active]);
+  }, [segments, data, active, requestedSegment]);
 
   const current = useMemo(
     () => segments.find((s: any) => s.key === active) ?? null,
