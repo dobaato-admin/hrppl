@@ -14,7 +14,14 @@ import { clockIn, clockOut, upsertAttendanceEntry, submitTimesheet } from "@/lib
 import { AppShell } from "@/components/AppShell";
 import { KpiTile, CardRail, StatusChip, statusTone } from "@/components/monday";
 import { Clock, Timer, AlarmClock, FileCheck2 } from "lucide-react";
-import { browserTimeZone, localYmd } from "@/lib/work-date";
+import {
+  browserTimeZone,
+  localYmd,
+  workTimeInZone,
+  instantFromZonedWallTime,
+  hoursWorked,
+  resolveTimeZone,
+} from "@/lib/work-date";
 
 export const Route = createFileRoute("/attendance")({
   head: () => ({ meta: [{ title: "My attendance — hrppl" }] }),
@@ -30,8 +37,29 @@ interface Entry {
   hours_worked: number;
   notes: string | null;
   status: string;
+  /**
+   * The zone the punch was captured in, stamped on the row at punch time.
+   *
+   * Null on rows written before 20260823060000. Reading it back from the
+   * tenant would be wrong — correcting a tenant's timezone setting must not
+   * retroactively move historical shifts — so those rows fall back to the
+   * viewer's own zone, which is what they were being displayed in anyway.
+   */
+  work_timezone: string | null;
 }
 interface Timesheet { id: string; period_start: string; period_end: string; total_hours: number; overtime_hours: number; status: string; rejection_reason: string | null }
+
+/**
+ * The zone a row's times should be read and written in.
+ *
+ * The row's own `work_timezone` when it has one — stamped at punch time, so
+ * correcting the tenant's setting later cannot move a historical shift — and
+ * the viewer's own zone for rows written before that column existed, which is
+ * what they were already being displayed in.
+ */
+function zoneOf(e?: { work_timezone?: string | null } | null): string {
+  return resolveTimeZone(e?.work_timezone, browserTimeZone());
+}
 
 function startOfWeek(d: Date) {
   const x = new Date(d);
@@ -174,8 +202,13 @@ function AttendancePage() {
     setBusy(true);
     try {
       const ds = ymd(date);
-      const ci = clockInStr ? new Date(`${ds}T${clockInStr}:00`).toISOString() : null;
-      const co = clockOutStr ? new Date(`${ds}T${clockOutStr}:00`).toISOString() : null;
+      // T24 · The wall-clock reading in the box belongs to the row's zone, not
+      // the browser's. `new Date(`${ds}T${hh:mm}:00`)` parsed it as local time,
+      // so saving a row without editing it silently moved the punch by the
+      // difference between the viewer's zone and the one it was taken in.
+      const zone = zoneOf(entries.find((e) => e.work_date === ds));
+      const ci = clockInStr ? instantFromZonedWallTime(ds, clockInStr, zone).toISOString() : null;
+      const co = clockOutStr ? instantFromZonedWallTime(ds, clockOutStr, zone).toISOString() : null;
       await fnUpsert({ data: { workDate: ds, clockIn: ci, clockOut: co, breakMinutes: breakMin, notes } });
       toast.success("Saved");
       await loadWeek();
@@ -195,8 +228,23 @@ function AttendancePage() {
   if (loading || !user) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</main>;
   if (!empId) return <main className="flex min-h-screen items-center justify-center text-muted-foreground">No employee record linked.</main>;
 
-  const fmtTime = (iso: string | null) => iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  /**
+   * T24 · Render a punch in the zone it was taken in, not the viewer's.
+   *
+   * This was `new Date(iso).toLocaleTimeString([])`, which renders in whatever
+   * zone the *renderer* is in. On the employee's own device that is usually
+   * right; under SSR the renderer is a UTC server, which is how a 23:50
+   * clock-in came back as 13:50 for an AEST employee — a clean ten hours, the
+   * AEST offset. Reading the row's own `work_timezone` makes the displayed
+   * time match what the person actually saw on their clock, from any device in
+   * any zone, and makes the server and the browser render the same string.
+   */
+  const fmtTime = (iso: string | null, e?: Entry | null) =>
+    iso ? workTimeInZone(iso, zoneOf(e)) : "";
 
+  // Usually one; more than one means the week's punches were taken in
+  // different zones, in which case naming a single zone would be a lie.
+  const weekZones = Array.from(new Set(entries.filter((e) => e.clock_in).map((e) => zoneOf(e))));
   const submittedCount = timesheets.filter((t) => t.status === "submitted" || t.status === "pending").length;
   const rejectedCount = timesheets.filter((t) => t.status === "rejected").length;
 
@@ -209,7 +257,7 @@ function AttendancePage() {
             value={isClockedIn ? "Clocked in" : todayEntry?.clock_out ? "Done" : "—"}
             tone={isClockedIn ? "working" : todayEntry?.clock_out ? "done" : "pending"}
             icon={Clock}
-            hint={todayEntry?.clock_in ? `In ${fmtTime(todayEntry.clock_in)}${todayEntry.clock_out ? ` · Out ${fmtTime(todayEntry.clock_out)}` : ""}` : "Not clocked in"}
+            hint={todayEntry?.clock_in ? `In ${fmtTime(todayEntry.clock_in, todayEntry)}${todayEntry.clock_out ? ` · Out ${fmtTime(todayEntry.clock_out, todayEntry)}` : ""}` : "Not clocked in"}
           />
           <KpiTile label="Week hours" value={totalWeekHours.toFixed(1)} tone="info" icon={Timer} hint={`${ymd(weekStart)} → ${ymd(weekEnd)}`} />
           <KpiTile label="Awaiting approval" value={submittedCount} tone={submittedCount > 0 ? "working" : "done"} icon={FileCheck2} />
@@ -221,8 +269,8 @@ function AttendancePage() {
           <CardHeader>
             <CardTitle className="text-base">Today</CardTitle>
             <CardDescription>
-              {todayEntry?.clock_in ? `In at ${fmtTime(todayEntry.clock_in)}` : "Not clocked in"}
-              {todayEntry?.clock_out ? ` · Out at ${fmtTime(todayEntry.clock_out)} · ${todayEntry.hours_worked}h` : ""}
+              {todayEntry?.clock_in ? `In at ${fmtTime(todayEntry.clock_in, todayEntry)}` : "Not clocked in"}
+              {todayEntry?.clock_out ? ` · Out at ${fmtTime(todayEntry.clock_out, todayEntry)} · ${todayEntry.hours_worked}h` : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex gap-2">
@@ -247,6 +295,18 @@ function AttendancePage() {
             </div>
           </CardHeader>
           <CardContent>
+            {/*
+              T24 · Said once, where the times are, rather than left to be
+              worked out from a discrepancy. Times are shown in the zone each
+              punch was taken in, which is what the employee saw; hours worked
+              is a difference between two instants and is unaffected either
+              way.
+            */}
+            <p className="mb-3 text-xs text-muted-foreground">
+              Clock times are shown in the time zone each punch was recorded in
+              {weekZones.length === 1 ? ` (${weekZones[0]})` : ""} — the time you saw on your own
+              device. Hours worked is the figure used for pay and is not affected by time zones.
+            </p>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -297,11 +357,10 @@ function AttendancePage() {
 }
 
 function DayRow({ date, entry, onSave, disabled }: { date: Date; entry?: Entry; onSave: (d: Date, ci: string, co: string, br: number, notes: string) => void; disabled: boolean }) {
-  const tStr = (iso: string | null) => {
-    if (!iso) return "";
-    const d = new Date(iso);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  };
+  // Same zone the row was captured in — see fmtTime. `d.getHours()` read the
+  // browser's, so the value in the box was not the time the punch was taken.
+  const zone = zoneOf(entry);
+  const tStr = (iso: string | null) => (iso ? workTimeInZone(iso, zone) : "");
   const [ci, setCi] = useState(tStr(entry?.clock_in ?? null));
   const [co, setCo] = useState(tStr(entry?.clock_out ?? null));
   const [br, setBr] = useState(entry?.break_minutes ?? 0);
@@ -320,7 +379,23 @@ function DayRow({ date, entry, onSave, disabled }: { date: Date; entry?: Entry; 
       <TableCell><Input type="time" value={ci} onChange={(e) => setCi(e.target.value)} className="w-28" /></TableCell>
       <TableCell><Input type="time" value={co} onChange={(e) => setCo(e.target.value)} className="w-28" /></TableCell>
       <TableCell><Input type="number" min={0} max={720} value={br} onChange={(e) => setBr(Number(e.target.value))} className="w-24" /></TableCell>
-      <TableCell>{Number(entry?.hours_worked ?? 0).toFixed(2)}</TableCell>
+      <TableCell>
+        {/*
+          T24 · Hours worked is the figure that decides pay, and the one figure
+          a time zone cannot corrupt — it is a difference between two instants,
+          so both ends shift together. Recomputed live from what is in the
+          boxes so an edit shows its effect on hours before it is saved.
+        */}
+        <span className="font-medium tabular-nums">
+          {(
+            hoursWorked(
+              ci ? instantFromZonedWallTime(ymd(date), ci, zone) : null,
+              co ? instantFromZonedWallTime(ymd(date), co, zone) : null,
+              br,
+            ) ?? Number(entry?.hours_worked ?? 0)
+          ).toFixed(2)}
+        </span>
+      </TableCell>
       <TableCell><Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" /></TableCell>
       <TableCell className="text-right">
         <Button size="sm" variant="outline" disabled={disabled} onClick={() => onSave(date, ci, co, br, notes)}>Save</Button>
