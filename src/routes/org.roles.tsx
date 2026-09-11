@@ -33,13 +33,14 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ShieldCheck, Plus, X } from "lucide-react";
+import { ShieldCheck, Plus, X, Mail, AlertTriangle } from "lucide-react";
 import {
   listTenantMembers,
   grantRole,
   revokeRole,
   setBranchScope,
 } from "@/lib/role-management.functions";
+import { resendInvitation } from "@/lib/staff-invitations.functions";
 
 export const Route = createFileRoute("/org/roles")({
   head: () => ({ meta: [{ title: "Roles & permissions — hrppl" }] }),
@@ -85,7 +86,65 @@ type Member = {
   status: string | null;
   roles: string[];
   scopes: { branch_id: string | null; country_code: string | null }[];
+  /** Set only for an employee with no linked user account. See accountState(). */
+  invitation: { id: string; status: string; expires_at: string | null } | null;
 };
+
+/**
+ * T23 · Why this person has no roles, in the three states that are actually
+ * different to an admin.
+ *
+ * "Roles: none" with a greyed-out button was the whole of the explanation. It
+ * reads as a broken control, and the admin has no way to tell an employee
+ * added by hand from one whose invitation bounced — which is the difference
+ * between "invite them" and "resend it".
+ */
+type AccountState =
+  | { kind: "active" }
+  | { kind: "never_invited" }
+  | { kind: "awaiting_acceptance"; invitationId: string }
+  | { kind: "invitation_expired"; invitationId: string }
+  | { kind: "invitation_revoked"; invitationId: string };
+
+export function accountState(m: {
+  user_id: string | null;
+  invitation?: { id: string; status: string; expires_at: string | null } | null;
+}): AccountState {
+  if (m.user_id) return { kind: "active" };
+  const inv = m.invitation ?? null;
+  if (!inv) return { kind: "never_invited" };
+  if (inv.status === "revoked") return { kind: "invitation_revoked", invitationId: inv.id };
+  const expired = !!inv.expires_at && new Date(inv.expires_at).getTime() < Date.now();
+  if (inv.status !== "pending" || expired) {
+    return { kind: "invitation_expired", invitationId: inv.id };
+  }
+  return { kind: "awaiting_acceptance", invitationId: inv.id };
+}
+
+/** What the row says, and what the button beside it offers to do. */
+export function accountStateCopy(state: AccountState): { label: string; action: string | null } {
+  switch (state.kind) {
+    case "active":
+      return { label: "", action: null };
+    case "never_invited":
+      return {
+        label: "No account yet — roles are granted to a person who has signed in.",
+        action: "Send invitation",
+      };
+    case "awaiting_acceptance":
+      return {
+        label: "Invited, waiting for them to accept. Roles can be granted once they sign in.",
+        action: "Resend invitation",
+      };
+    case "invitation_expired":
+      return {
+        label: "Their invitation expired before they accepted it.",
+        action: "Resend invitation",
+      };
+    case "invitation_revoked":
+      return { label: "Their invitation was revoked.", action: "Send a new invitation" };
+  }
+}
 
 type Branch = { id: string; name: string; code: string | null };
 
@@ -97,6 +156,7 @@ function OrgRolesPage() {
   const grantFn = useServerFn(grantRole);
   const revokeFn = useServerFn(revokeRole);
   const scopeFn = useServerFn(setBranchScope);
+  const resendFn = useServerFn(resendInvitation);
   // W5 · Derived from this page's nav feature key rather than a
   // hand-rolled list, so the sidebar and the page cannot give different
   // answers to "who may be here".
@@ -108,6 +168,7 @@ function OrgRolesPage() {
   const [newRole, setNewRole] = useState<string>("hr");
   const [newBranch, setNewBranch] = useState<string>("");
   const [scopeBranches, setScopeBranches] = useState<Set<string>>(new Set());
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -141,8 +202,17 @@ function OrgRolesPage() {
 
   async function doGrant() {
     if (!target?.user_id) return;
+    const roleMeta = ASSIGNABLE_ROLES.find((r) => r.value === newRole);
+    // T23 · The label said "required" and nothing required it. A scoped role
+    // granted with no branch produces a role_scope with no rows, which reads
+    // as *every* branch — so an admin meaning to limit someone to one branch
+    // silently gave them the organisation. Refuse while there is a branch to
+    // pick; when the org has none, say plainly what the grant will mean.
+    if (roleMeta?.scoped && !newBranch && branches.length > 0) {
+      toast.error(`Choose a branch for ${roleMeta.label} — it decides what they can see.`);
+      return;
+    }
     try {
-      const roleMeta = ASSIGNABLE_ROLES.find((r) => r.value === newRole);
       await grantFn({
         data: {
           user_id: target.user_id,
@@ -156,6 +226,31 @@ function OrgRolesPage() {
     } catch (e: any) {
       toast.error(e?.message ?? "Failed");
     }
+  }
+
+  /**
+   * Resend — or point at where to send a first invitation.
+   *
+   * `resendInvitation` only accepts an invitation that is still pending, so an
+   * expired or revoked one, and a person never invited at all, are sent to the
+   * invitations page rather than failing here with a refusal the admin cannot
+   * act on.
+   */
+  async function resendFor(m: Member, state: ReturnType<typeof accountState>) {
+    if (state.kind === "awaiting_acceptance") {
+      setResendingId(m.id);
+      try {
+        await resendFn({ data: { id: state.invitationId } });
+        toast.success(`Invitation resent to ${m.email ?? "them"}`);
+        qc.invalidateQueries({ queryKey: ["tenant-members"] });
+      } catch (e: any) {
+        toast.error(e?.message ?? "Could not resend the invitation");
+      } finally {
+        setResendingId(null);
+      }
+      return;
+    }
+    navigate({ to: "/org/invitations" });
   }
 
   async function doRevoke(m: Member, role: string) {
@@ -220,8 +315,11 @@ function OrgRolesPage() {
               <CardTitle>Team roles</CardTitle>
             </div>
             <CardDescription>
-              Assign Org Admin, Branch Admin, HR, Finance, Manager or Employee. Branch-scoped roles
-              (Branch Admin, HR, Finance, Manager) require one or more branches.
+              Assign Org Admin, Branch Admin, HR, Finance, Manager or Employee. Branch-scoped
+              roles (Branch Admin, HR, Finance, Manager) are limited to the branches you choose;
+              Org Admin and Employee apply across the whole organisation. Roles are granted to a
+              person who has signed in, so anyone still holding an unaccepted invitation shows
+              what they are waiting on instead.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -248,6 +346,8 @@ function OrgRolesPage() {
                       const hasScopedRole = m.roles.some((r) =>
                         ["branch_admin", "hr", "finance", "manager"].includes(r),
                       );
+                      const state = accountState(m);
+                      const stateCopy = accountStateCopy(state);
                       const branchNames = m.scopes
                         .map((s) => (s.branch_id ? branchById.get(s.branch_id)?.name : null))
                         .filter(Boolean);
@@ -263,7 +363,9 @@ function OrgRolesPage() {
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
                               {m.roles.length === 0 ? (
-                                <span className="text-xs text-muted-foreground">none</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {state.kind === "active" ? "none" : "—"}
+                                </span>
                               ) : (
                                 m.roles.map((r) => (
                                   <Badge key={r} variant="secondary" className="gap-1">
@@ -299,22 +401,39 @@ function OrgRolesPage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              {hasScopedRole && (
-                                <Button size="sm" variant="outline" onClick={() => openScope(m)}>
-                                  Branches
+                            {state.kind === "active" ? (
+                              <div className="flex justify-end gap-2">
+                                {hasScopedRole && (
+                                  <Button size="sm" variant="outline" onClick={() => openScope(m)}>
+                                    Branches
+                                  </Button>
+                                )}
+                                <Button size="sm" onClick={() => openGrant(m)} title="Grant a role">
+                                  <Plus className="mr-1 h-3 w-3" />
+                                  Role
                                 </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                onClick={() => openGrant(m)}
-                                disabled={!m.user_id}
-                                title={!m.user_id ? "User has not signed in yet" : "Grant a role"}
-                              >
-                                <Plus className="mr-1 h-3 w-3" />
-                                Role
-                              </Button>
-                            </div>
+                              </div>
+                            ) : (
+                              // T23 · Say why, and offer the thing that fixes
+                              // it, in the row. A disabled button with a
+                              // tooltip is indistinguishable from a bug.
+                              <div className="flex flex-col items-end gap-1">
+                                <span className="text-xs text-muted-foreground text-right max-w-[16rem]">
+                                  {stateCopy.label}
+                                </span>
+                                {stateCopy.action && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={resendingId === m.id}
+                                    onClick={() => resendFor(m, state)}
+                                  >
+                                    <Mail className="mr-1 h-3 w-3" />
+                                    {resendingId === m.id ? "Sending…" : stateCopy.action}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -357,25 +476,50 @@ function OrgRolesPage() {
                 </SelectContent>
               </Select>
             </div>
-            {ASSIGNABLE_ROLES.find((r) => r.value === newRole)?.scoped && (
-              <div>
-                <Label>Branch (required for scoped roles)</Label>
-                <Select value={newBranch} onValueChange={setNewBranch}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select branch…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Use the Branches button later to assign multiple branches.
-                </p>
-              </div>
+            {ASSIGNABLE_ROLES.find((r) => r.value === newRole)?.scoped &&
+              (branches.length === 0 ? (
+                // The org has no branches at all. Granting anyway is correct —
+                // a one-site organisation should not have to invent a branch —
+                // but the admin must be told that is what they are doing.
+                <div className="flex items-start gap-2 rounded-md border border-status-stuck/40 bg-status-stuck/5 p-3 text-sm">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-status-stuck" />
+                  <span>
+                    This organisation has no branches, so this role will cover the whole
+                    organisation. Create branches under Organization → Branches first if you meant
+                    to limit it.
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <Label htmlFor="grant-branch">
+                    Branch <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={newBranch} onValueChange={setNewBranch}>
+                    <SelectTrigger id="grant-branch" aria-invalid={!newBranch}>
+                      <SelectValue placeholder="Select branch…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branches.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {newBranch
+                      ? "Use the Branches button later to add more branches."
+                      : "Without a branch this role would cover the whole organisation."}
+                  </p>
+                </div>
+              ))}
+            {!ASSIGNABLE_ROLES.find((r) => r.value === newRole)?.scoped && (
+              // Confirms the other half of T23: Org Admin and Employee are not
+              // branch-scoped and are assignable to somebody with no branch.
+              <p className="text-xs text-muted-foreground">
+                {ASSIGNABLE_ROLES.find((r) => r.value === newRole)?.label} is not branch-scoped — it
+                applies across the organisation and needs no branch.
+              </p>
             )}
           </div>
           <DialogFooter>
