@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { validateInvitationDetails } from "@/lib/payroll-validation";
 import { enforcePublicRateLimit } from "@/lib/rate-limit.functions";
+import { outstandingSetupItems } from "@/lib/payroll-readiness";
+import { plainDbMessage } from "@/lib/db-error";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -88,6 +90,30 @@ const inviteSchema = z.object({
   duties: z.array(dutyItemSchema).max(50).optional().default([]),
 });
 
+/**
+ * The setup items still outstanding for a tenant, in plain language.
+ *
+ * Never throws: this is advisory on the invite path, and an invitation must
+ * not fail because a readiness check did. A failed read returns an empty list
+ * — see `outstandingSetupItems`, which treats "unknown" as "do not claim it is
+ * missing".
+ */
+async function readOutstandingSetup(admin: any, tenantId: string) {
+  try {
+    const { checkPayrollReadiness, checkOvertimeReadiness } = await import("@/lib/payroll-setup.functions");
+    const { checkLeaveReadiness } = await import("@/lib/leave-setup.functions");
+    const [payroll, overtime, leave] = await Promise.all([
+      checkPayrollReadiness(admin, tenantId).catch(() => null),
+      checkOvertimeReadiness(admin, tenantId).catch(() => null),
+      checkLeaveReadiness(admin, tenantId).catch(() => null),
+    ]);
+    return outstandingSetupItems(payroll, overtime, leave);
+  } catch (e) {
+    console.error("[invite] could not read setup readiness", e);
+    return [];
+  }
+}
+
 export const inviteStaff = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => inviteSchema.parse(data))
@@ -103,27 +129,20 @@ export const inviteStaff = createServerFn({ method: "POST" })
     }
     const admin = await loadAdmin();
 
-    // Hard-block: payroll, overtime, and leave setup must all be complete
-    // before any invitation can be created. Server-side enforcement so the
-    // gate cannot be bypassed by a stale or tampered UI state.
-    const { checkPayrollReadiness, checkOvertimeReadiness } = await import("@/lib/payroll-setup.functions");
-    const { checkLeaveReadiness } = await import("@/lib/leave-setup.functions");
-    const [payroll, overtime, leave] = await Promise.all([
-      checkPayrollReadiness(admin, tenantId),
-      checkOvertimeReadiness(admin, tenantId),
-      checkLeaveReadiness(admin, tenantId),
-    ]);
-    if (!payroll.allComplete) {
-      const missing = Object.entries(payroll.steps).filter(([, ok]) => !ok).map(([k]) => k).join(", ");
-      throw new Error(`Complete the Payroll Setup Wizard before inviting employees. Outstanding: ${missing}.`);
-    }
-    if (!overtime.allComplete) {
-      throw new Error("Complete the Overtime & Penalty Rates setup before inviting employees.");
-    }
-    if (!leave.allComplete) {
-      const missing = Object.entries(leave.steps).filter(([, ok]) => !ok).map(([k]) => k).join(", ");
-      throw new Error(`Complete the Leave Setup Wizard before inviting employees. Outstanding: ${missing}.`);
-    }
+    // T19 · Payroll setup is reported, not enforced, here.
+    //
+    // This used to be a hard block: no invitation could be created until
+    // payroll, overtime and leave setup were all complete, and the refusal
+    // printed the raw check keys ("Outstanding: payItems, payDates"). It made
+    // the common case impossible — an org admin inviting the HR or finance
+    // person who is going to *do* the payroll setup — and left the invite row
+    // showing "Failed" with no way forward.
+    //
+    // The enforcement moved to the point where it actually matters:
+    // `createPayrollRun` refuses to open a run against an incomplete setup,
+    // and `computePayrollRun` refuses to pay an employee who has no pay
+    // details. Inviting somebody pays nobody.
+    const outstanding = await readOutstandingSetup(admin, tenantId);
 
     const { data: tenant } = await admin
       .from("tenants").select("name,country_code").eq("id", tenantId).maybeSingle();
@@ -131,6 +150,26 @@ export const inviteStaff = createServerFn({ method: "POST" })
 
     const { data: inviter } = await admin
       .from("profiles").select("full_name,email").eq("id", userId).maybeSingle();
+
+    // T19 · Validated *before* the row is written. This check used to run after
+    // the invitation had been created and the email sent, so a refusal here
+    // left a live, delivered invitation while the sender was told "Failed" —
+    // one of the ways an invite row could show as failed and still exist.
+    const dutySum = (data.duties ?? []).reduce((s, d) => s + Number(d.weight || 0), 0);
+    let weightWarning: string | null = null;
+    if (data.duties && data.duties.length > 0) {
+      const { data: tSet } = await admin.from("tenants")
+        .select("kpi_weight_tolerance, kpi_strict_weights").eq("id", tenantId).maybeSingle();
+      const tolerance = Number(tSet?.kpi_weight_tolerance ?? 0);
+      const strict = Boolean(tSet?.kpi_strict_weights ?? true);
+      const within = Math.abs(dutySum - 100) <= tolerance;
+      if (strict && !within) {
+        throw new Error(`KPI weights must sum to 100% (±${tolerance}%). Current total: ${dutySum}%. Nothing was sent.`);
+      }
+      if (!within) {
+        weightWarning = `Duty KPI weights sum to ${dutySum}% (expected 100%, ±${tolerance}%). The invitation was sent — adjust weights before reviews start.`;
+      }
+    }
 
     const token = generateToken();
     const { data: inserted, error } = await admin
@@ -148,38 +187,51 @@ export const inviteStaff = createServerFn({ method: "POST" })
         state_region: data.state_region || null,
         duties: data.duties ?? [],
       }).select("id,token").single();
-    if (error || !inserted) throw new Error(error?.message ?? "Could not create invitation");
+    if (error || !inserted) {
+      // The raw message here named the table and the constraint. T19 reported
+      // an invitation stuck at "Failed"; whatever the cause, the admin needs a
+      // sentence, and we need the original in the log.
+      console.error("[invite] could not create invitation", error);
+      throw new Error(plainDbMessage(error, "Could not create the invitation. Nothing was sent."));
+    }
 
     const inviteUrl = `${appUrl()}/invite/${token}`;
-    await sendInternalEmail({
-      templateName: "staff-invitation",
-      recipientEmail: data.email,
-      idempotencyKey: `invite-${inserted.id}`,
-      templateData: {
-        organizationName: tenant.name,
-        inviterName: inviter?.full_name || inviter?.email,
-        firstName: data.first_name || null,
-        jobTitle: data.job_title || null,
-        inviteUrl,
-      },
-    });
-
-    const dutySum = (data.duties ?? []).reduce((s, d) => s + Number(d.weight || 0), 0);
-    let weightWarning: string | null = null;
-    if (data.duties && data.duties.length > 0) {
-      const { data: tSet } = await admin.from("tenants")
-        .select("kpi_weight_tolerance, kpi_strict_weights").eq("id", tenantId).maybeSingle();
-      const tolerance = Number(tSet?.kpi_weight_tolerance ?? 0);
-      const strict = Boolean(tSet?.kpi_strict_weights ?? true);
-      const within = Math.abs(dutySum - 100) <= tolerance;
-      if (strict && !within) {
-        throw new Error(`KPI weights must sum to 100% (±${tolerance}%). Current total: ${dutySum}%.`);
-      }
-      if (!within) {
-        weightWarning = `Duty KPI weights sum to ${dutySum}% (expected 100%, ±${tolerance}%). The invitation was sent — adjust weights before reviews start.`;
-      }
+    // T19 · The invitation row is already committed at this point, so a mail
+    // failure must not be reported as the invitation having failed. It was:
+    // the row existed and was redeemable while the admin saw "Failed", tried
+    // nothing further, and ended up with a person who had been invited
+    // according to the database and not according to them.
+    let deliveryError: string | null = null;
+    try {
+      await sendInternalEmail({
+        templateName: "staff-invitation",
+        recipientEmail: data.email,
+        idempotencyKey: `invite-${inserted.id}`,
+        templateData: {
+          organizationName: tenant.name,
+          inviterName: inviter?.full_name || inviter?.email,
+          firstName: data.first_name || null,
+          jobTitle: data.job_title || null,
+          inviteUrl,
+        },
+      });
+    } catch (e: any) {
+      console.error("[invite] created but could not be emailed", inserted.id, e);
+      deliveryError =
+        "The invitation was created but the email could not be sent. Use Resend, or copy the invitation link.";
     }
-    return { id: inserted.id, inviteUrl, weight_sum: dutySum, warning: weightWarning };
+
+    return {
+      id: inserted.id,
+      inviteUrl,
+      weight_sum: dutySum,
+      warning: weightWarning,
+      /** Null when the invitation email went out. A sentence when it did not. */
+      deliveryError,
+      // The caller renders this as a notice beside the sent invitation. It is
+      // advisory: the invitation is already created by this point.
+      payrollOutstanding: outstanding,
+    };
   });
 
 

@@ -310,6 +310,36 @@ export const getPayrollReadiness = createServerFn({ method: "GET" })
     return checkPayrollReadiness(supabase, profile.tenant_id as string);
   });
 
+/**
+ * Everything still outstanding before this organisation can pay anybody, in
+ * plain language, with the page that fixes each one.
+ *
+ * T19 · The setup wizard's invite step shows this as a notice rather than a
+ * refusal, and `createPayrollRun` refuses against the same list. One source so
+ * the notice and the refusal cannot say different things.
+ */
+export const getOutstandingSetup = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context as any;
+    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
+    if (!profile?.tenant_id) return { items: [], known: false };
+    const { checkLeaveReadiness } = await import("@/lib/leave-setup.functions");
+    const { outstandingSetupItems } = await import("@/lib/payroll-readiness");
+    const [payroll, overtime, leave] = await Promise.all([
+      checkPayrollReadiness(supabase, profile.tenant_id as string).catch(() => null),
+      checkOvertimeReadiness(supabase, profile.tenant_id as string).catch(() => null),
+      checkLeaveReadiness(supabase, profile.tenant_id as string).catch(() => null),
+    ]);
+    return {
+      items: outstandingSetupItems(payroll, overtime, leave),
+      // False when a check could not be read. The caller must not render
+      // "everything is done" off a failed read — an empty list and a failed
+      // request must not look the same.
+      known: payroll !== null && overtime !== null && leave !== null,
+    };
+  });
+
 export const updateTenantCurrency = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ currency_code: z.string().trim().length(3).regex(/^[A-Za-z]{3}$/) }).parse(d))

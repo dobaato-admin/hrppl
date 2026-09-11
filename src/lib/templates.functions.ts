@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { throwPlain } from "@/lib/db-error";
 
 async function getTenant(supabase: any, userId: string): Promise<string> {
   const { data } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
@@ -50,6 +51,27 @@ const onbTplCourse = z.object({
   sort_order: z.number().int().min(0).max(999).default(0),
 });
 
+/**
+ * Build the rows for an onboarding template's tasks.
+ *
+ * Exported so `tests/template-items-insert.test.ts` can assert the one thing
+ * that matters and is invisible at the call site: the returned rows must not
+ * carry an `id` key **at all**. See the comment at the call site for why
+ * `id: undefined` is not the same thing.
+ */
+export function buildTemplateItemRows<T extends { id?: string; sort_order?: number }>(
+  items: T[],
+  templateId: string,
+  tenantId: string,
+): Array<Omit<T, "id"> & { template_id: string; tenant_id: string; sort_order: number }> {
+  return items.map(({ id: _existingItemId, ...rest }, idx) => ({
+    ...(rest as Omit<T, "id">),
+    template_id: templateId,
+    tenant_id: tenantId,
+    sort_order: rest.sort_order ?? idx,
+  }));
+}
+
 export const upsertOnboardingTemplate = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({
@@ -80,26 +102,34 @@ export const upsertOnboardingTemplate = createServerFn({ method: "POST" })
     let id = data.id;
     if (id) {
       const { error } = await supabase.from("onboarding_checklist_templates").update(base).eq("id", id).eq("tenant_id", tenant_id);
-      if (error) throw error;
+      if (error) throwPlain(error, "Could not save the template.", "upsertOnboardingTemplate update");
     } else {
       const { data: created, error } = await supabase.from("onboarding_checklist_templates").insert(base).select("id").single();
-      if (error) throw error;
+      if (error) throwPlain(error, "Could not create the template.", "upsertOnboardingTemplate insert");
       id = created.id;
     }
     // Replace items & courses
     await supabase.from("onboarding_checklist_template_items").delete().eq("template_id", id);
     if (data.items.length) {
       const { error } = await supabase.from("onboarding_checklist_template_items").insert(
-        data.items.map((i, idx) => ({ ...i, id: undefined, template_id: id, tenant_id, sort_order: i.sort_order ?? idx }))
+        // T20 · `id` is dropped by *omitting the key*, never by setting it to
+        // `undefined`. postgrest-js builds the `columns` query parameter from
+        // `Object.keys()` of every row, and `Object.keys({ id: undefined })`
+        // still contains "id" — so the column was declared as one we were
+        // inserting while `JSON.stringify` removed the value, and PostgREST
+        // wrote NULL rather than falling back to `gen_random_uuid()`. Editing
+        // a template that already had tasks failed with a not-null violation
+        // on every save.
+        buildTemplateItemRows(data.items, id, tenant_id)
       );
-      if (error) throw error;
+      if (error) throwPlain(error, "Could not save the template's tasks.", "upsertOnboardingTemplate items");
     }
     await supabase.from("onboarding_checklist_template_courses").delete().eq("template_id", id);
     if (data.courses.length) {
       const { error } = await supabase.from("onboarding_checklist_template_courses").insert(
         data.courses.map((c, idx) => ({ ...c, template_id: id, tenant_id, sort_order: c.sort_order ?? idx }))
       );
-      if (error) throw error;
+      if (error) throwPlain(error, "Could not save the template's courses.", "upsertOnboardingTemplate courses");
     }
     return { id };
   });
@@ -117,19 +147,24 @@ export const cloneOnboardingTemplate = createServerFn({ method: "POST" })
       tenant_id, name: data.newName, description: src.description, department_id: src.department_id,
       role_target: src.role_target, is_default: false, is_active: true, created_by: userId,
     }).select("id").single();
-    if (error) throw error;
+    if (error) throwPlain(error, "Could not create the copy.", "cloneOnboardingTemplate insert");
     const newId = created.id;
     const { data: items } = await supabase.from("onboarding_checklist_template_items").select("*").eq("template_id", data.id);
     if (items?.length) {
-      await supabase.from("onboarding_checklist_template_items").insert(
+      // A clone that copies the template but none of its tasks is worse than a
+      // failed clone: the admin sees "Cloned", opens an empty checklist, and
+      // has no reason to connect the two.
+      const { error: itemErr } = await supabase.from("onboarding_checklist_template_items").insert(
         items.map((i: any) => ({ template_id: newId, tenant_id, title: i.title, description: i.description, category: i.category, owner_role: i.owner_role, due_offset_days: i.due_offset_days, required: i.required, sort_order: i.sort_order }))
       );
+      if (itemErr) throwPlain(itemErr, "The copy was created but its tasks could not be copied.", "cloneOnboardingTemplate items");
     }
     const { data: courses } = await supabase.from("onboarding_checklist_template_courses").select("*").eq("template_id", data.id);
     if (courses?.length) {
-      await supabase.from("onboarding_checklist_template_courses").insert(
+      const { error: courseErr } = await supabase.from("onboarding_checklist_template_courses").insert(
         courses.map((c: any) => ({ template_id: newId, tenant_id, course_id: c.course_id, due_offset_days: c.due_offset_days, required: c.required, sort_order: c.sort_order }))
       );
+      if (courseErr) throwPlain(courseErr, "The copy was created but its courses could not be copied.", "cloneOnboardingTemplate courses");
     }
     return { id: newId };
   });

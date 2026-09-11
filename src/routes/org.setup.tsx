@@ -35,6 +35,11 @@ import { validateBusinessRegistrationNumber } from "@/lib/payroll-validation";
 import { useFormErrors, FieldError } from "@/hooks/use-form-errors";
 import { DepartmentPicker } from "@/components/setup/DepartmentPicker";
 import { StepNote, SetupGuideHandoff } from "@/components/setup/StepNote";
+import {
+  PayrollSetupNotice,
+  PayrollSetupComplete,
+} from "@/components/setup/PayrollSetupNotice";
+import { getOutstandingSetup } from "@/lib/payroll-setup.functions";
 
 export const Route = createFileRoute("/org/setup")({
   head: () => ({ meta: [{ title: "Set up your organization — hrppl" }] }),
@@ -71,6 +76,7 @@ function OrgSetupPage() {
   const inviteFn = useServerFn(inviteStaff);
   const resetFn = useServerFn(resetMyOrgSetup);
   const updateProfileFn = useServerFn(updateOrganizationProfile);
+  const outstandingFn = useServerFn(getOutstandingSetup);
   const trialInviteFn = useServerFn(getMyTrialInvitation);
   const redeemTrialFn = useServerFn(redeemMyTrialInvitation);
 
@@ -126,6 +132,19 @@ function OrgSetupPage() {
     staleTime: 60_000,
   });
   const trialInvitation = trialData?.invitation ?? null;
+
+  // T19 · What payroll setup is still missing. Read once the admin reaches the
+  // invite step; it is a notice there, not a gate, so a failed read costs
+  // nothing and must not stop anybody inviting anybody.
+  const { data: outstandingData } = useQuery({
+    queryKey: ["outstanding-setup"],
+    queryFn: () => outstandingFn(),
+    enabled: !!user && !!status?.tenantId && stepIdx === 4,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const outstandingSetup = outstandingData?.items ?? [];
+  const outstandingKnown = outstandingData?.known ?? false;
 
   async function refreshOrgStatus() {
     await qc.invalidateQueries({ queryKey: ["my-org-status"] });
@@ -547,7 +566,14 @@ function OrgSetupPage() {
       }
       await markFn({ data: { step: "invites" } });
       await refreshOrgStatus();
-      navigate({ to: "/dashboard" });
+      // T19 · Finishing with payroll still outstanding used to land the admin
+      // on the dashboard with no next step. Send them to the part of the setup
+      // guide that is actually unfinished instead.
+      if (outstandingSetup.length > 0) {
+        navigate({ to: "/org/setup-guide", search: { segment: "payroll" } });
+      } else {
+        navigate({ to: "/dashboard" });
+      }
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to finish setup");
     } finally {
@@ -997,6 +1023,10 @@ function OrgSetupPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <PayrollSetupNotice items={outstandingSetup} />
+                {outstandingSetup.length === 0 && (
+                  <PayrollSetupComplete known={outstandingKnown} />
+                )}
                 {invites.map((row, idx) => (
                   <div key={idx} className="rounded-lg border p-4 space-y-3 bg-background">
                     <StepNote editLabel="Employees" editTo="/org/employees">

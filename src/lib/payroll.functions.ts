@@ -103,6 +103,30 @@ export const createPayrollRun = createServerFn({ method: "POST" })
         throw new Error("Australian payroll requires the AU Payroll add-on. Upgrade to Pro and enable the AU Payroll add-on to run payroll.");
       }
     }
+    // T19 · This is where payroll setup is enforced. It used to be enforced on
+    // the invite step, which blocked an org admin from inviting the very
+    // person who was going to complete the setup. Opening a payroll run is the
+    // first moment the missing configuration would produce a wrong number.
+    {
+      const { checkPayrollReadiness, checkOvertimeReadiness } = await import("@/lib/payroll-setup.functions");
+      const { checkLeaveReadiness } = await import("@/lib/leave-setup.functions");
+      const { outstandingSetupItems, outstandingSummary } = await import("@/lib/payroll-readiness");
+      const [payrollReady, overtimeReady, leaveReady] = await Promise.all([
+        checkPayrollReadiness(supabase, data.tenantId).catch(() => null),
+        checkOvertimeReadiness(supabase, data.tenantId).catch(() => null),
+        checkLeaveReadiness(supabase, data.tenantId).catch(() => null),
+      ]);
+      // Leave setup does not stop a run — it changes balances, not pay — so
+      // only the payroll half is passed in as a blocker.
+      const outstanding = outstandingSetupItems(payrollReady, overtimeReady, null);
+      if (outstanding.length > 0) {
+        throw new Error(
+          `Payroll setup is not finished, so this run cannot be opened. Still needed: ${outstandingSummary(outstanding)}. Finish it in the setup guide, then start the run again.`,
+        );
+      }
+      void leaveReady;
+    }
+
     const baseCurrency = (tenant.currency_code as string).toUpperCase();
     const payCurrency = (data.currencyCode ?? baseCurrency).toUpperCase();
     const fxRate = payCurrency === baseCurrency ? 1 : (data.fxRate ?? 0);
@@ -343,6 +367,28 @@ export const computePayrollRun = createServerFn({ method: "POST" })
         .order("effective_date", { ascending: false });
       for (const r of rateRows ?? []) {
         if (!effectivePay.has(r.employee_id)) effectivePay.set(r.employee_id, Number(r.to_amount));
+      }
+    }
+
+    // T19 · Nobody is paid a number nobody entered.
+    //
+    // An employee with neither an applied pay-rate change nor a base salary
+    // used to compute to a gross of 0 and receive a payslip for nothing —
+    // indistinguishable, on the run summary, from somebody who had genuinely
+    // earned nothing. Refusing names them, because the fix is per-person and
+    // the admin has to know which person.
+    {
+      const missingPay = active.filter(
+        (e: any) => !effectivePay.has(e.id) && !(Number(e.base_salary ?? 0) > 0),
+      );
+      if (missingPay.length > 0) {
+        const names = missingPay
+          .slice(0, 5)
+          .map((e: any) => `${e.first_name ?? ""} ${e.last_name ?? ""}`.trim() || e.employee_number || e.id);
+        const more = missingPay.length > names.length ? ` and ${missingPay.length - names.length} more` : "";
+        throw new Error(
+          `${missingPay.length} employee${missingPay.length === 1 ? " has" : "s have"} no pay details, so this run would pay ${missingPay.length === 1 ? "them" : "them"} nothing: ${names.join(", ")}${more}. Set a salary or pay rate for each, then compute again.`,
+        );
       }
     }
 
