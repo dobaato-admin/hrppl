@@ -18,6 +18,7 @@ import { approveTimesheet, rejectTimesheet } from "@/lib/attendance.functions";
 import { decideExpenseClaim } from "@/lib/expenses.functions";
 import { Users, CalendarCheck2, FileClock, UmbrellaOff, Search, GraduationCap, ClipboardList, MessageSquareWarning, Receipt } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
+import { localYmd } from "@/lib/work-date";
 
 export const Route = createFileRoute("/team")({
   head: () => ({ meta: [{ title: "Dashboard — hrppl" }] }),
@@ -64,7 +65,21 @@ function startOfWeek(d: Date) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
-function ymd(d: Date) { return d.toISOString().slice(0, 10); }
+/**
+ * T24 · The browser's own calendar date, not the UTC one.
+ *
+ * This was `d.toISOString().slice(0, 10)`, applied to the *local* midnight
+ * Date that `startOfWeek` returns. For any zone east of Greenwich, local
+ * midnight Monday is still Sunday in UTC, so every column of the week grid was
+ * labelled one day later than the date it actually queried — a leave day
+ * showed against the wrong weekday, and the whole week window was off by one.
+ * `Asia/Kathmandu` (+05:45) and `Australia/Sydney` (+10) both hit it; a US
+ * manager saw it shift the other way after 19:00 local.
+ *
+ * This grid is the browser's view of a manager's own week, so the browser's
+ * zone is the right one here — see `localYmd`.
+ */
+const ymd = localYmd;
 function fullName(e: Pick<Emp, "first_name" | "last_name">) { return `${e.first_name} ${e.last_name}`.trim(); }
 function initials(e: Pick<Emp, "first_name" | "last_name">) {
   return `${(e.first_name?.[0] ?? "").toUpperCase()}${(e.last_name?.[0] ?? "").toUpperCase()}`;

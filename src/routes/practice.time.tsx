@@ -39,18 +39,23 @@ import { listMyTimesheets, submitMyTimesheet } from "@/lib/timesheet-workflow.fu
 import { toast } from "sonner";
 import { Trash2, Layers, Send, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { AdminGate } from "@/components/AdminGate";
+import { localYmd } from "@/lib/work-date";
 
+// T24 · `localYmd`, not `toISOString().slice(0, 10)`. These build a local Date
+// and then read its UTC calendar date, which for any zone east of Greenwich is
+// the previous day — so the week window queried was one day out from the week
+// it claimed to cover.
 function startOfWeek(d: Date) {
   const dt = new Date(d);
   const day = (dt.getDay() + 6) % 7; // Monday=0
   dt.setDate(dt.getDate() - day);
-  return dt.toISOString().slice(0, 10);
+  return localYmd(dt);
 }
 function endOfWeek(d: Date) {
   const dt = new Date(d);
   const day = (dt.getDay() + 6) % 7;
   dt.setDate(dt.getDate() - day + 6);
-  return dt.toISOString().slice(0, 10);
+  return localYmd(dt);
 }
 function statusBadge(s: string) {
   if (s === "approved")
@@ -138,7 +143,7 @@ function TimePage() {
   const [form, setForm] = useState<any>({
     project_id: "",
     job_id: "",
-    work_date: new Date().toISOString().slice(0, 10),
+    work_date: localYmd(new Date()),
     hours: 1,
     description: "",
     billable: true,

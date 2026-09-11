@@ -171,6 +171,66 @@ export function localYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * The instant at which a wall-clock time occurred in a given zone.
+ *
+ * The inverse of `workTimeInZone`, and the piece T24 was missing. Editing an
+ * attendance row built its instant with
+ *
+ *     new Date(`${workDate}T${hhmm}:00`)
+ *
+ * which reads the string in the **browser's** zone. Correct for an employee
+ * editing their own row on their own device, and wrong by the difference for
+ * anybody else — an HR admin in Sydney correcting a Kathmandu punch moved it
+ * by 4h15m without touching the field.
+ *
+ * Resolved in two passes because the offset depends on the instant, which is
+ * what we are solving for: guess, read the zone's offset there, correct, then
+ * re-read in case the guess and the answer sit on opposite sides of a DST
+ * transition. Sub-hour offsets (Nepal is +05:45) fall out of the same
+ * arithmetic — nothing here assumes whole hours.
+ */
+export function instantFromZonedWallTime(
+  workDate: string,
+  hhmm: string,
+  timeZone: string,
+): Date {
+  const [y, m, d] = workDate.split("-").map(Number);
+  const [hh, mm] = hhmm.split(":").map(Number);
+  if ([y, m, d, hh, mm].some((n) => !Number.isFinite(n))) {
+    throw new Error("instantFromZonedWallTime: invalid date or time");
+  }
+  const zone = resolveTimeZone(timeZone);
+  // The wall-clock reading treated as if it were UTC. Subtracting the zone's
+  // offset from this gives the real instant.
+  const asIfUtc = Date.UTC(y, m - 1, d, hh, mm, 0, 0);
+  const firstGuess = new Date(asIfUtc - zoneOffsetMinutes(new Date(asIfUtc), zone) * 60000);
+  const settled = zoneOffsetMinutes(firstGuess, zone);
+  return new Date(asIfUtc - settled * 60000);
+}
+
+/**
+ * Hours between two instants, to two decimals, minus an unpaid break.
+ *
+ * T24 · Hours worked is the figure that decides pay, and it is the one figure
+ * a time zone cannot corrupt: it is a difference between two instants, so both
+ * ends shift together. Surfaces should lead with this and treat the clock
+ * readings as supporting detail.
+ */
+export function hoursWorked(
+  clockIn: string | Date | null,
+  clockOut: string | Date | null,
+  breakMinutes = 0,
+): number | null {
+  if (!clockIn || !clockOut) return null;
+  const a = clockIn instanceof Date ? clockIn : new Date(clockIn);
+  const b = clockOut instanceof Date ? clockOut : new Date(clockOut);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  const ms = b.getTime() - a.getTime() - Math.max(0, breakMinutes) * 60000;
+  if (ms <= 0) return 0;
+  return Math.round((ms / 3_600_000) * 100) / 100;
+}
+
 /** The viewer's own IANA zone, for showing "your device says …" alongside the tenant's. */
 export function browserTimeZone(): string {
   try {
