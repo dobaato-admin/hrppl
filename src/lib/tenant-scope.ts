@@ -25,6 +25,8 @@
  * new code should start here.
  */
 
+import { requestMemo } from "@/lib/request-cache";
+
 /** Minimal shape we need — avoids importing the generated client types here. */
 export type AnySupabase = {
   from: (table: string) => any;
@@ -69,12 +71,14 @@ export async function getActingTenantId(
   supabase: AnySupabase,
   userId: string,
 ): Promise<string | null> {
-  const { data } = await supabase
-    .from("platform_acting_tenant")
-    .select("tenant_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  return (data?.tenant_id as string | undefined) ?? null;
+  return requestMemo(supabase, `acting:${userId}`, async () => {
+    const { data } = await supabase
+      .from("platform_acting_tenant")
+      .select("tenant_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return (data?.tenant_id as string | undefined) ?? null;
+  });
 }
 
 /**
@@ -86,13 +90,20 @@ export async function getActingTenantId(
  * use {@link requireTenantId} when the caller must have one.
  */
 export async function getTenantId(supabase: AnySupabase, userId: string): Promise<string | null> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("tenant_id")
-    .eq("id", userId)
-    .maybeSingle();
-  if (profile?.tenant_id) return profile.tenant_id as string;
-  return getActingTenantId(supabase, userId);
+  // T13 · Memoised per request. `profiles` carried 912,884 sequential scans
+  // over twenty rows because nearly every server fn opens by resolving the
+  // caller's tenant, and several do it more than once. No index helps a
+  // twenty-row table; not asking twice does. See src/lib/request-cache.ts for
+  // why the cache is keyed on the per-request client.
+  return requestMemo(supabase, `tenant:${userId}`, async () => {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("tenant_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (profile?.tenant_id) return profile.tenant_id as string;
+    return getActingTenantId(supabase, userId);
+  });
 }
 
 /**
@@ -121,10 +132,53 @@ export async function getMyEmployeeId(
   supabase: AnySupabase,
   userId: string,
 ): Promise<string | null> {
-  const { data } = await supabase
-    .from("employees")
-    .select("id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  return (data?.id as string | undefined) ?? null;
+  return requestMemo(supabase, `employee:${userId}`, async () => {
+    const { data } = await supabase
+      .from("employees")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return (data?.id as string | undefined) ?? null;
+  });
+}
+
+/**
+ * The caller's roles, resolved once per request.
+ *
+ * T13 · `user_roles` carried 183,207 sequential scans over twenty-eight rows
+ * for the same reason `profiles` did: every module has its own `assertAdmin`
+ * and each one re-reads. Modules keep their own guards — the check is theirs
+ * to make — but they no longer each pay for the read.
+ *
+ * Returns a plain array so existing `roles.some(...)` / `roles.includes(...)`
+ * call sites work unchanged.
+ */
+export async function getMyRoles(
+  supabase: AnySupabase,
+  userId: string,
+): Promise<string[]> {
+  return requestMemo(supabase, `roles:${userId}`, async () => {
+    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+    return ((data ?? []) as Array<{ role: string }>).map((r) => r.role);
+  });
+}
+
+/**
+ * Tenant and roles together, in parallel.
+ *
+ * The two reads are independent, and thirteen modules were doing them one
+ * after the other — `await assertAdmin(...)` then `await getTenant(...)` —
+ * which is two sequential round trips where one round trip's worth of latency
+ * would do. Both are memoised, so calling this after something else has
+ * already resolved either costs nothing.
+ */
+export async function getTenantAndRoles(
+  supabase: AnySupabase,
+  userId: string,
+): Promise<{ tenantId: string | null; roles: string[] }> {
+  const [tenantId, roles] = await Promise.all([
+    getTenantId(supabase, userId),
+    getMyRoles(supabase, userId),
+  ]);
+  return { tenantId, roles };
 }
