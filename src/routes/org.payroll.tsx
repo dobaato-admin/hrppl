@@ -3,6 +3,7 @@ import { can } from "@/lib/rbac";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/use-auth";
+import { useMyTenantId } from "@/hooks/use-tenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +48,7 @@ import { getRunVariance, getRunDistribution } from "@/lib/payroll-insights.funct
 import { getOutstandingSetup } from "@/lib/payroll-setup.functions";
 import { partitionForRun } from "@/lib/payroll-readiness";
 import { PayrollReadinessGate } from "@/components/payroll/PayrollReadinessGate";
+import { PayrollTrends } from "@/components/payroll/PayrollTrends";
 import {
   recentPayPeriods,
   PAY_PERIOD_LABEL,
@@ -107,6 +109,7 @@ interface Payslip {
 function PayrollPage() {
   const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
+  const { tenantId: actingTenantId } = useMyTenantId();
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [selected, setSelected] = useState<PayrollRun | null>(null);
@@ -124,7 +127,11 @@ function PayrollPage() {
       }
     >
   >({});
-  const [tenantInfo, setTenantInfo] = useState<{ name: string; country_code: string } | null>(null);
+  const [tenantInfo, setTenantInfo] = useState<{
+    name: string;
+    country_code: string;
+    currency_code: string | null;
+  } | null>(null);
   const [auAddon, setAuAddon] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -220,16 +227,19 @@ function PayrollPage() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (data?.tenant_id) {
-        setTenantId(data.tenant_id);
+      // Resolved through useMyTenantId, which falls back to the acting tenant.
+      // This used to read `profiles.tenant_id` directly, which is NULL for a
+      // platform account — so a super_admin acting as a tenant through the
+      // TenantSwitcher saw "No runs yet" on a tenant that had runs, and could
+      // not approve anything. That is gap 1 in CLAUDE.md, and it is a bug
+      // rather than a permissions question.
+      const resolved = actingTenantId ?? null;
+      if (resolved) {
+        setTenantId(resolved);
+        const data = { tenant_id: resolved };
         const { data: t } = await supabase
           .from("tenants")
-          .select("name,country_code")
+          .select("name,country_code,currency_code")
           .eq("id", data.tenant_id)
           .maybeSingle();
         if (t) setTenantInfo(t as any);
@@ -258,7 +268,9 @@ function PayrollPage() {
         );
       }
     })();
-  }, [user]);
+    // Re-runs when the acting tenant changes, so switching tenant reloads the
+    // page's data rather than leaving the previous tenant's on screen.
+  }, [user, actingTenantId]);
 
   async function loadRuns() {
     if (!tenantId) return;
@@ -330,6 +342,63 @@ function PayrollPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * Every run with its totals, as CSV.
+   *
+   * The per-run "Export CSV" exports one run's payslips; this is the other
+   * question — "what has payroll cost us" — which previously needed opening
+   * each run and copying the figures out by hand.
+   */
+  function exportAllRuns() {
+    const rows: Array<Array<string | number>> = [
+      [
+        "Period start",
+        "Period end",
+        "Pay date",
+        "Status",
+        "Currency",
+        "Employees",
+        "Gross",
+        "Income tax",
+        "Employee contrib.",
+        "Employer contrib.",
+        "Net pay",
+      ],
+      ...runs.map((r) => {
+        const t = (r.totals ?? {}) as Record<string, number | undefined>;
+        return [
+          r.period_start,
+          r.period_end,
+          r.pay_date,
+          r.status,
+          r.currency_code,
+          t.employee_count ?? "",
+          t.gross ?? "",
+          t.income_tax ?? "",
+          t.employee_contributions ?? "",
+          t.employer_contributions ?? "",
+          t.net_pay ?? "",
+        ];
+      }),
+    ];
+    const csv = rows
+      .map((r) =>
+        r
+          .map((c) =>
+            typeof c === "string" && /[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c,
+          )
+          .join(","),
+      )
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `payroll-runs-${localYmd(new Date())}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${runs.length} run${runs.length === 1 ? "" : "s"}`);
   }
 
   /**
@@ -766,6 +835,15 @@ function PayrollPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportAllRuns}
+              disabled={runs.length === 0}
+              title="Download every run with its totals as CSV"
+            >
+              <Download className="mr-1 h-3.5 w-3.5" /> Export runs
+            </Button>
             <Link to="/org">
               <Button variant="outline" size="sm">
                 Back
@@ -834,6 +912,13 @@ function PayrollPage() {
             </CardContent>
           </Card>
         )}
+        {/*
+          Progressive history, on the home page rather than behind a two-run
+          variance dialog. See PayrollTrends for why the cost view is a choice
+          the reader makes rather than one the screen makes for them.
+        */}
+        <PayrollTrends currency={runs[0]?.currency_code ?? tenantInfo?.currency_code ?? ""} />
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Runs</CardTitle>
@@ -919,7 +1004,8 @@ function PayrollPage() {
                   )}
                   {selected.status === "pending_approval" && (
                     <div className="mt-1 text-amber-600">
-                      Awaiting manager approval — payslips are NOT yet visible to employees.
+                      Awaiting manager approval — payslips are NOT yet visible to employees, and
+                      cannot be emailed until it is approved.
                     </div>
                   )}
                   {selected.status === "approved" && (
@@ -1009,8 +1095,25 @@ function PayrollPage() {
                       <TrendingUp className="mr-2 h-4 w-4" /> Variance vs prior
                     </Button>
                   )}
-                {isOrgAdmin && selected.status === "approved" && payslips.length > 0 && (
-                  <Button size="sm" onClick={() => onEmailPayslips(selected)} disabled={busy}>
+                {/*
+                  Shown whenever the reader could ever use it, disabled with a
+                  reason when they cannot use it yet. It used to render only
+                  for an approved run, so on a pending run there was nothing
+                  about sending payslips anywhere on the screen — which reads
+                  as the feature not existing rather than as not being time
+                  for it. "How do I forward the payslips" was exactly that.
+                */}
+                {isOrgAdmin && payslips.length > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={() => onEmailPayslips(selected)}
+                    disabled={busy || selected.status !== "approved"}
+                    title={
+                      selected.status === "approved"
+                        ? "Email each employee their payslip PDF"
+                        : "Payslips can be sent once the run is approved"
+                    }
+                  >
                     <Mail className="mr-2 h-4 w-4" /> Email payslips
                   </Button>
                 )}
