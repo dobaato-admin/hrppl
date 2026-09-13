@@ -478,6 +478,15 @@ export const markSetupStep = createServerFn({ method: "POST" })
 const seedSchema = z.object({
   departments: z.array(z.string().trim().min(1).max(80)).max(20).default(["Operations","Engineering","People"]),
   withLeaveTypes: z.boolean().default(true),
+  /**
+   * T18 · Which of the country's default leave types to create.
+   *
+   * Omitted means "the country's standard set", which is what `withLeaveTypes`
+   * alone used to mean — so an older client, or any caller that has not been
+   * updated, behaves exactly as before. An explicit empty array means the
+   * admin unticked everything, which is different from not having been asked.
+   */
+  leaveTypeCodes: z.array(z.string().trim().max(40)).max(30).optional(),
 });
 
 export const seedOrgDefaults = createServerFn({ method: "POST" })
@@ -496,19 +505,70 @@ export const seedOrgDefaults = createServerFn({ method: "POST" })
     }
 
     // Leave types
+    //
+    // T18 · Seeded from `country_leave_defaults` rather than from three
+    // hard-coded rows that were the same for every country. Australia's
+    // entitlements are not Nepal's, and the previous set (21 days annual, 10
+    // sick) matched neither.
+    let leaveTypesCreated = 0;
     if (data.withLeaveTypes) {
       const { count } = await admin
         .from("leave_types").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId);
       if ((count ?? 0) === 0) {
-        await admin.from("leave_types").insert([
-          { tenant_id: tenantId, code: "ANNUAL", name: "Annual Leave", annual_quota_days: 21, accrual_per_month: 1.75, is_paid: true, color: "#3b82f6" },
-          { tenant_id: tenantId, code: "SICK", name: "Sick Leave", annual_quota_days: 10, accrual_per_month: 0.83, is_paid: true, color: "#ef4444" },
-          { tenant_id: tenantId, code: "UNPAID", name: "Unpaid Leave", annual_quota_days: 0, accrual_per_month: 0, is_paid: false, color: "#6b7280" },
-        ]);
+        const { data: tenant } = await admin
+          .from("tenants").select("country_code").eq("id", tenantId).maybeSingle();
+        const countryCode = String(tenant?.country_code ?? "").toUpperCase();
+
+        const { data: catalogue } = countryCode
+          ? await admin
+              .from("country_leave_defaults")
+              .select("code,name,annual_quota_days,accrual_per_month,is_paid,color,is_standard")
+              .eq("country_code", countryCode)
+              .order("sort_order")
+          : { data: [] as any[] };
+
+        const wanted = data.leaveTypeCodes
+          ? new Set(data.leaveTypeCodes.map((c) => c.toUpperCase()))
+          : null;
+        const chosen = (catalogue ?? []).filter((row: any) =>
+          wanted ? wanted.has(String(row.code).toUpperCase()) : row.is_standard,
+        );
+
+        const rows =
+          chosen.length > 0
+            ? chosen.map((row: any) => ({
+                tenant_id: tenantId,
+                code: row.code,
+                name: row.name,
+                annual_quota_days: Number(row.annual_quota_days),
+                accrual_per_month: Number(row.accrual_per_month),
+                is_paid: row.is_paid,
+                color: row.color,
+              }))
+            : // No catalogue for this country yet — launch coverage is AU and
+              // NP. Falling back to the universal three is better than leaving
+              // an organisation with no leave types at all, which stops anyone
+              // requesting time off. An explicit empty selection is honoured.
+              wanted && wanted.size === 0
+              ? []
+              : [
+                  { tenant_id: tenantId, code: "ANNUAL", name: "Annual Leave", annual_quota_days: 21, accrual_per_month: 1.75, is_paid: true, color: "#3b82f6" },
+                  { tenant_id: tenantId, code: "SICK", name: "Sick Leave", annual_quota_days: 10, accrual_per_month: 0.83, is_paid: true, color: "#ef4444" },
+                  { tenant_id: tenantId, code: "UNPAID", name: "Unpaid Leave", annual_quota_days: 0, accrual_per_month: 0, is_paid: false, color: "#6b7280" },
+                ];
+
+        if (rows.length > 0) {
+          const { error } = await admin.from("leave_types").insert(rows);
+          if (error) {
+            console.error("[seedOrgDefaults] leave types insert failed", error);
+            throw new Error("Could not create the leave types. Nothing else was changed.");
+          }
+          leaveTypesCreated = rows.length;
+        }
       }
     }
 
-    return { ok: true };
+    return { ok: true, leaveTypesCreated };
   });
 
 // ---------- resetMyOrgSetup ----------

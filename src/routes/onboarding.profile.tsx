@@ -14,9 +14,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFormErrors, FieldError } from "@/hooks/use-form-errors";
 import {
   getCountrySchema, getPersonalFields, getAddressFields, getEmergencyFields,
+  normaliseBsb, validateBankFields,
   type FieldDef,
 } from "@/lib/onboarding-country-fields";
 import { getMyOnboardingProfile, upsertMyOnboardingProfile } from "@/lib/staff-onboarding.functions";
+import { SubdivisionField } from "@/components/form/SubdivisionField";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/onboarding/profile")({
@@ -79,13 +81,25 @@ function OnboardingProfilePage() {
           id={`ob-${def.key}`}
           type={type}
           value={form[def.key] ?? ""}
+          maxLength={def.maxLength}
           onChange={(e) => {
             fieldErrors.clearField(def.key);
             setForm({ ...form, [def.key]: e.target.value });
           }}
+          onBlur={(e) => {
+            // T26 · A BSB is stored as six digits however it was typed, so two
+            // records for the same branch cannot differ only in punctuation.
+            if (def.format === "bsb" && e.target.value.trim()) {
+              setForm((f: Record<string, any>) => ({
+                ...f,
+                [def.key]: normaliseBsb(e.target.value),
+              }));
+            }
+          }}
           placeholder={def.placeholder}
           {...(fieldErrors.register(def.key) as object)}
         />
+        {def.help && <p className="text-xs text-muted-foreground">{def.help}</p>}
         <FieldError name={def.key} errors={fieldErrors.errors} />
       </div>
     );
@@ -118,6 +132,20 @@ function OnboardingProfilePage() {
           .map((d) => ({ name: d.key, value: form[d.key], label: d.label })),
       );
       if (!ok) return;
+      // T26 · A filled-in field can still be wrong. A six-digit BSB rule
+      // caught here is a corrected field; caught by the bank's payment file it
+      // is a failed salary payment three weeks later.
+      const bankErrors = validateBankFields(country, form);
+      if (Object.keys(bankErrors).length > 0) {
+        // Shaped as Zod issues so it goes through the same path a server
+        // refusal does: the field turns red, focus moves to the first bad one,
+        // and the toast says which. One code path, one behaviour.
+        fieldErrors.fromServer(
+          Object.entries(bankErrors).map(([name, message]) => ({ path: [name], message })),
+          Object.fromEntries(allFieldDefs().map((d) => [d.key, d.label])),
+        );
+        return;
+      }
     }
     setBusy(true);
     try {
@@ -196,7 +224,30 @@ function OnboardingProfilePage() {
         <Card>
           <CardHeader><CardTitle>Contact & address</CardTitle></CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
-            {getAddressFields().filter((f) => f.key !== "country_of_residence").map((d) => field(d, d.key === "personal_email" ? "email" : "text"))}
+            {getAddressFields()
+              .filter((f) => f.key !== "country_of_residence")
+              .map((d) =>
+                // T16 · The state/region field is a dropdown wherever the
+                // country has one, so the same state cannot arrive as "NSW",
+                // "N.S.W." and "New South Wales" from three employees.
+                d.key === "region" ? (
+                  <SubdivisionField
+                    key={d.key}
+                    id="ob-region"
+                    countryCode={country}
+                    value={form.region ?? ""}
+                    required={d.required}
+                    onChange={(v) => {
+                      fieldErrors.clearField("region");
+                      setForm({ ...form, region: v });
+                    }}
+                    invalidProps={fieldErrors.register("region") as Record<string, unknown>}
+                    error={<FieldError name="region" errors={fieldErrors.errors} />}
+                  />
+                ) : (
+                  field(d, d.key === "personal_email" ? "email" : "text")
+                ),
+              )}
           </CardContent>
         </Card>
 

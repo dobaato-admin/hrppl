@@ -2449,6 +2449,59 @@ export type Database = {
           },
         ]
       }
+      country_leave_defaults: {
+        Row: {
+          accrual_per_month: number
+          annual_quota_days: number
+          code: string
+          color: string
+          country_code: string
+          created_at: string
+          description: string | null
+          id: string
+          is_paid: boolean
+          is_standard: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          accrual_per_month?: number
+          annual_quota_days?: number
+          code: string
+          color?: string
+          country_code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_paid?: boolean
+          is_standard?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          accrual_per_month?: number
+          annual_quota_days?: number
+          code?: string
+          color?: string
+          country_code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_paid?: boolean
+          is_standard?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "country_leave_defaults_country_code_fkey"
+            columns: ["country_code"]
+            isOneToOne: false
+            referencedRelation: "countries"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
       country_payroll_settings: {
         Row: {
           country_code: string
@@ -2494,6 +2547,47 @@ export type Database = {
             foreignKeyName: "country_payroll_settings_country_code_fkey"
             columns: ["country_code"]
             isOneToOne: true
+            referencedRelation: "countries"
+            referencedColumns: ["code"]
+          },
+        ]
+      }
+      country_subdivisions: {
+        Row: {
+          code: string
+          country_code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          kind: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          country_code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          country_code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "country_subdivisions_country_code_fkey"
+            columns: ["country_code"]
+            isOneToOne: false
             referencedRelation: "countries"
             referencedColumns: ["code"]
           },
