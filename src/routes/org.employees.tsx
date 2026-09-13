@@ -720,12 +720,17 @@ function EmployeeDialog({
             <div className="space-y-1.5">
               <Label className="text-xs">Template</Label>
               {templates.length === 0 ? (
+                // T21 · Setup seeds a "New starter" template, so this is the
+                // state of an organisation whose templates were all
+                // deactivated or deleted. Say that Skip is a real answer —
+                // the employee is already created either way.
                 <p className="text-xs text-muted-foreground">
-                  No active templates. Create one in{" "}
+                  No active onboarding templates. You can Skip — the employee has been added
+                  already — or create one in{" "}
                   <Link to="/admin/templates" className="underline">
                     Templates Hub
-                  </Link>
-                  .
+                  </Link>{" "}
+                  and start their onboarding from the Onboarding page.
                 </p>
               ) : (
                 <Select value={chosenTpl} onValueChange={setChosenTpl}>

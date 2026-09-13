@@ -201,6 +201,7 @@ import { Route as ApiPublicHooksStripeWebhookRouteImport } from './routes/api/pu
 import { Route as ApiPublicHooksSecurityScanResultsRouteImport } from './routes/api/public/hooks/security-scan-results'
 import { Route as ApiPublicHooksReviewRemindersRouteImport } from './routes/api/public/hooks/review-reminders'
 import { Route as ApiPublicHooksReviewInstanceRemindersRouteImport } from './routes/api/public/hooks/review-instance-reminders'
+import { Route as ApiPublicHooksOrgSetupRemindersRouteImport } from './routes/api/public/hooks/org-setup-reminders'
 import { Route as ApiPublicHooksOnboardingTaskRemindersRouteImport } from './routes/api/public/hooks/onboarding-task-reminders'
 import { Route as ApiPublicHooksOnboardingOverdueRemindersRouteImport } from './routes/api/public/hooks/onboarding-overdue-reminders'
 import { Route as ApiPublicHooksOffboardingDueAlertsRouteImport } from './routes/api/public/hooks/offboarding-due-alerts'
@@ -1197,6 +1198,12 @@ const ApiPublicHooksReviewInstanceRemindersRoute =
     path: '/api/public/hooks/review-instance-reminders',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksOrgSetupRemindersRoute =
+  ApiPublicHooksOrgSetupRemindersRouteImport.update({
+    id: '/api/public/hooks/org-setup-reminders',
+    path: '/api/public/hooks/org-setup-reminders',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksOnboardingTaskRemindersRoute =
   ApiPublicHooksOnboardingTaskRemindersRouteImport.update({
     id: '/api/public/hooks/onboarding-task-reminders',
@@ -1501,6 +1508,7 @@ export interface FileRoutesByFullPath {
   '/api/public/hooks/offboarding-due-alerts': typeof ApiPublicHooksOffboardingDueAlertsRoute
   '/api/public/hooks/onboarding-overdue-reminders': typeof ApiPublicHooksOnboardingOverdueRemindersRoute
   '/api/public/hooks/onboarding-task-reminders': typeof ApiPublicHooksOnboardingTaskRemindersRoute
+  '/api/public/hooks/org-setup-reminders': typeof ApiPublicHooksOrgSetupRemindersRoute
   '/api/public/hooks/review-instance-reminders': typeof ApiPublicHooksReviewInstanceRemindersRoute
   '/api/public/hooks/review-reminders': typeof ApiPublicHooksReviewRemindersRoute
   '/api/public/hooks/security-scan-results': typeof ApiPublicHooksSecurityScanResultsRoute
@@ -1706,6 +1714,7 @@ export interface FileRoutesByTo {
   '/api/public/hooks/offboarding-due-alerts': typeof ApiPublicHooksOffboardingDueAlertsRoute
   '/api/public/hooks/onboarding-overdue-reminders': typeof ApiPublicHooksOnboardingOverdueRemindersRoute
   '/api/public/hooks/onboarding-task-reminders': typeof ApiPublicHooksOnboardingTaskRemindersRoute
+  '/api/public/hooks/org-setup-reminders': typeof ApiPublicHooksOrgSetupRemindersRoute
   '/api/public/hooks/review-instance-reminders': typeof ApiPublicHooksReviewInstanceRemindersRoute
   '/api/public/hooks/review-reminders': typeof ApiPublicHooksReviewRemindersRoute
   '/api/public/hooks/security-scan-results': typeof ApiPublicHooksSecurityScanResultsRoute
@@ -1919,6 +1928,7 @@ export interface FileRoutesById {
   '/api/public/hooks/offboarding-due-alerts': typeof ApiPublicHooksOffboardingDueAlertsRoute
   '/api/public/hooks/onboarding-overdue-reminders': typeof ApiPublicHooksOnboardingOverdueRemindersRoute
   '/api/public/hooks/onboarding-task-reminders': typeof ApiPublicHooksOnboardingTaskRemindersRoute
+  '/api/public/hooks/org-setup-reminders': typeof ApiPublicHooksOrgSetupRemindersRoute
   '/api/public/hooks/review-instance-reminders': typeof ApiPublicHooksReviewInstanceRemindersRoute
   '/api/public/hooks/review-reminders': typeof ApiPublicHooksReviewRemindersRoute
   '/api/public/hooks/security-scan-results': typeof ApiPublicHooksSecurityScanResultsRoute
@@ -2133,6 +2143,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/offboarding-due-alerts'
     | '/api/public/hooks/onboarding-overdue-reminders'
     | '/api/public/hooks/onboarding-task-reminders'
+    | '/api/public/hooks/org-setup-reminders'
     | '/api/public/hooks/review-instance-reminders'
     | '/api/public/hooks/review-reminders'
     | '/api/public/hooks/security-scan-results'
@@ -2338,6 +2349,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/offboarding-due-alerts'
     | '/api/public/hooks/onboarding-overdue-reminders'
     | '/api/public/hooks/onboarding-task-reminders'
+    | '/api/public/hooks/org-setup-reminders'
     | '/api/public/hooks/review-instance-reminders'
     | '/api/public/hooks/review-reminders'
     | '/api/public/hooks/security-scan-results'
@@ -2550,6 +2562,7 @@ export interface FileRouteTypes {
     | '/api/public/hooks/offboarding-due-alerts'
     | '/api/public/hooks/onboarding-overdue-reminders'
     | '/api/public/hooks/onboarding-task-reminders'
+    | '/api/public/hooks/org-setup-reminders'
     | '/api/public/hooks/review-instance-reminders'
     | '/api/public/hooks/review-reminders'
     | '/api/public/hooks/security-scan-results'
@@ -2650,6 +2663,7 @@ export interface RootRouteChildren {
   ApiPublicHooksOffboardingDueAlertsRoute: typeof ApiPublicHooksOffboardingDueAlertsRoute
   ApiPublicHooksOnboardingOverdueRemindersRoute: typeof ApiPublicHooksOnboardingOverdueRemindersRoute
   ApiPublicHooksOnboardingTaskRemindersRoute: typeof ApiPublicHooksOnboardingTaskRemindersRoute
+  ApiPublicHooksOrgSetupRemindersRoute: typeof ApiPublicHooksOrgSetupRemindersRoute
   ApiPublicHooksReviewInstanceRemindersRoute: typeof ApiPublicHooksReviewInstanceRemindersRoute
   ApiPublicHooksReviewRemindersRoute: typeof ApiPublicHooksReviewRemindersRoute
   ApiPublicHooksSecurityScanResultsRoute: typeof ApiPublicHooksSecurityScanResultsRoute
@@ -4006,6 +4020,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksReviewInstanceRemindersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/org-setup-reminders': {
+      id: '/api/public/hooks/org-setup-reminders'
+      path: '/api/public/hooks/org-setup-reminders'
+      fullPath: '/api/public/hooks/org-setup-reminders'
+      preLoaderRoute: typeof ApiPublicHooksOrgSetupRemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/onboarding-task-reminders': {
       id: '/api/public/hooks/onboarding-task-reminders'
       path: '/api/public/hooks/onboarding-task-reminders'
@@ -4539,6 +4560,7 @@ const rootRouteChildren: RootRouteChildren = {
     ApiPublicHooksOnboardingOverdueRemindersRoute,
   ApiPublicHooksOnboardingTaskRemindersRoute:
     ApiPublicHooksOnboardingTaskRemindersRoute,
+  ApiPublicHooksOrgSetupRemindersRoute: ApiPublicHooksOrgSetupRemindersRoute,
   ApiPublicHooksReviewInstanceRemindersRoute:
     ApiPublicHooksReviewInstanceRemindersRoute,
   ApiPublicHooksReviewRemindersRoute: ApiPublicHooksReviewRemindersRoute,

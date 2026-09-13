@@ -26,6 +26,7 @@ import { template as employmentVariationStatus } from './employment-variation-st
 import { template as timesheetStatus } from './timesheet-status'
 import { template as onboardingTaskReminder } from './onboarding-task-reminder'
 import { template as kpiCycleStatus } from './kpi-cycle-status'
+import { template as orgSetupReminder } from './org-setup-reminder'
 
 
 
@@ -66,5 +67,6 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'timesheet-status': timesheetStatus,
   'onboarding-task-reminder': onboardingTaskReminder,
   'kpi-cycle-status': kpiCycleStatus,
+  'org-setup-reminder': orgSetupReminder,
 }
 
