@@ -68,7 +68,6 @@ const HANDROLLED_TENANT_LOOKUP = new Set([
   "src/routes/org.danger.tsx",
   "src/routes/org.leave.tsx",
   "src/routes/org.onboarding.index.tsx",
-  "src/routes/org.payroll.tsx",
   "src/routes/org.performance.tsx",
   "src/routes/org.timesheets.tsx",
 ]);

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -166,4 +167,130 @@ export const getRunDistribution = createServerFn({ method: "POST" })
       }
     }
     return { distribution };
+  });
+
+/**
+ * Payroll cost over time, for the trend charts on /org/payroll.
+ *
+ * Returns raw per-run points rather than pre-bucketed totals: the grouping and
+ * the cost view are things the reader changes constantly, and re-fetching for
+ * each would make an exploratory screen feel broken. `src/lib/payroll-trends.ts`
+ * does the arithmetic client-side, and is tested there.
+ *
+ * Only APPROVED runs count. A draft is a proposal and a pending run is an
+ * unanswered question; putting either in a cost trend reports money as spent
+ * that nobody has agreed to.
+ */
+export const getPayrollTrends = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        /** Oldest pay date to include. Defaults to 24 months back. */
+        from: z.string().optional(),
+        includeExpenses: z.boolean().optional().default(true),
+      })
+      .parse(d ?? {}),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context as any;
+    const tenantId = await requireTenantId(supabase, userId);
+
+    const from =
+      data.from ??
+      (() => {
+        const d = new Date();
+        d.setUTCMonth(d.getUTCMonth() - 24);
+        return d.toISOString().slice(0, 10);
+      })();
+
+    const { data: runs, error: runErr } = await supabase
+      .from("payroll_runs")
+      .select("id, pay_date, period_start, period_end, currency_code, status")
+      .eq("tenant_id", tenantId)
+      .eq("status", "approved")
+      .gte("pay_date", from)
+      .order("pay_date");
+    if (runErr) {
+      console.error("[payroll-trends] runs read failed", runErr);
+      throw new Error("Could not load payroll history.");
+    }
+
+    const runIds = (runs ?? []).map((r: any) => r.id);
+    const byRun = new Map<string, any>();
+    if (runIds.length > 0) {
+      const { data: slips, error: slipErr } = await supabase
+        .from("payroll_payslips")
+        .select("run_id, gross, income_tax, employee_contributions, employer_contributions, net_pay")
+        .in("run_id", runIds);
+      if (slipErr) {
+        console.error("[payroll-trends] payslips read failed", slipErr);
+        throw new Error("Could not load payroll history.");
+      }
+      for (const s of slips ?? []) {
+        const agg = byRun.get(s.run_id) ?? {
+          gross: 0,
+          incomeTax: 0,
+          employeeContributions: 0,
+          employerContributions: 0,
+          netPay: 0,
+          headcount: 0,
+        };
+        agg.gross += Number(s.gross ?? 0);
+        agg.incomeTax += Number(s.income_tax ?? 0);
+        agg.employeeContributions += Number(s.employee_contributions ?? 0);
+        agg.employerContributions += Number(s.employer_contributions ?? 0);
+        agg.netPay += Number(s.net_pay ?? 0);
+        agg.headcount += 1;
+        byRun.set(s.run_id, agg);
+      }
+    }
+
+    const points = (runs ?? []).map((r: any) => {
+      const agg = byRun.get(r.id) ?? {
+        gross: 0,
+        incomeTax: 0,
+        employeeContributions: 0,
+        employerContributions: 0,
+        netPay: 0,
+        headcount: 0,
+      };
+      return {
+        payDate: r.pay_date as string,
+        periodStart: r.period_start as string,
+        periodEnd: r.period_end as string,
+        currency: (r.currency_code as string) ?? "",
+        ...agg,
+      };
+    });
+
+    // Reimbursed expenses, by the date they were actually paid. Unpaid claims
+    // are a liability, not a cost that has left the business, so they are not
+    // in this series — the same reason drafts are excluded above.
+    let expenses: Array<{ paidDate: string; amount: number }> = [];
+    if (data.includeExpenses) {
+      const { data: claims, error: expErr } = await supabase
+        .from("expense_claims")
+        .select("paid_at, total_amount")
+        .eq("tenant_id", tenantId)
+        .not("paid_at", "is", null)
+        .gte("paid_at", from);
+      if (expErr) {
+        // Not fatal: the payroll series is still worth showing. But the caller
+        // must be able to tell "no expenses" from "we could not read them".
+        console.error("[payroll-trends] expenses read failed", expErr);
+        return { points, expenses: [], expensesKnown: false, currency: points[0]?.currency ?? "" };
+      }
+      expenses = (claims ?? []).map((c: any) => ({
+        paidDate: String(c.paid_at).slice(0, 10),
+        amount: Number(c.total_amount ?? 0),
+      }));
+    }
+
+    return {
+      points,
+      expenses,
+      expensesKnown: data.includeExpenses,
+      currency: points[0]?.currency ?? "",
+    };
   });

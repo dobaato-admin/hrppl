@@ -252,7 +252,7 @@ Three rules those tests encode, worth stating in prose because the next person w
 
 ## Baseline
 
-A green test run reads **0 failed / 1,320 passed / 6 skipped**.
+A green test run reads **0 failed / 1,360 passed / 6 skipped**.
 
 **This changed in Wave 7.** The baseline used to read "4 failed", and those four were stale
 fixtures in `tests/onboarding-readiness.test.ts` describing a table shape that no longer exists —
@@ -324,11 +324,23 @@ none of them visible from inside the app:
 | `org_admin`, `finance`, `branch_admin` | Yes | **No** — "Forbidden: manager role required" | Approve button is not rendered for them |
 | `super_admin` | Yes | Yes | Page shows "No runs yet" — see below |
 
-The `super_admin` case is gap 1 in CLAUDE.md made concrete: `org.payroll.tsx`
-resolves its tenant with a direct `profiles.tenant_id` read, which is NULL for
-a platform account, so acting as a tenant through the TenantSwitcher does not
-scope the page. Verified in the browser: acting as Globex Nepal, the runs table
-is empty while the database holds three runs for that tenant.
+The `super_admin` case was gap 1 in CLAUDE.md made concrete: `org.payroll.tsx`
+resolved its tenant with a direct `profiles.tenant_id` read, which is NULL for
+a platform account, so acting as a tenant through the TenantSwitcher did not
+scope the page — the runs table was empty while the database held three runs
+for that tenant.
+
+**That third row is now FIXED** (2026-09-13). The page uses `useMyTenantId()`,
+which falls back to the acting tenant, and re-runs when it changes. A
+super_admin acting as a tenant can now see and approve that tenant's runs, and
+`tests/tenant-loading-state.test.ts` lost an entry from its hand-rolled list.
+That was a bug, not a permissions question, so it did not need the decision
+below.
+
+**The first two rows stand.** A `manager` — the role the server fn actually
+requires — still cannot open the page, and org_admin/finance still cannot
+approve. So in a tenant with no platform admin available, approval is still
+unreachable.
 
 This is the W5 "nav row vs RLS policy" drift axis, in the one place W5 did not
 reach. **It is a deliberate open finding, not something to fix in passing** —
@@ -347,5 +359,5 @@ each of the three repairs is a different product decision:
 Alongside (2), `org.payroll.tsx` should move to `requireTenantId()` /
 `useMyTenantId()` so acting-tenant works there at all.
 
-**Until it is decided, seeded demo runs sit at `pending_approval`** — which is
-an honest state, and the one the product actually produces today.
+The seeded Globex runs are now **approved**, via the fixed super_admin path —
+which is also what gave the new trend charts real data to render.
