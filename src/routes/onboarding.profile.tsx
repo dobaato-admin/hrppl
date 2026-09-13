@@ -20,6 +20,7 @@ import {
 } from "@/lib/onboarding-country-fields";
 import { getMyOnboardingProfile, upsertMyOnboardingProfile } from "@/lib/staff-onboarding.functions";
 import { SubdivisionField } from "@/components/form/SubdivisionField";
+import { auStateForPostcode, hasPostcodeLookup } from "@/lib/address/providers";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/onboarding/profile")({
@@ -81,7 +82,16 @@ function OnboardingProfilePage() {
           maxLength={def.maxLength}
           onChange={(e) => {
             fieldErrors.clearField(def.key);
-            setForm({ ...form, [def.key]: e.target.value });
+            const next = { ...form, [def.key]: e.target.value };
+            // T17 · Postcode fills the state, because in Australia the
+            // postcode determines it — it is a rule, not a guess. Only ever
+            // fills an EMPTY field: silently overwriting something the person
+            // typed is how an autofill stops being trusted.
+            if (def.key === "postal_code") {
+              const inferred = auStateForPostcode(e.target.value);
+              if (inferred && country === "AU" && !form.region) next.region = inferred;
+            }
+            setForm(next);
           }}
           onBlur={(e) => {
             // T26 · A BSB is stored as six digits however it was typed, so two
@@ -219,7 +229,15 @@ function OnboardingProfilePage() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle>Contact & address</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Contact & address</CardTitle>
+            {hasPostcodeLookup(country) && (
+              <CardDescription>
+                Enter your postcode and we'll fill in the state for you. Everything here can be
+                typed by hand.
+              </CardDescription>
+            )}
+          </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             {getAddressFields()
               .filter((f) => f.key !== "country_of_residence")
