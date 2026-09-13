@@ -41,6 +41,7 @@ import {
 } from "@/components/setup/PayrollSetupNotice";
 import { getOutstandingSetup } from "@/lib/payroll-setup.functions";
 import { listCountryLeaveDefaults } from "@/lib/country-reference.functions";
+import { useCountries } from "@/hooks/use-countries";
 
 export const Route = createFileRoute("/org/setup")({
   head: () => ({ meta: [{ title: "Set up your organization — hrppl" }] }),
@@ -59,12 +60,6 @@ const STEPS: { key: StepKey; title: string; subtitle: string }[] = [
   { key: "defaults", title: "Leave defaults", subtitle: "So people can book time off" },
   { key: "invites", title: "Invite your team", subtitle: "Optional — do it later" },
 ];
-
-interface Country {
-  code: string;
-  name: string;
-  currency_code: string;
-}
 
 function OrgSetupPage() {
   const { user, loading: authLoading } = useAuth();
@@ -86,7 +81,8 @@ function OrgSetupPage() {
   const [stepIdx, setStepIdx] = useState(0);
   const [stepInitialized, setStepInitialized] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [countries, setCountries] = useState<Country[]>([]);
+  // T13 · One shared, session-long cache entry instead of a per-mount fetch.
+  const { countries } = useCountries();
   const [stepError, setStepError] = useState<string | null>(null);
   const [deptOptions, setDeptOptions] = useState<{ id: string; name: string }[]>([]);
   type InviteRow = {
@@ -113,13 +109,7 @@ function OrgSetupPage() {
     if (!authLoading && !user) navigate({ to: "/auth" });
   }, [user, authLoading, navigate]);
 
-  useEffect(() => {
-    supabase
-      .from("countries")
-      .select("code,name,currency_code")
-      .order("name")
-      .then(({ data }) => setCountries((data ?? []) as Country[]));
-  }, []);
+
 
   const { data: status, isLoading } = useQuery({
     queryKey: ["my-org-status"],

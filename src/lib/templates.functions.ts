@@ -2,18 +2,22 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { throwPlain } from "@/lib/db-error";
+import { getTenantAndRoles } from "@/lib/tenant-scope";
 
-async function getTenant(supabase: any, userId: string): Promise<string> {
-  const { data } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!data?.tenant_id) throw new Error("No tenant");
-  return data.tenant_id as string;
-}
-async function assertAdmin(supabase: any, userId: string) {
-  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  const roles = (data ?? []).map((r: any) => r.role);
+/**
+ * T13 · Both reads go through the memoised, parallel resolver in
+ * tenant-scope.ts. Every handler here opened with `await assertAdmin(...)`
+ * followed by `await getTenant(...)` — two independent round trips taken one
+ * after the other, and re-taken by each handler a page called. The guard is
+ * unchanged; only the number of times the same two rows are fetched is.
+ */
+async function adminTenant(supabase: any, userId: string): Promise<string> {
+  const { tenantId, roles } = await getTenantAndRoles(supabase, userId);
   if (!roles.some((r: string) => ["org_admin", "hr", "super_admin"].includes(r))) {
     throw new Error("Not authorized");
   }
+  if (!tenantId) throw new Error("No tenant");
+  return tenantId;
 }
 
 // ============================================================
@@ -24,8 +28,7 @@ export const listOnboardingTemplates = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const [tpls, items, courses] = await Promise.all([
       supabase.from("onboarding_checklist_templates").select("*").eq("tenant_id", tenant_id).order("created_at", { ascending: false }),
       supabase.from("onboarding_checklist_template_items").select("*").eq("tenant_id", tenant_id).order("sort_order"),
@@ -87,8 +90,7 @@ export const upsertOnboardingTemplate = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const base = {
       tenant_id,
       name: data.name,
@@ -139,8 +141,7 @@ export const cloneOnboardingTemplate = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ id: z.string().uuid(), newName: z.string().min(1).max(120) }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const { data: src } = await supabase.from("onboarding_checklist_templates").select("*").eq("id", data.id).eq("tenant_id", tenant_id).maybeSingle();
     if (!src) throw new Error("Template not found");
     const { data: created, error } = await supabase.from("onboarding_checklist_templates").insert({
@@ -174,8 +175,7 @@ export const deleteOnboardingTemplate = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const { error } = await supabase.from("onboarding_checklist_templates").delete().eq("id", data.id).eq("tenant_id", tenant_id);
     if (error) throw error;
     return { ok: true };
@@ -190,8 +190,7 @@ export const applyOnboardingTemplate = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const start = data.start_date ? new Date(data.start_date) : new Date();
     const { data: tpl } = await supabase.from("onboarding_checklist_templates").select("*").eq("id", data.template_id).eq("tenant_id", tenant_id).maybeSingle();
     if (!tpl) throw new Error("Template not found");
@@ -238,8 +237,7 @@ export const listTrainingBundles = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const [bundles, items, courses] = await Promise.all([
       supabase.from("training_bundles").select("*").eq("tenant_id", tenant_id).order("created_at", { ascending: false }),
       supabase.from("training_bundle_items").select("*").eq("tenant_id", tenant_id).order("sort_order"),
@@ -265,8 +263,7 @@ export const upsertTrainingBundle = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const base = { tenant_id, name: data.name, description: data.description ?? null, target_role: data.target_role ?? null, is_active: data.is_active, created_by: userId };
     let id = data.id;
     if (id) {
@@ -292,8 +289,7 @@ export const deleteTrainingBundle = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const { error } = await supabase.from("training_bundles").delete().eq("id", data.id).eq("tenant_id", tenant_id);
     if (error) throw error;
     return { ok: true };
@@ -308,8 +304,7 @@ export const applyTrainingBundle = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const start = data.start_date ? new Date(data.start_date) : new Date();
     const { data: items } = await supabase.from("training_bundle_items").select("*").eq("bundle_id", data.bundle_id).eq("tenant_id", tenant_id);
     if (!items?.length) return { enrolled: 0 };
@@ -336,8 +331,7 @@ export const listDocumentRequestTemplates = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const [tpls, items, docTpls] = await Promise.all([
       supabase.from("document_request_templates").select("*").eq("tenant_id", tenant_id).order("created_at", { ascending: false }),
       supabase.from("document_request_template_items").select("*").eq("tenant_id", tenant_id).order("sort_order"),
@@ -363,8 +357,7 @@ export const upsertDocumentRequestTemplate = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const base = { tenant_id, name: data.name, description: data.description ?? null, trigger: data.trigger ?? null, is_active: data.is_active, created_by: userId };
     let id = data.id;
     if (id) {
@@ -390,8 +383,7 @@ export const deleteDocumentRequestTemplate = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const { error } = await supabase.from("document_request_templates").delete().eq("id", data.id).eq("tenant_id", tenant_id);
     if (error) throw error;
     return { ok: true };
@@ -404,8 +396,7 @@ export const listActiveEmployees = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    await assertAdmin(supabase, userId);
-    const tenant_id = await getTenant(supabase, userId);
+    const tenant_id = await adminTenant(supabase, userId);
     const { data } = await supabase
       .from("employees")
       .select("id, first_name, last_name, email, department_id")

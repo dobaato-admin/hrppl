@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFormErrors, FieldError } from "@/hooks/use-form-errors";
+import { useCountries } from "@/hooks/use-countries";
 import {
   getCountrySchema, getPersonalFields, getAddressFields, getEmergencyFields,
   normaliseBsb, validateBankFields,
@@ -26,23 +27,19 @@ export const Route = createFileRoute("/onboarding/profile")({
   component: OnboardingProfilePage,
 });
 
-interface Country { code: string; name: string }
-
 function OnboardingProfilePage() {
   const { user, loading } = useAuth();
+  // T13 · Shared, cached once per session — was a per-mount effect fetch.
+  const { countries } = useCountries();
   const navigate = useNavigate();
   const fetchFn = useServerFn(getMyOnboardingProfile);
   const saveFn = useServerFn(upsertMyOnboardingProfile);
-  const [countries, setCountries] = useState<Country[]>([]);
   const [form, setForm] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { if (!loading && !user) navigate({ to: "/auth" }); }, [user, loading, navigate]);
 
-  useEffect(() => {
-    supabase.from("countries").select("code,name").order("name")
-      .then(({ data }) => setCountries((data ?? []) as Country[]));
-  }, []);
+
 
   const { data, isLoading } = useQuery({
     queryKey: ["my-onboarding-profile"],
