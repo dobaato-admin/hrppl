@@ -120,8 +120,14 @@ export const createPayrollRun = createServerFn({ method: "POST" })
       // only the payroll half is passed in as a blocker.
       const outstanding = outstandingSetupItems(payrollReady, overtimeReady, null);
       if (outstanding.length > 0) {
+        // Names the specific pages, because "the setup guide" is one more hop
+        // than the admin needs — they are already looking at the thing they
+        // cannot do. The payroll page shows the same list as links before
+        // anybody gets here, so this should now be unreachable through the UI
+        // and is the enforcement rather than the explanation.
+        const where = Array.from(new Set(outstanding.map((o) => o.href))).join(" and ");
         throw new Error(
-          `Payroll setup is not finished, so this run cannot be opened. Still needed: ${outstandingSummary(outstanding)}. Finish it in the setup guide, then start the run again.`,
+          `Payroll setup is not finished, so this run cannot be opened. Still needed: ${outstandingSummary(outstanding)}. Configure it at ${where}, then start the run again.`,
         );
       }
       void leaveReady;

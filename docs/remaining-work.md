@@ -252,7 +252,7 @@ Three rules those tests encode, worth stating in prose because the next person w
 
 ## Baseline
 
-A green test run reads **0 failed / 1,274 passed / 6 skipped**.
+A green test run reads **0 failed / 1,320 passed / 6 skipped**.
 
 **This changed in Wave 7.** The baseline used to read "4 failed", and those four were stale
 fixtures in `tests/onboarding-readiness.test.ts` describing a table shape that no longer exists —
@@ -308,3 +308,44 @@ ship complete. Free-text autocomplete needs a provider decision and an API key; 
 needs a ~16,000-row dataset. Nepal was verified as T17 asked and gets the province dropdown plus
 manual entry — its postal data is district-level and addresses are written by ward and landmark,
 so a postcode→suburb flow would match neither the data nor the habit.
+
+
+---
+
+## Payroll approval is unreachable through the UI (found 2026-09-13)
+
+**Priority 1.** A payroll run can be created, computed and submitted, and then
+nobody can approve it from the product. Three roles, three different reasons,
+none of them visible from inside the app:
+
+| Role | Sees `/org/payroll`? | `assertApproverForTenant` allows? | Result |
+| --- | --- | --- | --- |
+| `manager` | **No** — `can("org.payroll")` admits super_admin, org_admin, branch_admin, finance | **Yes** — it requires `manager` | Cannot open the page |
+| `org_admin`, `finance`, `branch_admin` | Yes | **No** — "Forbidden: manager role required" | Approve button is not rendered for them |
+| `super_admin` | Yes | Yes | Page shows "No runs yet" — see below |
+
+The `super_admin` case is gap 1 in CLAUDE.md made concrete: `org.payroll.tsx`
+resolves its tenant with a direct `profiles.tenant_id` read, which is NULL for
+a platform account, so acting as a tenant through the TenantSwitcher does not
+scope the page. Verified in the browser: acting as Globex Nepal, the runs table
+is empty while the database holds three runs for that tenant.
+
+This is the W5 "nav row vs RLS policy" drift axis, in the one place W5 did not
+reach. **It is a deliberate open finding, not something to fix in passing** —
+each of the three repairs is a different product decision:
+
+1. **Add `manager` to `org.payroll`.** Simplest, but the page shows every
+   payslip for every employee, so this hands the whole salary list to every
+   manager. Almost certainly wrong.
+2. **Approve from `/approvals` instead.** The approvals queue already exists
+   (T1–T5) and is the right shape: a manager sees only what they may decide.
+   This is the recommended direction.
+3. **Let org_admin approve.** Removes the separation of duties that stops the
+   person who submitted a run approving it. Needs the client's view on whether
+   that separation is a requirement for them.
+
+Alongside (2), `org.payroll.tsx` should move to `requireTenantId()` /
+`useMyTenantId()` so acting-tenant works there at all.
+
+**Until it is decided, seeded demo runs sit at `pending_approval`** — which is
+an honest state, and the one the product actually produces today.

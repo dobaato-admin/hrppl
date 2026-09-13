@@ -21,6 +21,7 @@ export interface PayrollReadinessSteps {
   payDates: boolean;
   overtimeRates: boolean;
   currency: boolean;
+  payslipTemplate: boolean;
 }
 
 export interface LeaveReadinessSteps {
@@ -60,6 +61,12 @@ const PAYROLL_ITEMS: Record<keyof PayrollReadinessSteps, Omit<OutstandingItem, "
     label: "Overtime rates",
     detail: "The multipliers applied to approved overtime hours.",
     href: "/admin/overtime-setup-wizard",
+  },
+  payslipTemplate: {
+    label: "Payslip template",
+    detail:
+      "The layout a payslip is rendered from. Without one for your country a run is created but cannot be computed.",
+    href: "/admin/payslip-templates",
   },
 };
 
@@ -101,6 +108,7 @@ export function outstandingSetupItems(
     "payItems",
     "payDates",
     "overtimeRates",
+    "payslipTemplate",
   ];
   for (const key of payrollOrder) {
     if (!payroll) continue;
@@ -138,4 +146,34 @@ export function outstandingSummary(items: OutstandingItem[]): string {
   const labels = items.map((i) => i.label);
   if (labels.length === 1) return labels[0];
   return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+
+
+/** Keys that stop a payroll run from being opened. */
+const BLOCKS_A_RUN = new Set([
+  "currency",
+  "payItems",
+  "payDates",
+  "overtimeRates",
+  "payslipTemplate",
+]);
+
+/**
+ * Split outstanding items into what actually stops a run and what does not.
+ *
+ * `createPayrollRun` refuses on the payroll half only — leave setup changes
+ * balances, not pay, so an organisation with no leave quotas can still pay
+ * people. A banner that lists both under "you can't run payroll yet" tells the
+ * admin something false, and sends them to fix a thing that was not in their
+ * way. Found exactly that way: the page reported two blockers where the server
+ * would only have refused on one.
+ */
+export function partitionForRun(items: OutstandingItem[]): {
+  blocking: OutstandingItem[];
+  advisory: OutstandingItem[];
+} {
+  return {
+    blocking: items.filter((i) => BLOCKS_A_RUN.has(i.key)),
+    advisory: items.filter((i) => !BLOCKS_A_RUN.has(i.key)),
+  };
 }

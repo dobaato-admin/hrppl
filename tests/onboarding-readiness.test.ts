@@ -104,6 +104,7 @@ describe("checkPayrollReadiness", () => {
       payDates: false,
       overtimeRates: false,
       currency: false,
+      payslipTemplate: false,
     });
   });
 
@@ -112,6 +113,9 @@ describe("checkPayrollReadiness", () => {
       payroll_components: [{ id: "c1", tenant_id: TENANT, is_active: true }],
       tenant_payroll_settings: [{ tenant_id: TENANT, pay_period: "monthly" }],
       overtime_penalty_rates: [{ id: "ot1", country_code: COUNTRY, is_active: true }],
+      // A run with no payslip template is created and then cannot be
+      // computed, so readiness checks for one — see 20260913090000.
+      payslip_templates: [{ id: "tpl1", country_code: COUNTRY, status: "published" }],
       tenants: [{ id: TENANT, currency_code: "USD", country_code: COUNTRY }],
     });
     const r = await checkPayrollReadiness(sb as any, TENANT);
@@ -123,6 +127,9 @@ describe("checkPayrollReadiness", () => {
       payroll_components: [{ id: "c1", tenant_id: TENANT, is_active: true }],
       tenant_payroll_settings: [{ tenant_id: TENANT, pay_period: "monthly" }],
       overtime_penalty_rates: [{ id: "ot1", country_code: COUNTRY, is_active: true }],
+      // A run with no payslip template is created and then cannot be
+      // computed, so readiness checks for one — see 20260913090000.
+      payslip_templates: [{ id: "tpl1", country_code: COUNTRY, status: "published" }],
       tenants: [{ id: TENANT, currency_code: "XX", country_code: COUNTRY }],
     });
     const r = await checkPayrollReadiness(sb as any, TENANT);
@@ -135,6 +142,9 @@ describe("checkPayrollReadiness", () => {
       payroll_components: [{ id: "c1", tenant_id: TENANT, is_active: false }],
       tenant_payroll_settings: [{ tenant_id: TENANT, pay_period: "monthly" }],
       overtime_penalty_rates: [{ id: "ot1", country_code: COUNTRY, is_active: true }],
+      // A run with no payslip template is created and then cannot be
+      // computed, so readiness checks for one — see 20260913090000.
+      payslip_templates: [{ id: "tpl1", country_code: COUNTRY, status: "published" }],
       tenants: [{ id: TENANT, currency_code: "USD", country_code: COUNTRY }],
     });
     const r = await checkPayrollReadiness(sb as any, TENANT);
@@ -189,6 +199,9 @@ describe("checkOvertimeReadiness", () => {
     const sb = makeFakeSupabase({
       tenants: [{ id: TENANT }],
       overtime_penalty_rates: [{ id: "ot1", country_code: COUNTRY, is_active: true }],
+      // A run with no payslip template is created and then cannot be
+      // computed, so readiness checks for one — see 20260913090000.
+      payslip_templates: [{ id: "tpl1", country_code: COUNTRY, status: "published" }],
     });
     const r = await checkOvertimeReadiness(sb as any, TENANT);
     expect(r).toEqual({ hasRates: false, rateCount: 0, allComplete: false });
@@ -302,6 +315,9 @@ describe("invitation gate — combined readiness", () => {
       payroll_components: [],
       tenant_payroll_settings: [{ tenant_id: TENANT, pay_period: "monthly" }],
       overtime_penalty_rates: [{ id: "ot1", country_code: COUNTRY, is_active: true }],
+      // A run with no payslip template is created and then cannot be
+      // computed, so readiness checks for one — see 20260913090000.
+      payslip_templates: [{ id: "tpl1", country_code: COUNTRY, status: "published" }],
       tenants: [{ id: TENANT, currency_code: "USD", country_code: COUNTRY }],
       leave_types: [
         {
@@ -347,6 +363,9 @@ describe("invitation gate — combined readiness", () => {
       payroll_components: [{ id: "c1", tenant_id: TENANT, is_active: true }],
       tenant_payroll_settings: [{ tenant_id: TENANT, pay_period: "monthly" }],
       overtime_penalty_rates: [{ id: "ot1", country_code: COUNTRY, is_active: true }],
+      // A run with no payslip template is created and then cannot be
+      // computed, so readiness checks for one — see 20260913090000.
+      payslip_templates: [{ id: "tpl1", country_code: COUNTRY, status: "published" }],
       tenants: [{ id: TENANT, currency_code: "USD", country_code: COUNTRY }],
       leave_types: [],
       user_roles: [],
@@ -359,6 +378,9 @@ describe("invitation gate — combined readiness", () => {
       payroll_components: [{ id: "c1", tenant_id: TENANT, is_active: true }],
       tenant_payroll_settings: [{ tenant_id: TENANT, pay_period: "monthly" }],
       overtime_penalty_rates: [{ id: "ot1", country_code: COUNTRY, is_active: true }],
+      // A run with no payslip template is created and then cannot be
+      // computed, so readiness checks for one — see 20260913090000.
+      payslip_templates: [{ id: "tpl1", country_code: COUNTRY, status: "published" }],
       tenants: [{ id: TENANT, currency_code: "USD", country_code: COUNTRY }],
       leave_types: [
         {

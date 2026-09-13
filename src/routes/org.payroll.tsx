@@ -44,6 +44,17 @@ import {
   bulkResendPayslipsInRange,
 } from "@/lib/payroll-emails.functions";
 import { getRunVariance, getRunDistribution } from "@/lib/payroll-insights.functions";
+import { getOutstandingSetup } from "@/lib/payroll-setup.functions";
+import { partitionForRun } from "@/lib/payroll-readiness";
+import { PayrollReadinessGate } from "@/components/payroll/PayrollReadinessGate";
+import {
+  recentPayPeriods,
+  PAY_PERIOD_LABEL,
+  type PayPeriod,
+  type ProposedPeriod,
+} from "@/lib/pay-period";
+import { localYmd } from "@/lib/work-date";
+import { useQuery } from "@tanstack/react-query";
 import { generatePayslipPdf } from "@/lib/payslip-pdf";
 import {
   Download,
@@ -127,6 +138,34 @@ function PayrollPage() {
   });
   const [previewSlip, setPreviewSlip] = useState<Payslip | null>(null);
 
+  const outstandingFn = useServerFn(getOutstandingSetup);
+  /**
+   * What is still missing before a run can be opened.
+   *
+   * The same list `createPayrollRun` refuses against, read up front so the
+   * refusal never has to happen — see PayrollReadinessGate.
+   */
+  const { data: readiness, isLoading: readinessLoading } = useQuery({
+    queryKey: ["outstanding-setup"],
+    queryFn: () => outstandingFn(),
+    enabled: !!user && !!tenantId,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const outstanding = readiness?.items ?? [];
+  // Only the payroll half stops a run — see partitionForRun. Disabling the
+  // button on a leave-setup item would block a run the server would have
+  // allowed.
+  const { blocking: runBlockers } = partitionForRun(outstanding);
+  const setupIncomplete = runBlockers.length > 0;
+
+  /** The tenant's pay cadence, for proposing periods. */
+  const [payPeriod, setPayPeriod] = useState<PayPeriod | null>(null);
+  const periodOptions = useMemo(
+    () => recentPayPeriods(payPeriod, localYmd(new Date()), 3),
+    [payPeriod],
+  );
+
   const create = useServerFn(createPayrollRun);
   const compute = useServerFn(computePayrollRun);
   const submit = useServerFn(submitPayrollRun);
@@ -194,6 +233,21 @@ function PayrollPage() {
           .eq("id", data.tenant_id)
           .maybeSingle();
         if (t) setTenantInfo(t as any);
+        // The tenant's pay cadence, so the New run dialog can propose real
+        // periods instead of three empty boxes.
+        const { data: settings, error: settingsErr } = await supabase
+          .from("tenant_payroll_settings")
+          .select("pay_period")
+          .eq("tenant_id", data.tenant_id)
+          .maybeSingle();
+        if (settingsErr) {
+          // Not fatal — the dialog falls back to monthly periods, which are
+          // editable. But it must not be silent: a fortnightly tenant being
+          // quietly offered monthly periods is a wrong default that looks
+          // like a considered one.
+          console.error("[payroll] could not read pay cadence", settingsErr);
+        }
+        setPayPeriod((settings?.pay_period as PayPeriod | undefined) ?? null);
         const { data: sub } = await supabase
           .from("tenant_subscriptions")
           .select("au_payroll_addon,status")
@@ -276,6 +330,21 @@ function PayrollPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /**
+   * Fill the form from a proposed period, leaving everything else alone.
+   *
+   * Only the three dates — currency, FX and notes are the admin's, and a
+   * preset that silently cleared them would be a trap.
+   */
+  function applyPeriod(p: ProposedPeriod) {
+    setForm((f) => ({
+      ...f,
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      payDate: p.payDate,
+    }));
   }
 
   async function onCreate() {
@@ -567,9 +636,28 @@ function PayrollPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <Dialog
+              open={createOpen}
+              onOpenChange={(open) => {
+                // Prefill on open rather than on mount: the cadence may have
+                // arrived after the page did, and a stale proposal is worse
+                // than none.
+                if (open && periodOptions[0]) applyPeriod(periodOptions[0]);
+                setCreateOpen(open);
+              }}
+            >
               <DialogTrigger asChild>
-                <Button size="sm">New run</Button>
+                <Button
+                  size="sm"
+                  disabled={setupIncomplete || readinessLoading}
+                  title={
+                    setupIncomplete
+                      ? "Finish payroll setup first — see the notice above"
+                      : undefined
+                  }
+                >
+                  New run
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -579,6 +667,36 @@ function PayrollPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
+                  {/*
+                    Quick picks. The dialog opens on the most recent complete
+                    period already; these are for the month before that, which
+                    is the other common case (a late run, or catching up).
+                  */}
+                  <div className="space-y-1.5">
+                    <Label>Pay period</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {periodOptions.map((p) => {
+                        const active =
+                          form.periodStart === p.periodStart && form.periodEnd === p.periodEnd;
+                        return (
+                          <Button
+                            key={p.periodStart}
+                            type="button"
+                            size="sm"
+                            variant={active ? "default" : "outline"}
+                            onClick={() => applyPeriod(p)}
+                          >
+                            {p.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {payPeriod ? PAY_PERIOD_LABEL[payPeriod] : "Monthly"} periods, from your
+                      payroll settings. The dates below are editable — change them if this run
+                      covers something else.
+                    </p>
+                  </div>
                   <div>
                     <Label>Period start</Label>
                     <Input
@@ -658,6 +776,14 @@ function PayrollPage() {
       </header>
 
       <section className="mx-auto max-w-6xl px-6 py-8 space-y-6">
+        {/*
+          First thing on the page, above everything else. This used to be a
+          toast AFTER the admin had opened the dialog, typed three dates and
+          pressed Create — information that was available before they started,
+          withheld until after they had done the work.
+        */}
+        <PayrollReadinessGate items={outstanding} />
+
         {tenantInfo?.country_code?.toUpperCase() === "AU" && auAddon === false && (
           <Card className="border-amber-500/40 bg-amber-500/5">
             <CardHeader>

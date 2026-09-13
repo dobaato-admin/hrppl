@@ -20,7 +20,13 @@ import { readFileSync } from "node:fs";
 import { outstandingSetupItems, outstandingSummary } from "@/lib/payroll-readiness";
 
 const ALL_PAYROLL_OK = {
-  steps: { payItems: true, payDates: true, overtimeRates: true, currency: true },
+  steps: {
+    payItems: true,
+    payDates: true,
+    overtimeRates: true,
+    currency: true,
+    payslipTemplate: true,
+  },
 };
 const ALL_LEAVE_OK = { steps: { leaveTypes: true, accruals: true, approvalRouting: true } };
 
@@ -31,7 +37,7 @@ describe("outstandingSetupItems", () => {
 
   it("names items the way an admin does, never by check key", () => {
     const items = outstandingSetupItems(
-      { steps: { payItems: false, payDates: false, overtimeRates: false, currency: false } },
+      { steps: { payItems: false, payDates: false, overtimeRates: false, currency: false, payslipTemplate: false } },
       { allComplete: false },
       { steps: { leaveTypes: false, accruals: false, approvalRouting: false } },
     );
@@ -48,7 +54,7 @@ describe("outstandingSetupItems", () => {
 
   it("puts currency first — pay items are denominated in it", () => {
     const items = outstandingSetupItems(
-      { steps: { payItems: false, payDates: false, overtimeRates: true, currency: false } },
+      { steps: { payItems: false, payDates: false, overtimeRates: true, currency: false, payslipTemplate: true } },
       { allComplete: true },
       ALL_LEAVE_OK,
     );
@@ -57,11 +63,11 @@ describe("outstandingSetupItems", () => {
 
   it("gives every item somewhere to go and something to read", () => {
     const items = outstandingSetupItems(
-      { steps: { payItems: false, payDates: false, overtimeRates: false, currency: false } },
+      { steps: { payItems: false, payDates: false, overtimeRates: false, currency: false, payslipTemplate: false } },
       { allComplete: false },
       { steps: { leaveTypes: false, accruals: false, approvalRouting: false } },
     );
-    expect(items.length).toBe(7);
+    expect(items.length).toBe(8);
     for (const item of items) {
       expect(item.href.startsWith("/")).toBe(true);
       expect(item.detail.length).toBeGreaterThan(20);
@@ -79,7 +85,7 @@ describe("outstandingSetupItems", () => {
 
   it("does not report overtime twice when both checks cover it", () => {
     const items = outstandingSetupItems(
-      { steps: { payItems: true, payDates: true, overtimeRates: false, currency: true } },
+      { steps: { payItems: true, payDates: true, overtimeRates: false, currency: true, payslipTemplate: true } },
       { allComplete: false },
       ALL_LEAVE_OK,
     );
@@ -90,7 +96,7 @@ describe("outstandingSetupItems", () => {
 describe("outstandingSummary", () => {
   it("reads as a sentence fragment, not a list of identifiers", () => {
     const items = outstandingSetupItems(
-      { steps: { payItems: false, payDates: false, overtimeRates: true, currency: true } },
+      { steps: { payItems: false, payDates: false, overtimeRates: true, currency: true, payslipTemplate: true } },
       { allComplete: true },
       ALL_LEAVE_OK,
     );
