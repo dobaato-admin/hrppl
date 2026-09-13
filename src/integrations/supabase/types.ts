@@ -13781,6 +13781,10 @@ export type Database = {
         Args: { _request_id: string; _user_id: string }
         Returns: boolean
       }
+      can_read_document_envelope: {
+        Args: { _envelope_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_see_confidential: {
         Args: { _tenant_id: string; _user_id: string }
         Returns: boolean

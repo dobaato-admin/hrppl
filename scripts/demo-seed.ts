@@ -741,6 +741,170 @@ async function seed(): Promise<SeededAccount[]> {
       ok("wfh_requests", await admin.from("wfh_requests").insert(wfhRows).select("id"));
     }
 
+    // ---- documents: templates, envelopes and expiring records ----
+    //
+    // The documents module had NO seed data at all, which is why the 2026-09-07
+    // QA sweep's "No envelopes yet." looked the same for a manager (who was
+    // being refused by `getOrgAdminTenant`) as for an org admin (who was being
+    // told the truth). Two different failures, one indistinguishable screen.
+    // With rows here, a refusal and an empty tenant finally look different.
+    //
+    // Shaped to exercise the read scoping rather than just to be non-empty:
+    //
+    //   * one PUBLISHED template and one DRAFT — `manager` and `branch_admin`
+    //     hold `status = 'published'` policies, so they should see exactly one.
+    //   * envelopes for a manager's own direct report AND for someone outside
+    //     that line, so `env_manager_read`'s direct-report predicate is
+    //     observable instead of vacuously true.
+    //   * signers and events on each, because the detail page reads three
+    //     tables and only one of them used to admit anyone but an org admin.
+    const publishedTpl = ok(
+      "document_templates (published)",
+      await admin.from("document_templates").insert({
+        tenant_id: tenant.id,
+        name: "Employment contract",
+        description: "Standard full-time agreement.",
+        doc_type: "employment_contract",
+        status: "published",
+        version: 1,
+        requires_signature: true,
+        default_due_days: 7,
+        body_html:
+          "<h1>Employment agreement</h1><p>This agreement is made between {{company.name}} and {{employee.full_name}}, commencing {{today}} in the role of {{employee.job_title}}.</p>",
+        published_at: new Date().toISOString(),
+        published_by: founderId,
+        created_by: founderId,
+      }).select("id").single(),
+    ) as { id: string };
+
+    ok(
+      "document_templates (draft)",
+      await admin.from("document_templates").insert({
+        tenant_id: tenant.id,
+        name: "Offer letter (in review)",
+        description: "Draft — not yet published, so read-only roles must not see it.",
+        doc_type: "offer_letter",
+        status: "draft",
+        version: 1,
+        requires_signature: true,
+        body_html: "<h1>Offer of employment</h1><p>Dear {{employee.first_name}},</p>",
+        created_by: founderId,
+      }).select("id").single(),
+    );
+
+    // A direct report of the seeded manager, and someone who is not.
+    const managerHandle = spec.people.find((x) => x.role === "manager")?.handle;
+    const directReport = spec.people.find((x) => x.reportsTo && x.reportsTo === managerHandle);
+    const outsider = spec.people.find(
+      (x) => x.role === "employee" && x.handle !== directReport?.handle,
+    );
+
+    for (const [person, status] of [
+      [directReport, "sent"],
+      [outsider, "completed"],
+    ] as const) {
+      if (!person) continue;
+      const signed = status === "completed";
+      const env = ok(
+        `document_envelopes ${person.handle}`,
+        await admin.from("document_envelopes").insert({
+          tenant_id: tenant.id,
+          template_id: publishedTpl.id,
+          template_version: 1,
+          doc_type: "employment_contract",
+          subject: `Employment contract — ${person.first} ${person.last}`,
+          body_html_snapshot: `<h1>Employment agreement</h1><p>This agreement is made between ${spec.name} and ${person.first} ${person.last}.</p>`,
+          employee_id: empIds.get(person.handle)!,
+          recipient_email: email(person.handle, spec.slug),
+          recipient_name: `${person.first} ${person.last}`,
+          status,
+          requires_signature: true,
+          due_date: day(7),
+          sent_at: new Date(Date.now() - 3 * 24 * 3600_000).toISOString(),
+          completed_at: signed ? new Date(Date.now() - 24 * 3600_000).toISOString() : null,
+          created_by: founderId,
+        }).select("id").single(),
+      ) as { id: string };
+
+      ok(
+        `document_signers ${person.handle}`,
+        await admin.from("document_signers").insert({
+          envelope_id: env.id,
+          tenant_id: tenant.id,
+          order_index: 1,
+          role: "signer",
+          signer_user_id: userIds.get(person.handle),
+          signer_employee_id: empIds.get(person.handle)!,
+          signer_email: email(person.handle, spec.slug),
+          signer_name: `${person.first} ${person.last}`,
+          status: signed ? "signed" : "pending",
+          signed_at: signed ? new Date(Date.now() - 24 * 3600_000).toISOString() : null,
+          signature_method: signed ? "typed" : null,
+          signature_typed: signed ? `${person.first} ${person.last}` : null,
+        }).select("id"),
+      );
+
+      ok(
+        `document_events ${person.handle}`,
+        await admin.from("document_events").insert(
+          [
+            { event: "envelope_sent", at: 3 },
+            ...(signed ? [{ event: "envelope_signed", at: 1 }] : []),
+          ].map((e) => ({
+            envelope_id: env.id,
+            tenant_id: tenant.id,
+            event: e.event,
+            actor_user_id: founderId,
+            actor_email: email(spec.people[0].handle, spec.slug),
+            created_at: new Date(Date.now() - e.at * 24 * 3600_000).toISOString(),
+          })),
+        ).select("id"),
+      );
+    }
+
+    // Employee documents with expiry dates, so /org/documents/expiring is not
+    // an empty page. `visibility` stays 'admin' on the identity document: it is
+    // a passport scan, and the whole reason that page carries its own feature
+    // key is that this table answers differently from the envelope tables.
+    const expiringOwner = directReport ?? spec.people.find((x) => x.role === "employee");
+    if (expiringOwner) {
+      ok(
+        "employee_documents",
+        await admin.from("employee_documents").insert([
+          {
+            tenant_id: tenant.id,
+            employee_id: empIds.get(expiringOwner.handle)!,
+            doc_type: "other",
+            category: "identity",
+            file_path: `${tenant.id}/${empIds.get(expiringOwner.handle)}/passport.pdf`,
+            file_name: "passport.pdf",
+            visibility: "admin",
+            issued_date: day(-1200),
+            expiry_date: day(30),
+            verification_status: "unverified",
+            uploaded_by: founderId,
+            notes: "Seeded demo record — no file is actually stored.",
+          },
+          {
+            tenant_id: tenant.id,
+            employee_id: empIds.get(expiringOwner.handle)!,
+            doc_type: "other",
+            category: "certificate",
+            file_path: `${tenant.id}/${empIds.get(expiringOwner.handle)}/first-aid.pdf`,
+            file_name: "first-aid-certificate.pdf",
+            visibility: "manager",
+            issued_date: day(-700),
+            expiry_date: day(14),
+            verification_status: "verified",
+            verified_by: founderId,
+            verified_at: new Date().toISOString(),
+            uploaded_by: founderId,
+            notes: "Seeded demo record — no file is actually stored.",
+          },
+        ]).select("id"),
+      );
+    }
+
     // Submitted onboarding profiles.
     //
     // dashboard.tsx redirects any user who has an employee record and no

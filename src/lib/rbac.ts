@@ -71,6 +71,7 @@ export type Feature =
   | "org.expenseSettings"
   | "org.documents"
   | "org.documentTemplates"
+  | "org.documentVerification"
   | "org.onboardingPacks"
   | "org.employmentVariations"
   | "org.training"
@@ -268,6 +269,11 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
   // — "define a tenant-wide config" — rather than reusing org.expenses, which
   // also admits branch_admin/manager (approvers, not policy owners).
   "org.expenseSettings": SET("super_admin", "org_admin", "finance"),
+  // The envelope surface: company letters, contracts, offers. All six roles read
+  // it; only super_admin / org_admin / hr write. RLS narrows *which* rows the
+  // read-only three see (a manager gets their direct reports', a branch_admin
+  // gets their branches'), which is the right place for that narrowing.
+  // `src/lib/documents-guard.ts` is the server-side half and holds the table.
   "org.documents": SET("super_admin", "org_admin", "branch_admin", "hr", "finance", "manager"),
   // Matches org.documents — same domain, same admins. Had no route-level
   // gate at all before this wave.
@@ -279,6 +285,16 @@ const MATRIX: Record<Feature, Set<AppRole>> = {
     "finance",
     "manager",
   ),
+  // `/org/documents/expiring` reads `employee_documents` — passports, visas,
+  // certificates — NOT the envelope tables, and the database answers
+  // differently there: no policy on `employee_documents` admits `finance`, by
+  // the same choice 20260604064304 made for every other identity document.
+  //
+  // So this cannot reuse `org.documents`. Admitting finance here would either
+  // show them an unexplained empty table (the defect this key exists to close)
+  // or require widening finance into personal identity documents, which is a
+  // privacy decision and not a gating fix.
+  "org.documentVerification": SET("super_admin", "org_admin", "hr", "branch_admin", "manager"),
   // Matches admin.onboarding-packs.tsx's own AdminGate allow={ORG_ADMIN_ONLY}.
   "org.onboardingPacks": SET("super_admin", "org_admin"),
   // Matches hr.variations.tsx's own inline role check.

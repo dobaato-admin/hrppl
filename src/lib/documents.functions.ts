@@ -1,5 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireTenantId } from "@/lib/tenant-scope";
+import {
+  requireDocumentAdminTenant,
+  requireDocumentReadTenant,
+  requireEmployeeDocumentAdminTenant,
+  requireEmployeeDocumentReadTenant,
+} from "@/lib/documents-guard";
 import { z } from "zod";
 import { getRequestHeader, getRequestIP, getRequestHost } from "@tanstack/react-start/server";
 import DOMPurify from "isomorphic-dompurify";
@@ -201,15 +206,10 @@ function escapeHtml(s: string | null | undefined): string {
   );
 }
 
-async function getOrgAdminTenant(supabase: any, userId: string): Promise<string> {
-  // W5 P0-4 · The role check is unchanged; only the tenant lookup moves to
-  // tenant-scope, so a super_admin acting as a tenant resolves to that tenant
-  // instead of failing on their own NULL profiles.tenant_id.
-  const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  const ok = (roles ?? []).some((r: any) => r.role === "org_admin" || r.role === "super_admin");
-  if (!ok) throw new Error("Not authorized");
-  return requireTenantId(supabase, userId);
-}
+// `getOrgAdminTenant` lived here and admitted org_admin + super_admin only,
+// while the nav and the route offered these pages to six roles. See
+// `src/lib/documents-guard.ts` for what the database actually permits and why
+// the employee-document surface answers differently from the envelope one.
 
 // Allow-list HTML sanitizer for stored template/envelope HTML.
 // Uses DOMPurify with a strict tag/attribute allowlist; safe URI schemes only.
@@ -362,7 +362,7 @@ export const listTemplates = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentReadTenant(supabase, userId);
     const { data, error } = await supabase
       .from("document_templates")
       .select(
@@ -381,7 +381,7 @@ export const getTemplate = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentReadTenant(supabase, userId);
     const { data: tpl, error } = await supabase
       .from("document_templates")
       .select("*")
@@ -419,7 +419,7 @@ export const upsertTemplate = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => TemplateUpsertSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
     const body_html = sanitizeHtml(data.body_html);
     const payload: any = {
       tenant_id,
@@ -466,7 +466,7 @@ export const publishTemplate = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
     const { error } = await supabase
       .from("document_templates")
       .update({ status: "published", published_at: new Date().toISOString(), published_by: userId })
@@ -482,7 +482,7 @@ export const archiveTemplate = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
     const { error } = await supabase
       .from("document_templates")
       .update({ status: "archived" })
@@ -497,7 +497,7 @@ export const cloneTemplate = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
     const { data: src } = await supabase
       .from("document_templates")
       .select("*")
@@ -582,7 +582,7 @@ export const sendEnvelopes = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => SendEnvelopeSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
 
     let tpl: any = null;
     if (data.template_id) {
@@ -781,7 +781,7 @@ export const listEnvelopes = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentReadTenant(supabase, userId);
     let q = supabase
       .from("document_envelopes")
       .select(
@@ -840,8 +840,8 @@ export const cancelEnvelope = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
-    const { error } = await supabase
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
+    const { data: cancelled, error } = await supabase
       .from("document_envelopes")
       .update({
         status: "cancelled",
@@ -850,8 +850,13 @@ export const cancelEnvelope = createServerFn({ method: "POST" })
         cancel_reason: data.reason ?? null,
       })
       .eq("id", data.id)
-      .eq("tenant_id", tenant_id);
+      .eq("tenant_id", tenant_id)
+      .select("id")
+      .maybeSingle();
     if (error) throw error;
+    // W7 rule · a zero-row UPDATE is a 200. Without this the toast says
+    // "cancelled" and the envelope goes on collecting signatures.
+    if (!cancelled) throw new Error("That envelope was not cancelled — it may no longer exist.");
     await logEvent({
       envelope_id: data.id,
       tenant_id,
@@ -1266,7 +1271,7 @@ export const sendEnvelopeReminder = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ envelope_id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
     const admin = await loadAdmin();
     const { data: env } = await admin
       .from("document_envelopes")
@@ -1363,7 +1368,7 @@ export const renderTemplatePreview = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    await getOrgAdminTenant(supabase, userId);
+    await requireDocumentAdminTenant(supabase, userId);
     const defaults: Record<string, string> = {
       "employee.first_name": "Alex",
       "employee.last_name": "Sample",
@@ -1393,7 +1398,7 @@ export const listExpiringDocuments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireEmployeeDocumentReadTenant(supabase, userId);
     const cutoff = new Date(Date.now() + 60 * 86400_000).toISOString().slice(0, 10);
     const { data, error } = await supabase
       .from("employee_documents")
@@ -1422,8 +1427,14 @@ export const verifyEmployeeDocument = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
-    const { error } = await supabase
+    const tenant_id = await requireEmployeeDocumentAdminTenant(supabase, userId);
+    // W7 rule · read the row back. PostgREST answers an UPDATE matching zero
+    // rows with 200 and no error, and `branch_admin`'s policy here is
+    // BRANCH-scoped ("branch admin manages branch employee_documents",
+    // 20260613140101) — so verifying another branch's document would have
+    // matched nothing and still reported success. The role check above cannot
+    // catch that; only the row coming back can.
+    const { data: updated, error } = await supabase
       .from("employee_documents")
       .update({
         verification_status: data.status,
@@ -1432,8 +1443,15 @@ export const verifyEmployeeDocument = createServerFn({ method: "POST" })
         verification_notes: data.notes ?? null,
       })
       .eq("id", data.id)
-      .eq("tenant_id", tenant_id);
+      .eq("tenant_id", tenant_id)
+      .select("id")
+      .maybeSingle();
     if (error) throw error;
+    if (!updated) {
+      throw new Error(
+        "That document was not updated — it may belong to a branch you do not administer.",
+      );
+    }
     return { ok: true };
   });
 
@@ -1469,7 +1487,7 @@ export const instantiateStarterTemplate = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ key: z.string().min(1).max(80) }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const tenant_id = await getOrgAdminTenant(supabase, userId);
+    const tenant_id = await requireDocumentAdminTenant(supabase, userId);
     const { getPresetByKey } = await import("@/lib/document-template-presets");
     const preset = getPresetByKey(data.key);
     if (!preset) throw new Error("Starter template not found");
