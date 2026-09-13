@@ -169,6 +169,14 @@ function OrgRolesPage() {
   const [newBranch, setNewBranch] = useState<string>("");
   const [scopeBranches, setScopeBranches] = useState<Set<string>>(new Set());
   const [resendingId, setResendingId] = useState<string | null>(null);
+  /**
+   * Whether Grant has been pressed on the current dialog.
+   *
+   * Required-ness is only *shown* after somebody tries to submit. A field
+   * outlined in red the moment a dialog opens reads as "you have made a
+   * mistake" before any mistake is possible.
+   */
+  const [grantAttempted, setGrantAttempted] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -188,10 +196,17 @@ function OrgRolesPage() {
   const branches: Branch[] = (data?.branches ?? []) as Branch[];
   const branchById = new Map(branches.map((b) => [b.id, b]));
 
+  // Derived once rather than re-found in four places in the dialog's JSX.
+  const roleMeta = ASSIGNABLE_ROLES.find((r) => r.value === newRole) ?? null;
+  /** Scoped roles need a branch — but only when there is one to pick. */
+  const branchRequired = !!roleMeta?.scoped && branches.length > 0;
+  const branchMissing = grantAttempted && branchRequired && !newBranch;
+
   function openGrant(m: Member) {
     setTarget(m);
     setNewRole("hr");
     setNewBranch("");
+    setGrantAttempted(false);
     setGrantOpen(true);
   }
 
@@ -202,7 +217,7 @@ function OrgRolesPage() {
 
   async function doGrant() {
     if (!target?.user_id) return;
-    const roleMeta = ASSIGNABLE_ROLES.find((r) => r.value === newRole);
+    setGrantAttempted(true);
     // T23 · The label said "required" and nothing required it. A scoped role
     // granted with no branch produces a role_scope with no rows, which reads
     // as *every* branch — so an admin meaning to limit someone to one branch
@@ -210,6 +225,9 @@ function OrgRolesPage() {
     // pick; when the org has none, say plainly what the grant will mean.
     if (roleMeta?.scoped && !newBranch && branches.length > 0) {
       toast.error(`Choose a branch for ${roleMeta.label} — it decides what they can see.`);
+      // Move the cursor to the thing that needs answering, rather than
+      // leaving them to find the red control themselves.
+      document.getElementById("grant-branch")?.focus();
       return;
     }
     try {
@@ -450,7 +468,12 @@ function OrgRolesPage() {
       <Dialog open={grantOpen} onOpenChange={setGrantOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
+            {/*
+              A long name (or a long email, where there is no name) must wrap
+              rather than push the close button off the dialog. `break-words`
+              because an email address has no spaces to wrap at.
+            */}
+            <DialogTitle className="pr-6 break-words">
               Grant role to{" "}
               {target
                 ? [target.first_name, target.last_name].filter(Boolean).join(" ") || target.email
@@ -466,17 +489,17 @@ function OrgRolesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {ASSIGNABLE_ROLES.map((r) => (
-                    <SelectItem key={r.value} value={r.value}>
-                      <div className="flex flex-col">
-                        <span>{r.label}</span>
-                        <span className="text-xs text-muted-foreground">{r.description}</span>
-                      </div>
+                    // `description`, not a second line of children: Radix
+                    // clones ItemText into the trigger, so a two-line block
+                    // rendered both lines inside the 36px closed control.
+                    <SelectItem key={r.value} value={r.value} description={r.description}>
+                      {r.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            {ASSIGNABLE_ROLES.find((r) => r.value === newRole)?.scoped &&
+            {roleMeta?.scoped &&
               (branches.length === 0 ? (
                 // The org has no branches at all. Granting anyway is correct —
                 // a one-site organisation should not have to invent a branch —
@@ -490,34 +513,54 @@ function OrgRolesPage() {
                   </span>
                 </div>
               ) : (
-                <div>
+                <div className="space-y-2">
                   <Label htmlFor="grant-branch">
-                    Branch <span className="text-destructive">*</span>
+                    Branch <span aria-hidden="true" className="text-destructive">*</span>
+                    <span className="sr-only">(required)</span>
                   </Label>
                   <Select value={newBranch} onValueChange={setNewBranch}>
-                    <SelectTrigger id="grant-branch" aria-invalid={!newBranch}>
+                    <SelectTrigger
+                      id="grant-branch"
+                      // Only after they have tried to submit. Marking a field
+                      // invalid on open is shouting at somebody who has not
+                      // done anything yet — the same rule `useFormErrors`
+                      // follows for required fields.
+                      aria-invalid={branchMissing || undefined}
+                      aria-describedby={branchMissing ? "grant-branch-error" : "grant-branch-hint"}
+                    >
                       <SelectValue placeholder="Select branch…" />
                     </SelectTrigger>
                     <SelectContent>
                       {branches.map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
+                        <SelectItem key={b.id} value={b.id} description={b.code ?? undefined}>
                           {b.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {newBranch
-                      ? "Use the Branches button later to add more branches."
-                      : "Without a branch this role would cover the whole organisation."}
-                  </p>
+                  {branchMissing ? (
+                    // Text, not just a red border: colour alone is not a
+                    // message, and is invisible to anyone who cannot see it.
+                    <p
+                      id="grant-branch-error"
+                      role="alert"
+                      className="text-xs font-medium text-destructive"
+                    >
+                      Choose a branch — it decides what this person can see.
+                    </p>
+                  ) : (
+                    <p id="grant-branch-hint" className="text-xs text-muted-foreground">
+                      {roleMeta?.label} is branch-scoped: they will see only the branch you pick.
+                      You can add more from the Branches button afterwards.
+                    </p>
+                  )}
                 </div>
               ))}
-            {!ASSIGNABLE_ROLES.find((r) => r.value === newRole)?.scoped && (
+            {!roleMeta?.scoped && (
               // Confirms the other half of T23: Org Admin and Employee are not
               // branch-scoped and are assignable to somebody with no branch.
               <p className="text-xs text-muted-foreground">
-                {ASSIGNABLE_ROLES.find((r) => r.value === newRole)?.label} is not branch-scoped — it
+                {roleMeta?.label} is not branch-scoped — it
                 applies across the organisation and needs no branch.
               </p>
             )}
@@ -535,7 +578,7 @@ function OrgRolesPage() {
       <Dialog open={!!scopeOpen} onOpenChange={(v) => !v && setScopeOpen(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="pr-6 break-words">
               Branch access for{" "}
               {scopeOpen
                 ? [scopeOpen.first_name, scopeOpen.last_name].filter(Boolean).join(" ") ||

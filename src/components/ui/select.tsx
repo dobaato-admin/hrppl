@@ -19,7 +19,12 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background cursor-pointer data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "flex h-9 w-full min-w-0 items-center justify-between gap-2 whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background cursor-pointer data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+      // The selected value must never push the chevron out of the control or
+      // wrap the trigger to two lines. `min-w-0` is what actually allows the
+      // truncation — a flex child defaults to `min-width: auto` and refuses to
+      // shrink below its content, so `truncate` alone does nothing here.
+      "[&>span]:min-w-0 [&>span]:flex-1 [&>span]:truncate [&>span]:text-left",
       "aria-[invalid=true]:border-destructive aria-[invalid=true]:ring-destructive/30 aria-[invalid=true]:focus:ring-destructive",
       className,
     )}
@@ -27,7 +32,7 @@ const SelectTrigger = React.forwardRef<
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -105,24 +110,61 @@ const SelectLabel = React.forwardRef<
 ));
 SelectLabel.displayName = SelectPrimitive.Label.displayName;
 
+/**
+ * An option.
+ *
+ * ## Use `description`, never a second line of children
+ *
+ * Radix clones the contents of `ItemText` into the **trigger** — that is how
+ * the closed control knows what to display. So anything passed as `children`
+ * is rendered twice: once in the open list, where a two-line block is fine,
+ * and once inside a 36px-high trigger, where it is not.
+ *
+ * That shipped. The role picker on `/org/roles` passed
+ *
+ *     <SelectItem value="hr">
+ *       <div className="flex flex-col">
+ *         <span>HR</span>
+ *         <span className="text-xs">Manages people, leave, training…</span>
+ *       </div>
+ *     </SelectItem>
+ *
+ * and the closed trigger rendered both lines, centred, overflowing its own
+ * border.
+ *
+ * `description` is rendered **outside** `ItemText`, so it appears in the list
+ * and never reaches the trigger. `tests/select-item-contract.test.ts` fails
+ * if a call site goes back to multi-line children.
+ */
 const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item> & {
+    /** Secondary line, shown in the list only. */
+    description?: React.ReactNode;
+  }
+>(({ className, children, description, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      "relative flex w-full cursor-default select-none flex-col items-start rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
     {...props}
   >
-    <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute right-2 top-2 flex h-3.5 w-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
         <Check className="h-4 w-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    {description ? (
+      // Outside ItemText on purpose — see the note above. `pointer-events-none`
+      // so clicking the description still selects the row rather than landing
+      // on a child that swallows it.
+      <span className="pointer-events-none mt-0.5 text-xs font-normal text-muted-foreground">
+        {description}
+      </span>
+    ) : null}
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;

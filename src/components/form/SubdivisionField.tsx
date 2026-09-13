@@ -83,9 +83,11 @@ export function SubdivisionField({
           </SelectTrigger>
           <SelectContent>
             {subdivisions.map((s) => (
-              <SelectItem key={s.code} value={s.code}>
+              // The code goes in `description`, not in children: anything
+              // inside ItemText is cloned into the trigger, so this rendered
+              // "New South Wales NSW" in the closed control.
+              <SelectItem key={s.code} value={s.code} description={s.code}>
                 {s.name}
-                <span className="ml-2 text-xs text-muted-foreground">{s.code}</span>
               </SelectItem>
             ))}
           </SelectContent>
