@@ -93,7 +93,41 @@ Lookup and address autocomplete are external APIs needing a key.
 
 ---
 
-## Priority 1b — X-07's twin, in the documents module *(found 2026-09-07 by the QA sweep)*
+## Done 2026-09-13 — Priority 1b, X-07's twin in the documents module
+
+**Fixed.** `src/lib/documents-guard.ts` replaces `getOrgAdminTenant` with four named
+guards mirroring the RLS; `20260913100000_documents_read_access.sql` adds the
+`branch_admin` policies that never existed and defines envelope read visibility once, in
+`can_read_document_envelope`, so `document_signers` and `document_events` follow the
+envelope instead of stopping at org_admin. Without that last part finance and manager
+would have read an envelope with **no signatories and a blank audit trail** — the same
+defect one table deeper, and the version that looks like a finished answer.
+
+`/org/documents/expiring` now carries its own key, `org.documentVerification`. It reads
+`employee_documents` — passports, visas, certificates — and **no policy there admits
+`finance`**. Reusing `org.documents` meant either an unexplained empty table or widening
+finance into personal identity documents, which is a privacy decision, not a gating fix.
+
+Two writes now read the row back: `branch_admin`'s `employee_documents` policy is
+branch-scoped, so widening the guard made the W7 zero-row-UPDATE defect newly reachable.
+
+**The demo seed created no documents at all**, which is why "No envelopes yet." looked
+identical for a refused manager and a truthful org admin. Both tenants now have a
+published template and a draft, envelopes for a manager's own report and for someone
+outside that line, signers, events and expiring records — shaped so the read scoping is
+observable rather than vacuously true.
+
+Verified live under real JWTs (not as `postgres`), Acme, templates / envelopes / signers
+/ events / employee-docs: `org_admin` 2/2/2/3/2 · `hr` 2/2/2/3/2 · `finance` 2/2/2/3/**0**
+· `manager` **1**/**1**/1/1/**1** · `branch_admin` **1**/2/2/3/2 · `employee` 0/0/0/0/0.
+The manager sees the published template but not the draft, her own direct report's
+envelope but not the one reporting elsewhere, and the manager-visibility certificate but
+not the passport.
+
+`tests/documents-access.test.ts` pins the **server-fn axis** — the axis with no coverage,
+and the one that would have caught both this and X-07 before a person did.
+
+The original write-up follows, because the diagnosis is the reusable part:
 
 **What.** `/org/documents` is offered by nav and route to six roles —
 `super_admin`, `org_admin`, `branch_admin`, `hr`, `finance`, `manager`. Fourteen of the twenty-one
@@ -131,7 +165,7 @@ same domain, same admins", which is true of the two keys and false of the module
 **Done when.** As `mia.acme` (manager) and `hana.acme` (hr), `/org/documents` either lists
 envelopes or is not offered. No third outcome — and in particular, not an empty table.
 
-**Two more open observations from the same sweep, neither chased:**
+**Two more open observations from the same sweep — STILL OPEN, neither chased:**
 
 - `/settings/billing` reports console errors for **every one of the eight roles**, usually two.
   Something on that page fails for everybody, including super_admin, which rules out a permission
@@ -337,10 +371,42 @@ super_admin acting as a tenant can now see and approve that tenant's runs, and
 That was a bug, not a permissions question, so it did not need the decision
 below.
 
-**The first two rows stand.** A `manager` — the role the server fn actually
-requires — still cannot open the page, and org_admin/finance still cannot
-approve. So in a tenant with no platform admin available, approval is still
-unreachable.
+**Row 2 is now FIXED** (2026-09-13). `assertApproverForTenant` required the
+`manager` role, which `org.payroll` does not admit — the page gate and the
+server guard were near-complements, so the Approve button was hidden from
+everyone who could reach the page. Both halves now read one exported set,
+`PAYROLL_APPROVER_ROLES` in `rbac.ts`: **super_admin, org_admin, finance,
+manager**. `org_admin` and `finance` can both open `/org/payroll` and approve,
+so approval is reachable in a tenant with no platform account — which was the
+actual outage.
+
+Separation of duties is unchanged and is enforced **by person, not by role**:
+`approvePayrollRun` still refuses when `submitted_by === userId`, so a second
+org admin has to approve what the first submitted. Note this guard writes
+through the **service-role** client, so there is no RLS behind it — it is the
+only gate on the transition, not a legibility layer in front of one.
+
+Both payroll guards also moved off their direct `profiles.tenant_id` read, so
+they honour the acting tenant (gap 1, in the guard rather than the page).
+
+`branch_admin` deliberately stays out: it can open the page, but a payroll run
+is tenant-wide and spans every branch, so approving one is not a branch-scoped
+act.
+
+**Row 1 still stands, deliberately.** A `manager` keeps the right it has always
+had and still cannot open `/org/payroll` — and should not, because that page
+renders every payslip for every employee in the tenant. The proper home for a
+manager's approval is **option 2, the `/approvals` queue**, which shows only
+what the caller may decide. That remains open work, and
+`tests/payroll-approver.test.ts` records `manager` as the known exception so it
+is not mistaken for an oversight or silently "fixed" by widening
+`org.payroll`.
+
+**Not walked end to end in a browser:** every seeded Globex run is already
+`approved` and Acme has none, so there was no `pending_approval` run to press
+the button on. The change is pinned by unit tests and the reasoning is closed
+(service-role write, pure-TypeScript guard, role and tenant reads verified
+under a real JWT), but nobody has clicked Approve as `fred.acme`.
 
 This is the W5 "nav row vs RLS policy" drift axis, in the one place W5 did not
 reach. **It is a deliberate open finding, not something to fix in passing** —

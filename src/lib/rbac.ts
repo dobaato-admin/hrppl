@@ -537,3 +537,48 @@ export const WFH_APPROVER_ROLES: ReadonlySet<AppRole> = SET(
   "manager",
   "hr",
 );
+
+/**
+ * Who may approve or reject a submitted payroll run.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this set is not just "manager"
+ * ---------------------------------------------------------------------------
+ *
+ * `assertApproverForTenant` required the `manager` role. `org.payroll` — the
+ * key gating the only page with an Approve button — admits super_admin,
+ * org_admin, branch_admin and finance, and NOT manager. So a run could be
+ * created, computed and submitted, and then nobody could approve it from the
+ * product:
+ *
+ *   * `manager`, the role the server fn actually required, could not open the
+ *     page at all;
+ *   * `org_admin`, `finance` and `branch_admin` could open it, and the button
+ *     was hidden from them because the server would have refused;
+ *   * only a platform `super_admin` could get through, and a tenant does not
+ *     necessarily have one available.
+ *
+ * That is the Wave 5 "nav row vs server fn" drift axis in the one place W5 did
+ * not reach, and payroll approval is a poor place to discover it.
+ *
+ * **Separation of duties is preserved by person, not by role.**
+ * `approvePayrollRun` refuses when `submitted_by === userId`, so whoever
+ * submitted a run still cannot approve their own — a second org admin has to.
+ * That check is the four-eyes rule and it is independent of this set.
+ *
+ * `branch_admin` is deliberately absent: a payroll run is tenant-wide and
+ * spans every branch, so approving one is not a branch-scoped act even though
+ * the page is visible to them.
+ *
+ * This is NOT mirrored by an RLS policy, because `approvePayrollRun` writes
+ * through the service-role client — which means this guard is the *only* gate
+ * on the transition, not a legibility layer in front of one. Widening it is a
+ * real widening. `tests/payroll-approver.test.ts` pins the client check and the
+ * server guard to this one set.
+ */
+export const PAYROLL_APPROVER_ROLES: ReadonlySet<AppRole> = SET(
+  "super_admin",
+  "org_admin",
+  "finance",
+  "manager",
+);
