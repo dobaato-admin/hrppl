@@ -23,7 +23,7 @@ export const Route = createFileRoute("/org/documents/expiring")({
   // Title matches the nav label, per the W4 §7 convention.
   head: () => ({ meta: [{ title: "Expiring documents — hrppl" }] }),
   component: () => (
-    <AdminGate feature="org.documents">
+    <AdminGate feature="org.documentVerification">
       <ExpiringPage />
     </AdminGate>
   ),

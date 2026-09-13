@@ -879,7 +879,9 @@ export const ORG_SECTIONS: NavSection[] = [
         to: "/org/documents/expiring",
         icon: FileText,
         accent: "bg-status-stuck",
-        feature: "org.documents",
+        // Not org.documents: this page reads `employee_documents`, whose RLS
+        // does not admit finance. See the key's comment in rbac.ts.
+        feature: "org.documentVerification",
       },
       {
         // W5 P2 · 649-line audit explorer with export, no nav entry, no route

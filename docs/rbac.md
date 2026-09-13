@@ -47,7 +47,7 @@ Roles are **additive** — a user can hold multiple (e.g. `hr` + `finance`). `br
 <!-- BEGIN GENERATED MATRIX -->
 
 > **Generated** by `node scripts/gen-rbac-matrix.mjs` from `src/lib/rbac.ts`.
-> Do not edit between the markers — regenerate instead. 88 feature keys across 8 groups.
+> Do not edit between the markers — regenerate instead. 89 feature keys across 8 groups.
 
 `can(feature, roles)` controls **UI only**. RLS policies plus server-fn role checks are the actual enforcement; where a key mirrors a specific policy, the comment beside it in `rbac.ts` names that policy.
 
@@ -97,6 +97,7 @@ Legend: **●** = admitted · blank = no access
 | `org.discipline` | ● |  | ● |  | ● |  |  |  |
 | `org.documents` | ● |  | ● | ● | ● | ● | ● |  |
 | `org.documentTemplates` | ● |  | ● | ● | ● | ● | ● |  |
+| `org.documentVerification` | ● |  | ● | ● | ● |  | ● |  |
 | `org.dutyReviews` | ● |  | ● |  | ● |  | ● |  |
 | `org.employeeDuties` | ● |  | ● |  | ● |  | ● |  |
 | `org.employeeHolidays` | ● |  | ● |  |  |  | ● |  |
@@ -185,14 +186,14 @@ Legend: **●** = admitted · blank = no access
 
 | Role | Feature keys admitted |
 |---|---|
-| `super_admin` | 88 of 88 |
-| `regional_admin` | 5 of 88 |
-| `org_admin` | 79 of 88 |
-| `branch_admin` | 30 of 88 |
-| `hr` | 49 of 88 |
-| `finance` | 23 of 88 |
-| `manager` | 28 of 88 |
-| `employee` | 1 of 88 |
+| `super_admin` | 89 of 89 |
+| `regional_admin` | 5 of 89 |
+| `org_admin` | 80 of 89 |
+| `branch_admin` | 31 of 89 |
+| `hr` | 50 of 89 |
+| `finance` | 23 of 89 |
+| `manager` | 29 of 89 |
+| `employee` | 1 of 89 |
 
 <!-- END GENERATED MATRIX -->
 
