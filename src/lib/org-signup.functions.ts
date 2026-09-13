@@ -568,7 +568,68 @@ export const seedOrgDefaults = createServerFn({ method: "POST" })
       }
     }
 
-    return { ok: true, leaveTypesCreated };
+    // T21 · A starter onboarding template.
+    //
+    // Adding an employee prompts for one, but nothing created one during
+    // setup — so an admin's first hire sent them out to the Templates Hub and
+    // back. Seeded only when the tenant has none, so an admin who has built
+    // their own never gets an unexpected extra.
+    let templateCreated = false;
+    {
+      const { count } = await admin
+        .from("onboarding_checklist_templates")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId);
+      if ((count ?? 0) === 0) {
+        const { data: tpl, error: tplErr } = await admin
+          .from("onboarding_checklist_templates")
+          .insert({
+            tenant_id: tenantId,
+            name: "New starter",
+            description:
+              "A starting checklist for a new hire. Edit it, or build your own, under Templates.",
+            is_default: true,
+            is_active: true,
+            created_by: userId,
+          })
+          .select("id")
+          .single();
+        if (tplErr) {
+          // Not fatal: an organisation with no template is the state we were
+          // already in, and failing the whole setup step over a convenience
+          // would be worse than not having it.
+          console.error("[seedOrgDefaults] starter template failed", tplErr);
+        } else if (tpl) {
+          const items = [
+            { title: "Sign employment contract", category: "paperwork", owner_role: "employee", due_offset_days: 0, required: true },
+            { title: "Provide bank and tax details", category: "paperwork", owner_role: "employee", due_offset_days: 2, required: true },
+            { title: "Add to payroll", category: "paperwork", owner_role: "hr", due_offset_days: 3, required: true },
+            { title: "Issue laptop and accounts", category: "equipment", owner_role: "it", due_offset_days: 0, required: true },
+            { title: "Workplace health and safety induction", category: "training", owner_role: "hr", due_offset_days: 5, required: true },
+            { title: "Introduce to the team", category: "intro", owner_role: "manager", due_offset_days: 1, required: false },
+            { title: "First-week check-in", category: "intro", owner_role: "manager", due_offset_days: 7, required: false },
+          ];
+          const { error: itemErr } = await admin
+            .from("onboarding_checklist_template_items")
+            .insert(
+              // T20 · Note there is no `id` key here at all. Setting one to
+              // `undefined` would put "id" in postgrest-js's `columns`
+              // parameter and make PostgREST write NULL over the default.
+              items.map((it, idx) => ({ ...it, template_id: tpl.id, tenant_id: tenantId, sort_order: idx })),
+            );
+          if (itemErr) {
+            console.error("[seedOrgDefaults] starter template items failed", itemErr);
+            // A template with no tasks is worse than none: it looks usable and
+            // assigns an empty checklist. Remove it rather than leave it.
+            await admin.from("onboarding_checklist_templates").delete().eq("id", tpl.id);
+          } else {
+            templateCreated = true;
+          }
+        }
+      }
+    }
+
+    return { ok: true, leaveTypesCreated, templateCreated };
   });
 
 // ---------- resetMyOrgSetup ----------
