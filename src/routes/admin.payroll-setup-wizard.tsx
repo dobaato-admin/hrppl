@@ -124,7 +124,7 @@ function WizardPage() {
           <CardHeader>
             <CardTitle>Setup progress</CardTitle>
             <CardDescription>
-              Employee invitations are blocked until all four steps below are complete.
+              Payroll runs are blocked until all four steps below are complete. Inviting people is not — you can invite the person who will finish this.
             </CardDescription>
           </CardHeader>
           <CardContent>

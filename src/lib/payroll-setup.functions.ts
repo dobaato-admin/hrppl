@@ -274,6 +274,7 @@ export type PayrollReadinessSteps = {
   payDates: boolean;
   overtimeRates: boolean;
   currency: boolean;
+  payslipTemplate: boolean;
 };
 
 export async function checkPayrollReadiness(
@@ -283,21 +284,39 @@ export async function checkPayrollReadiness(
   const { data: tenant } = await supabase
     .from("tenants").select("currency_code, country_code").eq("id", tenantId).maybeSingle();
   const countryCode = tenant?.country_code ?? null;
-  const [{ data: items }, { data: settings }, otRes] = await Promise.all([
+  const [{ data: items }, { data: settings }, otRes, tplRes] = await Promise.all([
     supabase.from("payroll_components").select("id").eq("tenant_id", tenantId).eq("is_active", true).limit(1),
     supabase.from("tenant_payroll_settings").select("pay_period").eq("tenant_id", tenantId).maybeSingle(),
     countryCode
       ? supabase.from("overtime_penalty_rates").select("id").eq("country_code", countryCode).eq("is_active", true).limit(1)
       : Promise.resolve({ data: [] as any[] }),
+    // Templates are country reference data, not tenant data — the same shape
+    // as overtime rates above.
+    countryCode
+      ? supabase.from("payslip_templates").select("id").eq("country_code", countryCode).eq("status", "published").limit(1)
+      : Promise.resolve({ data: [] as any[] }),
   ]);
   const ot = otRes.data;
+  const templates = tplRes.data;
   const steps: PayrollReadinessSteps = {
     payItems: (items ?? []).length > 0,
     payDates: !!settings?.pay_period,
     overtimeRates: (ot ?? []).length > 0,
     currency: !!tenant?.currency_code && String(tenant.currency_code).trim().length === 3,
+    // A run with no payslip template is created happily and then fails to
+    // compute with "No published payslip template for NP on 2026-09-03".
+    // Found by seeding demo payroll: three runs created, three computes
+    // failed, and every readiness check said the tenant was ready. A check
+    // that reports ready for something that cannot be done is worse than no
+    // check.
+    payslipTemplate: (templates ?? []).length > 0,
   };
-  const allComplete = steps.payItems && steps.payDates && steps.overtimeRates && steps.currency;
+  const allComplete =
+    steps.payItems &&
+    steps.payDates &&
+    steps.overtimeRates &&
+    steps.currency &&
+    steps.payslipTemplate;
   return { steps, allComplete };
 }
 
