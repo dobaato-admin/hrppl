@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getMyRoles, getTenantId } from "@/lib/tenant-scope";
+import { PAYROLL_APPROVER_ROLES, type AppRole } from "@/lib/rbac";
 import {
   computeAuPeriod,
   type PayFrequency as AuPayFrequency,
@@ -63,14 +65,13 @@ async function loadAdmin() {
 }
 
 async function assertOrgAdminForTenant(ctxSupabase: any, userId: string, tenantId: string) {
-  const { data: roles } = await ctxSupabase.from("user_roles").select("role").eq("user_id", userId);
-  const rs = (roles ?? []).map((r: any) => r.role);
-  const isSuper = rs.includes("super_admin");
-  const isOrgAdmin = rs.includes("org_admin");
-  if (isSuper) return;
-  if (!isOrgAdmin) throw new Error("Forbidden: org admin role required");
-  const { data: profile } = await ctxSupabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile || profile.tenant_id !== tenantId) throw new Error("Forbidden: tenant mismatch");
+  const roles = await getMyRoles(ctxSupabase, userId);
+  if (roles.includes("super_admin")) return;
+  if (!roles.includes("org_admin")) throw new Error("Forbidden: org admin role required");
+  // Same acting-tenant fallback as assertApproverForTenant, and memoised with
+  // it — the two guards together used to cost four round trips per request.
+  const callerTenant = await getTenantId(ctxSupabase, userId);
+  if (!callerTenant || callerTenant !== tenantId) throw new Error("Forbidden: tenant mismatch");
 }
 
 // ---------- Create draft run ----------
@@ -708,13 +709,31 @@ export const computePayrollRun = createServerFn({ method: "POST" })
   });
 
 // ---------- Submit / Approve / Reject / Cancel / Delete ----------
+/**
+ * May this caller decide a submitted run?
+ *
+ * This required the `manager` role, which `org.payroll` does not admit — so
+ * the one page with an Approve button was closed to the only role allowed to
+ * press it, and open to three roles the server would have refused. Payroll
+ * approval was unreachable through the product for any tenant without a
+ * platform super_admin on hand. See PAYROLL_APPROVER_ROLES in rbac.ts for the
+ * full account, including why widening this does not cost the four-eyes rule:
+ * `approvePayrollRun` refuses the submitter separately, by user id.
+ *
+ * `approvePayrollRun` writes through the service-role client, so there is no
+ * RLS policy behind this. It is the only gate on the transition.
+ */
 async function assertApproverForTenant(ctxSupabase: any, userId: string, tenantId: string) {
-  const { data: roles } = await ctxSupabase.from("user_roles").select("role").eq("user_id", userId);
-  const rs = (roles ?? []).map((r: any) => r.role);
-  if (rs.includes("super_admin")) return;
-  if (!rs.includes("manager")) throw new Error("Forbidden: manager role required");
-  const { data: profile } = await ctxSupabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile || profile.tenant_id !== tenantId) throw new Error("Forbidden: tenant mismatch");
+  const roles = await getMyRoles(ctxSupabase, userId);
+  if (roles.includes("super_admin")) return;
+  if (!roles.some((r) => PAYROLL_APPROVER_ROLES.has(r as AppRole))) {
+    throw new Error("Forbidden: payroll approver role required (org admin, finance or manager)");
+  }
+  // Acting-tenant aware. A direct `profiles.tenant_id` read is NULL for a
+  // platform account, which is what made /org/payroll answer "No tenant" for a
+  // super_admin who had explicitly chosen a tenant in the switcher.
+  const callerTenant = await getTenantId(ctxSupabase, userId);
+  if (!callerTenant || callerTenant !== tenantId) throw new Error("Forbidden: tenant mismatch");
 }
 
 export const submitPayrollRun = createServerFn({ method: "POST" })

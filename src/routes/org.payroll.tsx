@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { can } from "@/lib/rbac";
+import { can, PAYROLL_APPROVER_ROLES, type AppRole } from "@/lib/rbac";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/use-auth";
@@ -213,7 +213,11 @@ function PayrollPage() {
   });
 
   const isOrgAdmin = roles.includes("org_admin") || roles.includes("super_admin");
-  const isManager = roles.includes("manager") || roles.includes("super_admin");
+  // Who may decide a submitted run. This was `manager || super_admin`, which is
+  // almost the complement of the roles that can open this page — so the Approve
+  // button was hidden from everyone who could reach it. Single source, per the
+  // W5 rule: the server guard reads the same set.
+  const isApprover = roles.some((r) => PAYROLL_APPROVER_ROLES.has(r as AppRole));
   // W5 · Single source: the same feature key this page's nav row uses.
   // These pages carry no route-level gate component, only this inline check,
   // so the two were free to disagree — and did. The sidebar offered the page
@@ -478,7 +482,7 @@ function PayrollPage() {
   }
 
   async function onSubmit(run: PayrollRun) {
-    if (!confirm("Submit run for manager approval?")) return;
+    if (!confirm("Submit run for approval?")) return;
     setBusy(true);
     try {
       await submit({ data: { runId: run.id } });
@@ -1004,7 +1008,7 @@ function PayrollPage() {
                   )}
                   {selected.status === "pending_approval" && (
                     <div className="mt-1 text-amber-600">
-                      Awaiting manager approval — payslips are NOT yet visible to employees, and
+                      Awaiting approval — payslips are NOT yet visible to employees, and
                       cannot be emailed until it is approved.
                     </div>
                   )}
@@ -1054,7 +1058,7 @@ function PayrollPage() {
                   </>
                 )}
                 {selected.status === "pending_approval" &&
-                  isManager &&
+                  isApprover &&
                   selected.submitted_by !== user?.id && (
                     <>
                       <Button size="sm" onClick={() => onApprove(selected)} disabled={busy}>
@@ -1071,10 +1075,10 @@ function PayrollPage() {
                     </>
                   )}
                 {selected.status === "pending_approval" &&
-                  isManager &&
+                  isApprover &&
                   selected.submitted_by === user?.id && (
                     <span className="text-xs text-muted-foreground self-center">
-                      You submitted this run — another manager must approve.
+                      You submitted this run — somebody else must approve it.
                     </span>
                   )}
                 {payslips.length > 0 && (
