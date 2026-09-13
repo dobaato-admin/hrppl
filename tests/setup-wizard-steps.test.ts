@@ -78,22 +78,32 @@ describe("every step says what it will do and what happens next", () => {
     expect(notes.length, "every step of the wizard needs a StepNote").toBeGreaterThanOrEqual(5);
   });
 
-  it("the leave step lists the actual defaults, with their real numbers", () => {
-    // Sourced from seedOrgDefaults in org-signup.functions.ts. If those change,
-    // this fails — which is the point: a form that describes defaults it no
-    // longer creates is worse than one that describes nothing.
+  it("the leave step shows the numbers it will actually create", () => {
+    // T18 moved the source of truth from three literals in seedOrgDefaults to
+    // `country_leave_defaults`, because Australia's entitlements are not
+    // Nepal's and the old set matched neither. The invariant this test exists
+    // for is unchanged: a form that describes defaults it does not create is
+    // worse than one that describes nothing. So rather than pinning literals,
+    // pin that the wizard renders each row's OWN quota, accrual and paid flag.
+    expect(WIZARD).toContain("annual_quota_days");
+    expect(WIZARD).toContain("accrual_per_month");
+    expect(WIZARD).toMatch(/d\.is_paid \? " · paid" : " · unpaid"/);
+    expect(WIZARD).toContain("d.description");
+  });
+
+  it("the fallback set the wizard describes is the one the server falls back to", () => {
+    // A country with no catalogue rows still gets leave types, and the wizard
+    // names them. These two must not drift.
     const seed = read("src/lib/org-signup.functions.ts");
     for (const [name, quota, accrual] of [
       ["Annual Leave", "21", "1.75"],
       ["Sick Leave", "10", "0.83"],
     ]) {
-      expect(seed, `${name} should still be seeded`).toContain(`name: "${name}"`);
+      expect(seed, `${name} should still be the fallback`).toContain(`name: "${name}"`);
       expect(seed).toContain(`annual_quota_days: ${quota}`);
       expect(seed).toContain(`accrual_per_month: ${accrual}`);
-      expect(WIZARD, `the wizard must show ${name}'s real numbers`).toContain(
-        `["${name}", "${quota}", "${accrual}"`,
-      );
     }
+    expect(WIZARD).toMatch(/Annual Leave \(21 days\), Sick Leave \(10 days\) and Unpaid Leave/);
   });
 
   it("says what skipping the leave defaults costs", () => {

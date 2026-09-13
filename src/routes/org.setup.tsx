@@ -40,6 +40,7 @@ import {
   PayrollSetupComplete,
 } from "@/components/setup/PayrollSetupNotice";
 import { getOutstandingSetup } from "@/lib/payroll-setup.functions";
+import { listCountryLeaveDefaults } from "@/lib/country-reference.functions";
 
 export const Route = createFileRoute("/org/setup")({
   head: () => ({ meta: [{ title: "Set up your organization — hrppl" }] }),
@@ -77,6 +78,7 @@ function OrgSetupPage() {
   const resetFn = useServerFn(resetMyOrgSetup);
   const updateProfileFn = useServerFn(updateOrganizationProfile);
   const outstandingFn = useServerFn(getOutstandingSetup);
+  const leaveDefaultsFn = useServerFn(listCountryLeaveDefaults);
   const trialInviteFn = useServerFn(getMyTrialInvitation);
   const redeemTrialFn = useServerFn(redeemMyTrialInvitation);
 
@@ -143,6 +145,24 @@ function OrgSetupPage() {
     retry: false,
     staleTime: 30_000,
   });
+  const tenantCountry = (status?.tenant?.country_code as string | undefined) ?? "";
+  const { data: leaveCatalogue } = useQuery({
+    queryKey: ["country-leave-defaults", tenantCountry],
+    queryFn: () => leaveDefaultsFn({ data: { countryCode: tenantCountry } }),
+    enabled: !!user && tenantCountry.length === 2,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const leaveDefaults = leaveCatalogue?.defaults ?? [];
+
+  // Pre-tick the standard set once, when the catalogue first arrives. Keyed on
+  // the country so switching it re-proposes that country's standards rather
+  // than carrying the previous country's choices across.
+  useEffect(() => {
+    if (leaveDefaults.length === 0) return;
+    setLeaveSelection(new Set(leaveDefaults.filter((d) => d.is_standard).map((d) => d.code)));
+  }, [tenantCountry, leaveDefaults.length]);
+
   const outstandingSetup = outstandingData?.items ?? [];
   const outstandingKnown = outstandingData?.known ?? false;
 
@@ -191,6 +211,11 @@ function OrgSetupPage() {
   });
   const [departments, setDepartments] = useState<string[]>(["Operations", "Engineering", "People"]);
   const [defaults, setDefaults] = useState({ withLeaveTypes: true });
+  // T18 · Which of the country's default leave types to create. Null until the
+  // catalogue has loaded — "nothing selected yet" and "everything unticked"
+  // are different, and seeding on the first is how an admin loses the set they
+  // were about to confirm.
+  const [leaveSelection, setLeaveSelection] = useState<Set<string> | null>(null);
 
   useEffect(() => {
     if (status?.tenantId && status?.setupProgress?.departments_done) {
@@ -496,7 +521,15 @@ function OrgSetupPage() {
     setBusy(true);
     setStepError(null);
     try {
-      await seedFn({ data: { departments: [], withLeaveTypes: defaults.withLeaveTypes } });
+      await seedFn({
+        data: {
+          departments: [],
+          withLeaveTypes: defaults.withLeaveTypes,
+          // Only sent once the catalogue has loaded; otherwise the server
+          // applies the country's standard set, which is the same answer.
+          ...(leaveSelection ? { leaveTypeCodes: Array.from(leaveSelection) } : {}),
+        },
+      });
       await markFn({ data: { step: "defaults" } });
       await refreshOrgStatus();
       setStepIdx(4);
@@ -956,43 +989,87 @@ function OrgSetupPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <label className="flex items-start gap-2.5 rounded-lg border p-3 text-sm">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5"
-                    checked={defaults.withLeaveTypes}
-                    onChange={(e) => setDefaults({ withLeaveTypes: e.target.checked })}
-                  />
-                  <span>
-                    <span className="font-medium">Create these three leave types</span>
-                    <span className="mt-2 block overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="text-muted-foreground">
-                          <tr>
-                            <th className="py-1 pr-3 text-left font-medium">Type</th>
-                            <th className="py-1 pr-3 text-right font-medium">Days / year</th>
-                            <th className="py-1 pr-3 text-right font-medium">Accrues / month</th>
-                            <th className="py-1 text-left font-medium">Paid</th>
-                          </tr>
-                        </thead>
-                        <tbody className="tabular-nums">
-                          {[
-                            ["Annual Leave", "21", "1.75", "Yes"],
-                            ["Sick Leave", "10", "0.83", "Yes"],
-                            ["Unpaid Leave", "—", "—", "No"],
-                          ].map(([name, quota, accrual, paid]) => (
-                            <tr key={name} className="border-t">
-                              <td className="py-1 pr-3">{name}</td>
-                              <td className="py-1 pr-3 text-right">{quota}</td>
-                              <td className="py-1 pr-3 text-right">{accrual}</td>
-                              <td className="py-1">{paid}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                {/*
+                  T18 · One checkbox per leave type, driven by the tenant's
+                  country. The previous step offered a single "create these
+                  three" tick whose three were the same for every country —
+                  Australia's entitlements are not Nepal's, and 21 days annual
+                  / 10 sick matched neither.
+                */}
+                {leaveDefaults.length === 0 ? (
+                  <label className="flex items-start gap-2.5 rounded-lg border p-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={defaults.withLeaveTypes}
+                      onChange={(e) => setDefaults({ withLeaveTypes: e.target.checked })}
+                    />
+                    <span>
+                      <span className="font-medium">Create a starting set of leave types</span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        Annual Leave (21 days), Sick Leave (10 days) and Unpaid Leave. We don't
+                        have country-specific defaults for your country yet, so these are general
+                        ones — edit them any time from Leave types.
+                      </span>
                     </span>
-                  </span>
-                </label>
+                  </label>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Standard for {tenantCountry} are ticked. Untick anything you don't need, and
+                      tick anything you do — every quota and accrual rate is editable afterwards.
+                    </p>
+                    {leaveDefaults.map((d) => {
+                      const checked = leaveSelection?.has(d.code) ?? false;
+                      return (
+                        <label
+                          key={d.code}
+                          className="flex items-start gap-2.5 rounded-lg border p-3 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-1"
+                            checked={checked}
+                            onChange={(e) =>
+                              setLeaveSelection((prev) => {
+                                const next = new Set(prev ?? []);
+                                if (e.target.checked) next.add(d.code);
+                                else next.delete(d.code);
+                                return next;
+                              })
+                            }
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-baseline gap-x-2">
+                              <span className="font-medium">{d.name}</span>
+                              <span className="text-xs tabular-nums text-muted-foreground">
+                                {d.annual_quota_days > 0
+                                  ? `${d.annual_quota_days} days/year`
+                                  : "no set quota"}
+                                {d.accrual_per_month > 0
+                                  ? ` · accrues ${d.accrual_per_month}/month`
+                                  : ""}
+                                {d.is_paid ? " · paid" : " · unpaid"}
+                              </span>
+                            </span>
+                            {d.description && (
+                              <span className="mt-0.5 block text-xs text-muted-foreground">
+                                {d.description}
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {leaveSelection?.size === 0 && (
+                      <p className="rounded-md border border-status-stuck/40 bg-status-stuck/5 px-3 py-2 text-xs">
+                        With nothing ticked, your organisation starts with no leave types — nobody
+                        can submit a leave request until you create one.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <StepNote editLabel="Leave types" editTo="/admin/leave-types">
                   Quotas and accrual rates are editable per type, and you can add your own — long
                   service, study, parental. Skipping this leaves you with no leave types, which
