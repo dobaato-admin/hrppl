@@ -1302,7 +1302,12 @@ export const NAV_DESTINATIONS: NavDestination[] = [
  * gets the union, in role-precedence order.
  */
 export const ROLE_PRIMARY: Partial<Record<AppRole, string[]>> = {
-  super_admin: ["/admin", "/platform/tenants", "/org/employees", "/org/payroll"],
+  // T14 · Platform-scope only. "/org/employees" and "/org/payroll" used to sit
+  // here too, under the same "Your work" heading, with nothing saying which
+  // organisation they acted on — and for a platform account with no acting
+  // tenant selected, the answer was "none", so both opened empty. They are now
+  // in ROLE_PRIMARY_ORG_SCOPED and appear only once a tenant is chosen.
+  super_admin: ["/admin", "/platform/tenants"],
   regional_admin: ["/regional", "/admin/holiday-calendar"],
   // The broadest tenant role — the four things an owner opens most.
   // No "/org" here: the Organization group sits directly below this one and
@@ -1318,6 +1323,26 @@ export const ROLE_PRIMARY: Partial<Record<AppRole, string[]>> = {
   manager: ["/team", "/admin/requests", "/org/timesheets", "/org/leave"],
   // Deliberately absent: for an employee, My workspace already IS this section.
   // Adding a shortcut group would just repeat the group directly beneath it.
+};
+
+/**
+ * Shortcuts that act on *an organisation*, for roles that do not belong to one.
+ *
+ * T14 · A platform account has no tenant of its own (`profiles.tenant_id` is
+ * NULL), so an organisation-scoped page is meaningless until they pick one
+ * through the TenantSwitcher. Listing "Employees" and "Run payroll" beside
+ * "Platform admin" and "Tenants" under a single heading implied they were all
+ * the same kind of thing; they are not, and two of them silently did nothing.
+ *
+ * The answer to the ticket's open question — "should super admins manage
+ * employees and run payroll directly, or only after entering a tenant
+ * context?" — is **only within a tenant context**. There is no other coherent
+ * reading: `createPayrollRun` takes a tenant id, and every employees query is
+ * tenant-scoped. Acting as a tenant is how a platform admin says which.
+ */
+export const ROLE_PRIMARY_ORG_SCOPED: Partial<Record<AppRole, string[]>> = {
+  super_admin: ["/org/employees", "/org/payroll"],
+  regional_admin: ["/org/employees"],
 };
 
 /**
@@ -1360,11 +1385,18 @@ const ROLE_ORDER: AppRole[] = [
 export function roleShortcuts(
   roles: readonly AppRole[],
   canUse: (feature: Feature, roles: readonly AppRole[]) => boolean,
+  /**
+   * Which table to read. "primary" is the default and is what every
+   * tenant-bound role uses; "orgScoped" is the platform-account-only set that
+   * needs an acting tenant before it means anything (T14).
+   */
+  scope: "primary" | "orgScoped" = "primary",
 ): NavDestination[] {
+  const table = scope === "orgScoped" ? ROLE_PRIMARY_ORG_SCOPED : ROLE_PRIMARY;
   const wanted: string[] = [];
   for (const role of ROLE_ORDER) {
     if (!roles.includes(role)) continue;
-    for (const to of ROLE_PRIMARY[role] ?? []) if (!wanted.includes(to)) wanted.push(to);
+    for (const to of table[role] ?? []) if (!wanted.includes(to)) wanted.push(to);
   }
   const out: NavDestination[] = [];
   for (const to of wanted) {

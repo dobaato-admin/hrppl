@@ -47,6 +47,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { MfaEnforcementBanner } from "@/components/security/MfaEnforcementBanner";
 import { TenantSwitcher } from "@/components/TenantSwitcher";
 import { ActingTenantBanner } from "@/components/ActingTenantBanner";
+import { listActingTenantOptions } from "@/lib/platform-tenant.functions";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/monday";
 import { Button } from "@/components/ui/button";
@@ -186,20 +187,75 @@ function PlainNavGroup({
  */
 function RoleShortcuts({ roles }: { roles: import("@/lib/rbac").AppRole[] }) {
   const items = roleShortcuts(roles, can);
-  if (items.length === 0) return null;
+  const orgScoped = roleShortcuts(roles, can, "orgScoped");
+
+  // T14 · Shares the ActingTenantBanner's cache entry, so this costs no extra
+  // request. Platform accounts only — for everybody else `orgScoped` is empty
+  // and this whole branch is skipped.
+  const { user } = useAuth();
+  const listActing = useServerFn(listActingTenantOptions);
+  const { data: acting } = useQuery({
+    queryKey: ["platform-acting-tenant-options", user?.id],
+    enabled: !!user && orgScoped.length > 0,
+    queryFn: () => listActing(),
+    staleTime: 60_000,
+  });
+
+  const actingTenant = acting?.actingTenantId
+    ? (acting.tenants.find((t) => t.id === acting.actingTenantId) ?? null)
+    : null;
+
+  if (items.length === 0 && orgScoped.length === 0) return null;
+
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Your work</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((d) => {
-            const canonical = NAV_ITEM_BY_PATH[d.to];
-            if (!canonical) return null;
-            return <NavLinkButton key={`shortcut-${d.to}`} item={canonical} />;
-          })}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
+    <>
+      {items.length > 0 && (
+        <SidebarGroup>
+          {/*
+            T14 · "Platform" for an account whose work is the platform, "Your
+            work" for everybody else. Both groups used to be called "Your
+            work", which is what made platform-scope and org-scope look like
+            one list.
+          */}
+          <SidebarGroupLabel>{orgScoped.length > 0 ? "Platform" : "Your work"}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items.map((d) => {
+                const canonical = NAV_ITEM_BY_PATH[d.to];
+                if (!canonical) return null;
+                return <NavLinkButton key={`shortcut-${d.to}`} item={canonical} />;
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
+
+      {orgScoped.length > 0 && (
+        <SidebarGroup>
+          <SidebarGroupLabel className="truncate">
+            {actingTenant ? `In ${actingTenant.name}` : "No organisation selected"}
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            {actingTenant ? (
+              <SidebarMenu>
+                {orgScoped.map((d) => {
+                  const canonical = NAV_ITEM_BY_PATH[d.to];
+                  if (!canonical) return null;
+                  return <NavLinkButton key={`org-shortcut-${d.to}`} item={canonical} />;
+                })}
+              </SidebarMenu>
+            ) : (
+              // Not rendered as disabled rows: a disabled link says "you may
+              // not", and the truth is "we do not know which organisation yet".
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                Employees and payroll act on one organisation. Choose one from the switcher above
+                to work inside it.
+              </p>
+            )}
+          </SidebarGroupContent>
+        </SidebarGroup>
+      )}
+    </>
   );
 }
 
