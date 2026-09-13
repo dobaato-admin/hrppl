@@ -252,7 +252,7 @@ Three rules those tests encode, worth stating in prose because the next person w
 
 ## Baseline
 
-A green test run reads **0 failed / 995 passed / 5 skipped**.
+A green test run reads **0 failed / 1,274 passed / 6 skipped**.
 
 **This changed in Wave 7.** The baseline used to read "4 failed", and those four were stale
 fixtures in `tests/onboarding-readiness.test.ts` describing a table shape that no longer exists —
@@ -261,3 +261,50 @@ only reason to have one, so treat any red as yours.
 
 `tests/rbac.test.ts` and `tests/audit-overtime.test.ts` still cannot *collect* without live
 service-role credentials. That is a missing credential, not a failure.
+
+
+---
+
+## T13–T27 (hrpplissues2.md) — what was built, and what was not
+
+Worked through 2026-09-11 to 2026-09-13. Built and merged: **T13, T14, T16, T18, T19, T20,
+T21, T22, T23, T24, T26**, plus the shippable half of **T15/T17**. Each has its own commit
+explaining the defect; the two below are the ones deliberately *not* built, recorded here so
+they are not mistaken for oversights.
+
+### T25 — contextual help panel during setup (deferred by the client)
+
+A right-hand info box explaining each field as the admin moves through setup.
+
+**The client marked this "for a later stage, not now".** Logged so it is not lost. Note that
+`src/components/setup/StepNote.tsx` already carries per-step explanatory copy inline, which
+covers part of the intent — a panel would be a richer version of the same idea rather than a
+new capability, so whoever picks this up should start there rather than from scratch.
+
+### T27 — activate the advertisement and career page (needs scoping first)
+
+The ticket says the client wants these live but does not say what "these" are. There are at
+least three separable products in that sentence:
+
+1. a public-facing careers page listing open roles;
+2. job ad creation and publishing from inside the platform;
+3. applications flowing back in, into the recruitment module.
+
+**Estimating this without that answer would be guessing.** What already exists is worth knowing
+before the conversation: `src/lib/careers.functions.ts`, `careers-analytics.functions.ts`,
+`/org/recruitment` and its candidate pages, and `createResumeUploadUrl` — which is an
+*unauthenticated* mint of a storage upload credential, rate-limited by
+`enforcePublicRateLimit` since the 2026-09-03 audit. So (1) and part of (3) have foundations
+already; (2) is the one with the least behind it.
+
+**Recommended next step:** a short scoping call covering which of the three are in scope, who
+publishes an ad and who approves it, and whether ads go anywhere external (Seek, LinkedIn) —
+the last changes the answer substantially.
+
+### T15 / T17 — address lookup, partially shipped
+
+See **`docs/address-lookup.md`**. The provider interface and Australia's postcode→state rule
+ship complete. Free-text autocomplete needs a provider decision and an API key; postcode→suburb
+needs a ~16,000-row dataset. Nepal was verified as T17 asked and gets the province dropdown plus
+manual entry — its postal data is district-level and addresses are written by ward and landmark,
+so a postcode→suburb flow would match neither the data nor the habit.
