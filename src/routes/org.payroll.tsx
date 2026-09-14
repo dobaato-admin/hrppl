@@ -3,7 +3,7 @@ import { can, PAYROLL_APPROVER_ROLES, type AppRole } from "@/lib/rbac";
 import { useEffect, useMemo, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/use-auth";
-import { useMyTenantId } from "@/hooks/use-tenant";
+import { useMyTenant } from "@/hooks/use-tenant";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,8 +109,12 @@ interface Payslip {
 function PayrollPage() {
   const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
-  const { tenantId: actingTenantId } = useMyTenantId();
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  // One tenant source. There used to be two — useMyTenantId AND a useState
+  // mirroring it, filled by the effect below — which meant the page held the
+  // same value twice and could render with them disagreeing for a tick.
+  // useMyTenant also supplies the tenant record, which was the first of three
+  // sequential queries here.
+  const { tenant, tenantId } = useMyTenant();
   const [runs, setRuns] = useState<PayrollRun[]>([]);
   const [selected, setSelected] = useState<PayrollRun | null>(null);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
@@ -127,12 +131,62 @@ function PayrollPage() {
       }
     >
   >({});
-  const [tenantInfo, setTenantInfo] = useState<{
-    name: string;
-    country_code: string;
-    currency_code: string | null;
-  } | null>(null);
-  const [auAddon, setAuAddon] = useState<boolean | null>(null);
+  const tenantInfo = tenant
+    ? {
+        name: tenant.name,
+        country_code: (tenant.country_code as string | null) ?? "",
+        currency_code: (tenant.currency_code as string | null) ?? null,
+      }
+    : null;
+
+  /**
+   * The tenant's pay cadence and AU add-on entitlement.
+   *
+   * Was three reads strictly in series inside an effect — `tenants`, then
+   * `tenant_payroll_settings`, then `tenant_subscriptions` — although none of
+   * them depended on the others; they all just needed the tenant id. The first
+   * is now the shared cached record, and the remaining two run together.
+   */
+  const payrollConfigQ = useQuery({
+    queryKey: ["payroll-config", tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const [settingsRes, subRes] = await Promise.all([
+        supabase
+          .from("tenant_payroll_settings")
+          .select("pay_period")
+          .eq("tenant_id", tenantId!)
+          .maybeSingle(),
+        supabase
+          .from("tenant_subscriptions")
+          .select("au_payroll_addon,status")
+          .eq("tenant_id", tenantId!)
+          .maybeSingle(),
+      ]);
+      if (settingsRes.error) {
+        // Not fatal — the dialog falls back to monthly periods, which are
+        // editable. But it must not be silent: a fortnightly tenant being
+        // quietly offered monthly periods is a wrong default that looks like a
+        // considered one.
+        console.error("[payroll] could not read pay cadence", settingsRes.error);
+      }
+      const sub = subRes.data;
+      return {
+        payPeriod: (settingsRes.data?.pay_period as PayPeriod | undefined) ?? null,
+        auAddon: !!(
+          sub &&
+          sub.au_payroll_addon &&
+          (sub.status === "active" || sub.status === "trialing")
+        ),
+      };
+    },
+  });
+
+  const payPeriod = payrollConfigQ.data?.payPeriod ?? null;
+  // `null` until the answer arrives: the AU upsell banner below keys on
+  // `auAddon === false`, so an eager `false` would flash the banner at a tenant
+  // that has the add-on.
+  const auAddon = payrollConfigQ.data ? payrollConfigQ.data.auAddon : null;
   const [busy, setBusy] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({
@@ -167,7 +221,6 @@ function PayrollPage() {
   const setupIncomplete = runBlockers.length > 0;
 
   /** The tenant's pay cadence, for proposing periods. */
-  const [payPeriod, setPayPeriod] = useState<PayPeriod | null>(null);
   const periodOptions = useMemo(
     () => recentPayPeriods(payPeriod, localYmd(new Date()), 3),
     [payPeriod],
@@ -227,54 +280,6 @@ function PayrollPage() {
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      // Resolved through useMyTenantId, which falls back to the acting tenant.
-      // This used to read `profiles.tenant_id` directly, which is NULL for a
-      // platform account — so a super_admin acting as a tenant through the
-      // TenantSwitcher saw "No runs yet" on a tenant that had runs, and could
-      // not approve anything. That is gap 1 in CLAUDE.md, and it is a bug
-      // rather than a permissions question.
-      const resolved = actingTenantId ?? null;
-      if (resolved) {
-        setTenantId(resolved);
-        const data = { tenant_id: resolved };
-        const { data: t } = await supabase
-          .from("tenants")
-          .select("name,country_code,currency_code")
-          .eq("id", data.tenant_id)
-          .maybeSingle();
-        if (t) setTenantInfo(t as any);
-        // The tenant's pay cadence, so the New run dialog can propose real
-        // periods instead of three empty boxes.
-        const { data: settings, error: settingsErr } = await supabase
-          .from("tenant_payroll_settings")
-          .select("pay_period")
-          .eq("tenant_id", data.tenant_id)
-          .maybeSingle();
-        if (settingsErr) {
-          // Not fatal — the dialog falls back to monthly periods, which are
-          // editable. But it must not be silent: a fortnightly tenant being
-          // quietly offered monthly periods is a wrong default that looks
-          // like a considered one.
-          console.error("[payroll] could not read pay cadence", settingsErr);
-        }
-        setPayPeriod((settings?.pay_period as PayPeriod | undefined) ?? null);
-        const { data: sub } = await supabase
-          .from("tenant_subscriptions")
-          .select("au_payroll_addon,status")
-          .eq("tenant_id", data.tenant_id)
-          .maybeSingle();
-        setAuAddon(
-          !!(sub && sub.au_payroll_addon && (sub.status === "active" || sub.status === "trialing")),
-        );
-      }
-    })();
-    // Re-runs when the acting tenant changes, so switching tenant reloads the
-    // page's data rather than leaving the previous tenant's on screen.
-  }, [user, actingTenantId]);
 
   async function loadRuns() {
     if (!tenantId) return;
@@ -1008,8 +1013,8 @@ function PayrollPage() {
                   )}
                   {selected.status === "pending_approval" && (
                     <div className="mt-1 text-amber-600">
-                      Awaiting approval — payslips are NOT yet visible to employees, and
-                      cannot be emailed until it is approved.
+                      Awaiting approval — payslips are NOT yet visible to employees, and cannot be
+                      emailed until it is approved.
                     </div>
                   )}
                   {selected.status === "approved" && (
