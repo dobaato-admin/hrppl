@@ -73,6 +73,14 @@ function ReportsPage() {
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [series, setSeries] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  /**
+   * False for `branch_admin`, who holds policies on employees, leave and
+   * timesheets but **none on `payroll_runs`**. Their report therefore reads
+   * zero runs, and a chart showing a tenant spending nothing on wages is not an
+   * empty state — it is a false statement.
+   */
+  const [payrollVisible, setPayrollVisible] = useState(true);
 
   const fnReports = useServerFn(getOrgReports);
   // W5 · Single source: the same feature key this page's nav row uses.
@@ -88,12 +96,19 @@ function ReportsPage() {
   useEffect(() => {
     if (!user || !canAccess) return;
     setBusy(true);
+    setFailed(false);
     fnReports({ data: { monthsBack: months } })
       .then((r) => {
         setKpis(r.kpis as Kpis);
         setSeries(r.series as Row[]);
+        setPayrollVisible((r as { payrollVisible?: boolean }).payrollVisible !== false);
       })
-      .catch(() => {})
+      // Was `.catch(() => {})`. A swallowed failure left the last good numbers
+      // on screen, or zeros, with nothing to say either had happened.
+      .catch((err) => {
+        console.error("[reports] could not load organisation report", err);
+        setFailed(true);
+      })
       .finally(() => setBusy(false));
   }, [user, canAccess, months]);
 
@@ -149,6 +164,13 @@ function ReportsPage() {
         </div>
       </header>
 
+      {failed && (
+        <div className="mx-auto mb-4 max-w-6xl rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">
+          Could not load the organisation report. Every figure below is stale or absent — do not
+          read it as this month's position.
+        </div>
+      )}
+
       <section className="mx-auto max-w-6xl px-6 py-8 space-y-6">
         <div className="grid gap-4 md:grid-cols-4">
           <Kpi label="Active headcount" value={kpis ? String(kpis.headcount) : "—"} />
@@ -186,9 +208,18 @@ function ReportsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Payroll cost (approved)</CardTitle>
-            <CardDescription>Total gross by month, in {kpis?.currency ?? "—"}.</CardDescription>
+            <CardDescription>
+              {payrollVisible
+                ? `Total gross by month, in ${kpis?.currency ?? "—"}.`
+                : "Payroll is not visible to your role, so this chart is not shown. It is not zero."}
+            </CardDescription>
           </CardHeader>
           <CardContent style={{ height: 260 }}>
+            {!payrollVisible ? (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Not available for your role.
+              </div>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={series}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -205,6 +236,7 @@ function ReportsPage() {
                 />
               </LineChart>
             </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 

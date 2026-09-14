@@ -8,10 +8,38 @@ async function getRoles(supabase: any, userId: string): Promise<string[]> {
   return (data ?? []).map((r: any) => r.role);
 }
 
+/**
+ * Who may read the organisation report.
+ *
+ * This admitted manager / org_admin / super_admin while `org.reports` admits
+ * super_admin, org_admin, branch_admin, hr and finance — nearly a complement.
+ * The three roles the key admits and this refused opened the page and got an
+ * empty report; `manager`, which this admits, has never been offered the page
+ * at all.
+ *
+ * `manager` is kept deliberately rather than tidied away: removing a right is a
+ * separate decision from granting one, and nothing today calls this as a
+ * manager. Recorded here so the dangling entry is a choice and not an oversight.
+ */
 function ensureAccess(roles: string[]) {
-  if (!roles.some((r) => ["manager", "org_admin", "super_admin"].includes(r))) {
+  const allowed = ["super_admin", "org_admin", "branch_admin", "hr", "finance", "manager"];
+  if (!roles.some((r) => allowed.includes(r))) {
     throw new Error("Not authorized");
   }
+}
+
+/**
+ * Can this caller see payroll at all?
+ *
+ * `branch_admin` holds policies on employees, leave_requests and timesheets but
+ * **none on `payroll_runs`** — so their report reads zero runs and the payroll
+ * cost series comes back as a flat zero. A chart showing a tenant spending
+ * nothing on wages is not an empty state, it is a false statement, and it is
+ * exactly the shape this codebase keeps rediscovering. The page is told, so it
+ * can say "not visible to your role" instead of drawing the zero.
+ */
+function canReadPayroll(roles: string[]): boolean {
+  return roles.some((r) => ["super_admin", "org_admin", "hr", "finance"].includes(r));
 }
 
 function monthKey(d: Date | string) {
@@ -114,5 +142,9 @@ export const getOrgReports = createServerFn({ method: "POST" })
         currency,
       },
       series,
+      // False for branch_admin, who has no policy on payroll_runs. Without
+      // this the page draws a payroll cost of zero, which reads as "this
+      // organisation spends nothing on wages" rather than "you cannot see it".
+      payrollVisible: canReadPayroll(roles),
     };
   });

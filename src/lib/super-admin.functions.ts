@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
+import { getMyRoles, getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -55,15 +55,35 @@ export const upsertTenantGovernance = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/**
+ * Who may read and set a tenant's own branding.
+ *
+ * Mirrors `white_label_settings`: "super admin all white-label" plus
+ * "org admin manages own white-label" (20260914100000). A tenant's logo and
+ * colours belong to the tenant, and `tenant_id = user_tenant_id(...)` in the
+ * policy keeps an org admin inside their own.
+ *
+ * Named rather than inlined because this same check guards a read AND a write
+ * that goes through the service-role client, where RLS is not a backstop.
+ */
+async function assertWhiteLabelAdmin(supabase: any, userId: string) {
+  const roles = await getMyRoles(supabase, userId);
+  if (!roles.some((r) => r === "super_admin" || r === "org_admin")) {
+    throw new Error("Forbidden: organisation admin required");
+  }
+}
+
 // ---------- White label ----------
 export const getMyWhiteLabel = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
-    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    if (!(roles ?? []).some((r: any) => r.role === "super_admin")) {
-      throw new Error("Forbidden");
-    }
+    // `org.whiteLabel` has admitted org_admin since Wave 5 — which recorded
+    // "/org/white-label locking out org_admin" as one of the disagreements it
+    // converged. It fixed the page and not this function, so an org admin still
+    // could not read their own tenant's branding. 20260914100000 gives them the
+    // policy this now depends on.
+    await assertWhiteLabelAdmin(supabase, userId);
     const tenantId = await getTenantId(supabase, userId);
     if (!tenantId) return { settings: null };
     const { data } = await supabase.from("white_label_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
@@ -87,8 +107,7 @@ export const upsertMyWhiteLabel = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => wlSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    if (!(roles ?? []).some((r: any) => r.role === "super_admin")) throw new Error("Forbidden");
+    await assertWhiteLabelAdmin(supabase, userId);
     const tenantId = await requireTenantId(supabase, userId);
     const admin = await loadAdmin();
     const payload: any = { ...data, tenant_id: tenantId };

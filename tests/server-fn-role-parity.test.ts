@@ -69,8 +69,30 @@ const APP_ROLES = [
   "employee",
 ] as const;
 
-/** Role names named by a literal, or implied by a tenant-scoped RPC helper. */
-function rolesIn(text: string): Set<string> {
+/**
+ * Role names a piece of code uses to make an authorization DECISION.
+ *
+ * A `role` filter counts only when the same statement also narrows to the
+ * CALLER. `assertHrOrAdmin` reads `user_roles` where `user_id = userId` and
+ * throws if nothing comes back — that is a guard. `discipline.listHrUsers`
+ * reads `user_roles` for a whole tenant to populate an assignment dropdown —
+ * that is data, and it gates nobody.
+ *
+ * Without the distinction this test reported a page as locking HR out of a
+ * function that has no role check at all, which would have been "fixed" by
+ * widening a filter and quietly changing what the dropdown lists.
+ */
+function rolesIn(raw: string): Set<string> {
+  const text = raw
+    .split(";")
+    .map((stmt) =>
+      /\brole\b/.test(stmt) && !/\buserId\b|\b_user_id\b|auth\.uid/.test(stmt)
+        ? stmt
+            .replace(/\.in\(\s*["']role["']\s*,[\s\S]*?\)/g, "")
+            .replace(/\.eq\(\s*["']role["']\s*,[^)]*\)/g, "")
+        : stmt,
+    )
+    .join(";");
   const found = new Set<string>();
   for (const r of APP_ROLES) {
     if (new RegExp(`["']${r}["']`).test(text)) found.add(r);
@@ -186,12 +208,32 @@ function serverFnRoles(mod: string, name: string): Set<string> | null {
   return found.size ? found : null;
 }
 
+/**
+ * Identifiers on a page whose value is derived from the caller's roles —
+ * `const canSeeAccessAudit = roles.includes("org_admin") || …`, `const canEdit =
+ * can("org.x", roles)`. A query gated on one of these is not offered to a role
+ * that cannot use it, so it is not the defect this test looks for.
+ */
+function roleDerivedIdentifiers(pageSrc: string): string[] {
+  const out: string[] = [];
+  for (const m of pageSrc.matchAll(/const\s+(\w+)\s*=\s*([^;\n]*(?:\n[^;\n]*){0,3});/g)) {
+    if (/\broles\b|\bcan\(/.test(m[2])) out.push(m[1]);
+  }
+  return out;
+}
+
 /** Is `fn` invoked as the page loads, rather than from a button? */
 function calledOnMount(pageSrc: string, fn: string): boolean {
+  const roleDerived = roleDerivedIdentifiers(pageSrc);
   let alias = fn;
   const bound = new RegExp(`const\\s+(\\w+)\\s*=\\s*useServerFn\\(\\s*${fn}\\s*\\)`).exec(pageSrc);
   if (bound) alias = bound[1];
-  for (const kind of [/useQuery\(/g, /useEffect\(/g, /queryFn/g]) {
+  const KINDS: Array<[RegExp, boolean]> = [
+    [/useQuery\(/g, false],
+    [/useEffect\(/g, false],
+    [/queryFn/g, true],
+  ];
+  for (const [kind, isQueryFn] of KINDS) {
     for (const m of pageSrc.matchAll(kind)) {
       const open = pageSrc.indexOf("{", m.index!);
       if (open < 0) continue;
@@ -204,7 +246,28 @@ function calledOnMount(pageSrc: string, fn: string): boolean {
           if (depth === 0) break;
         }
       }
-      if (new RegExp(`\\b${alias}\\s*\\(`).test(pageSrc.slice(m.index!, j + 1))) return true;
+      const block = pageSrc.slice(m.index!, j + 1);
+      if (!new RegExp(`\\b${alias}\\s*\\(`).test(block)) continue;
+      // A block started at `queryFn` ENDS before its sibling `enabled:`, so read
+      // on its own it makes a correctly role-gated panel look unconditional.
+      // When the enclosing useQuery is right there it is already being scanned
+      // with the `enabled` attached, so defer to that pass rather than judging
+      // on a half-read block. `queryFn` is still scanned where it stands alone.
+      if (isQueryFn) {
+        const enclosing = pageSrc.lastIndexOf("useQuery(", m.index!);
+        if (enclosing >= 0 && m.index! - enclosing < 600) continue;
+      }
+      // A call gated on a role-derived condition is not offered to the roles the
+      // fn refuses, which is a correct answer rather than a gap. Both shapes
+      // count: `enabled: … && canSeeAccessAudit` on a useQuery
+      // (/admin/employees/$id's access-audit panel) and an early
+      // `if (!remindersFor || !isAdmin) return;` in a useEffect
+      // (/org/performance's reminder-schedule preview).
+      const gated = roleDerived.some((id) =>
+        new RegExp(`(?:enabled:[^,\\n]*|[!&|(]\\s*)\\b${id}\\b`).test(block),
+      );
+      if (gated) continue;
+      return true;
     }
   }
   return false;
@@ -257,45 +320,41 @@ function analyse(): { findings: Finding[]; resolved: number; unresolved: number 
 const { findings, resolved, unresolved } = analyse();
 
 /**
- * Known gaps, recorded 2026-09-14. **This list may only shrink.**
+ * The five that remain, all of them one question. **This list may only shrink.**
  *
- * Each is a page that offers itself to a role whose first read then refuses
- * them, so the role sees an empty surface rather than a refusal. Each needs the
- * same decision X-07's twin needed, and it is a product decision rather than a
- * mechanical one: **widen the guard** if that role should administer the
- * domain, or **narrow the feature key** if it should not. Getting it backwards
- * either leaks or removes a working page, which is why none of them is fixed
- * here in passing.
+ * Nineteen of the original twenty-four are closed (2026-09-14/15). These five
+ * are not "unlooked-at" — they are a **documented decision that the feature keys
+ * never caught up with**, and they need a product answer rather than a patch.
  *
- * Spot-checked by hand: `org.departments` admits `hr`, and
- * `departments.listDepartments` throws "Forbidden: organisation admin only".
- * HR opens the page and reads an empty list of departments.
+ * `timeline.functions.ts` says it outright, beside the guard:
+ *
+ *   "`finance` and `branch_admin` are deliberately excluded — finance holds
+ *    read-only access to employees and branch_admin is scoped to a branch,
+ *    neither of which matches what these endpoints do."
+ *
+ * `teams.functions.ts` carries the same set and says "Matches the guard in
+ * timeline.functions.ts". So the guards are not behind the keys by oversight;
+ * somebody decided, wrote down why, and the keys were never narrowed to agree.
+ *
+ * That makes the honest repair **narrowing `org.teams`, `org.idRequests`,
+ * `org.assets` and `org.employees`** to drop branch_admin and finance — not
+ * widening the guards, which would reverse a reasoned decision in passing. It is
+ * left open deliberately: removing a role's access to four destinations is a
+ * product call, and this file's job is to make sure it is a call somebody makes
+ * rather than a drift nobody notices.
+ *
+ * Widening is the wrong instinct here for a second reason: these endpoints are
+ * tenant-wide by construction, so admitting a branch admin means admitting them
+ * to every branch — which is precisely what the comment above rules out.
  */
 const KNOWN_GAPS = new Set<string>([
-  "admin.departments.tsx :: departments.listDepartments :: hr",
-  "admin.discipline.tsx :: discipline.listHrUsers :: hr",
-  "admin.duty-reviews.tsx :: duty-reviews.getDutyReview :: hr",
-  "admin.duty-reviews.tsx :: employee-duties.listEmployeesForDuties :: hr",
-  "admin.duty-reviews.tsx :: kpi-cycles.listCycles :: hr",
-  "admin.employee-duties.tsx :: employee-duties.listEmployeesForDuties :: hr",
-  "admin.employees.$employeeId.tsx :: audit.accessLogSummary :: branch_admin,finance,hr,manager",
-  "admin.employees.$employeeId.tsx :: audit.listEventAccessLog :: branch_admin,finance,hr,manager",
+  // Group A (white-label, payroll setup, org reports) was closed 2026-09-14,
+  // guards and RLS together — see 20260914100000.
   "admin.employees.$employeeId.tsx :: timeline.listEmployeeTimeline :: branch_admin,finance",
-  "admin.holiday-categories.tsx :: holiday-categories.listHolidayCategories :: hr",
   "admin.id-requests.tsx :: teams.listAllDocumentRequests :: branch_admin",
-  "admin.payroll-setup.tsx :: payroll-setup.getPayrollSetup :: finance",
-  "admin.review-cycles.tsx :: kpi-cycles.getCycleSubmissionStatus :: hr",
-  "admin.review-cycles.tsx :: kpi-cycles.getKpiWeightSettings :: hr",
-  "admin.review-cycles.tsx :: kpi-cycles.listCycles :: hr",
-  "admin.team-assignments.tsx :: team-assignments.listTeamData :: hr",
   "admin.teams.tsx :: teams.listEmployeeRecord :: branch_admin",
   "admin.teams.tsx :: teams.listTeamMembers :: branch_admin",
   "admin.assets.tsx :: timeline.listEmployeesForAdmin :: branch_admin,finance",
-  "org.performance.tsx :: performance.getReviewAuditTrail :: branch_admin,hr",
-  "org.performance.tsx :: performance.previewReviewReminderSchedule :: branch_admin,hr,manager",
-  "org.reports.tsx :: reports.getOrgReports :: branch_admin,finance,hr",
-  "org.white-label.tsx :: super-admin.getMyWhiteLabel :: org_admin",
-  "practice.time.tsx :: departments.listDepartments :: finance",
 ]);
 
 const key = (f: Finding) => `${f.page.split("/").pop()} :: ${f.fn} :: ${f.missing.join(",")}`;
@@ -304,11 +363,12 @@ describe("a page's feature key and the server fns it loads with agree", () => {
   it("the analysis can actually resolve gates", () => {
     // If a refactor moved every guard somewhere this cannot read, the whole
     // file would pass by finding nothing — the failure mode Wave 5 named.
-    // 36 at the time of writing: on-mount call sites whose gate resolves AND
+    // 20 at the time of writing: on-mount call sites whose gate resolves AND
     // admits super_admin, which is the population this can reason about. The
     // floor is deliberately well below it — this guards against the analysis
-    // going blind, not against the number drifting.
-    expect(resolved, "no server-fn gate could be resolved at all").toBeGreaterThan(25);
+    // going BLIND, not against the number drifting, and a floor set near the
+    // current value just fails on every unrelated change.
+    expect(resolved, "no server-fn gate could be resolved at all").toBeGreaterThan(12);
     expect(GUARDS.size).toBeGreaterThan(5);
     expect(MATRIX.size).toBeGreaterThan(50);
   });

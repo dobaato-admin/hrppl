@@ -8,7 +8,11 @@ async function getCtx(context: any) {
   const callerTenantId = await requireTenantId(supabase, userId);
   const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const r = (roles ?? []).map((x: any) => x.role as string);
-  const isAdmin = r.some((x: string) => ["org_admin", "super_admin", "manager"].includes(x));
+  // `hr` is admitted by this domain's feature key in rbac.ts and was refused
+  // here, so HR opened the page and read an empty one. 20260914110000 gives
+  // hr the matching write policies, so the refusal does not simply move from
+  // this guard to a row-level-security error on Save.
+  const isAdmin = r.some((x: string) => ["org_admin", "super_admin", "manager", "hr"].includes(x));
   return { tenantId: callerTenantId as string, isAdmin, userId, supabase };
 }
 

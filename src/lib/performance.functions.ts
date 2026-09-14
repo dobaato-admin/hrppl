@@ -20,6 +20,15 @@ async function getEmployeeForUser(supabase: any, userId: string) {
   return data;
 }
 
+/** Mirrors `org.performance` in rbac.ts. */
+const PERFORMANCE_VIEW_ROLES = [
+  "super_admin",
+  "org_admin",
+  "branch_admin",
+  "hr",
+  "manager",
+] as const;
+
 // Cycles
 export const createReviewCycle = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -440,7 +449,10 @@ export const submitManagerReview = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
-    if (!roles.some((r) => ["manager", "org_admin", "super_admin"].includes(r)))
+    // Matches `org.performance`, which admits branch_admin and hr. Both hold
+    // policies on `performance_reviews` and `review_cycles` already
+    // (20260613140101), so this was the guard refusing roles Postgres serves.
+    if (!roles.some((r) => PERFORMANCE_VIEW_ROLES.includes(r as (typeof PERFORMANCE_VIEW_ROLES)[number])))
       throw new Error("Not authorized");
     const payload: any = {
       manager_rating: Math.round(data.managerRating),
@@ -747,7 +759,10 @@ export const getReviewAuditTrail = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
-    if (!roles.some((r) => ["manager", "org_admin", "super_admin"].includes(r)))
+    // Matches `org.performance`, which admits branch_admin and hr. Both hold
+    // policies on `performance_reviews` and `review_cycles` already
+    // (20260613140101), so this was the guard refusing roles Postgres serves.
+    if (!roles.some((r) => PERFORMANCE_VIEW_ROLES.includes(r as (typeof PERFORMANCE_VIEW_ROLES)[number])))
       throw new Error("Not authorized");
     let q = supabase
       .from("audit_log")
