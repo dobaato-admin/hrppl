@@ -31,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { linkEvents, listEmployeeTimeline, recordCustomEvent } from "@/lib/timeline.functions";
 import { listEventAccessLog, accessLogSummary, logEventAccess } from "@/lib/audit.functions";
 import { AdminGate } from "@/components/AdminGate";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/admin/employees/$employeeId")({
   component: () => (
@@ -90,8 +91,27 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 function EmployeeRecordPage() {
   const { employeeId } = Route.useParams();
+  const { roles } = useAuth();
   const [filter, setFilter] = useState<string>("all");
   const [view, setView] = useState<"timeline" | "audit">("timeline");
+  /**
+   * Who may see the ACCESS AUDIT — the log of who has viewed this employee's
+   * record.
+   *
+   * `org.employees` admits six roles, and it should: branch admins, HR, finance
+   * and managers all have legitimate reasons to open an employee record. The
+   * audit log is a different question, and `audit.listEventAccessLog` answers it
+   * with `assertAdmin` — org_admin and super_admin only. The tab was offered to
+   * all six regardless, so four of them could click "Access audit" and get an
+   * empty panel.
+   *
+   * The fix is neither to widen the guard nor to narrow the key. Widening would
+   * let a manager see which colleagues had looked at an employee's confidential
+   * records, which weakens the deterrent the log exists to be. Narrowing the key
+   * would remove five roles from employee records entirely. So the PANEL carries
+   * the narrower answer and the page keeps the broader one.
+   */
+  const canSeeAccessAudit = roles.includes("org_admin") || roles.includes("super_admin");
   const fetchTimeline = useServerFn(listEmployeeTimeline);
   const fetchAudit = useServerFn(listEventAccessLog);
   const fetchAuditSummary = useServerFn(accessLogSummary);
@@ -160,7 +180,7 @@ function EmployeeRecordPage() {
   const { data: auditSummary } = useQuery({
     queryKey: ["employee-audit-summary", employeeId],
     queryFn: () => fetchAuditSummary({ data: { employeeId } }),
-    enabled: view === "audit",
+    enabled: view === "audit" && canSeeAccessAudit,
   });
 
   const { data, isLoading } = useQuery({
@@ -178,7 +198,7 @@ function EmployeeRecordPage() {
   const { data: auditData, isLoading: auditLoading } = useQuery({
     queryKey: ["employee-audit", employeeId],
     queryFn: () => fetchAudit({ data: { employeeId, limit: 300 } }),
-    enabled: view === "audit",
+    enabled: view === "audit" && canSeeAccessAudit,
   });
 
   const events = data?.events ?? [];
@@ -251,13 +271,15 @@ function EmployeeRecordPage() {
           >
             Timeline
           </Button>
-          <Button
-            size="sm"
-            variant={view === "audit" ? "default" : "outline"}
-            onClick={() => setView("audit")}
-          >
-            Access audit
-          </Button>
+          {canSeeAccessAudit && (
+            <Button
+              size="sm"
+              variant={view === "audit" ? "default" : "outline"}
+              onClick={() => setView("audit")}
+            >
+              Access audit
+            </Button>
+          )}
           <Button size="sm" variant="outline" className="ml-auto" onClick={() => setNoteOpen(true)}>
             <Plus className="mr-1 h-4 w-4" /> Add note
           </Button>

@@ -333,7 +333,12 @@ function OrgPerformance() {
     setPreview(null);
   }
   useEffect(() => {
-    if (!remindersFor) return;
+    // `previewReviewReminderSchedule` is org_admin/super_admin only, and
+    // deliberately so — configuring when reminders fire is an administrative
+    // act, not a view. `org.performance` admits branch_admin, hr and manager to
+    // the PAGE, which is correct; they just do not get this panel. Gating here
+    // rather than widening the guard keeps both answers where they belong.
+    if (!remindersFor || !isAdmin) return;
     const maxCountNum =
       remForm.maxCount.trim() === ""
         ? null
