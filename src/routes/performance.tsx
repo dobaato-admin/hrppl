@@ -41,6 +41,12 @@ function PerformancePage() {
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  /**
+   * False until load() has answered. Every list on this page starts as `[]`, so
+   * their empty states were rendered as the answer while the answer was in
+   * flight — "No goals yet." to someone who has goals.
+   */
+  const [loaded, setLoaded] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [coworkers, setCoworkers] = useState<Coworker[]>([]);
   const [myRequests, setMyRequests] = useState<FeedbackReq[]>([]);
@@ -70,6 +76,7 @@ function PerformancePage() {
 
   async function load() {
     if (!empId || !tenantId || !user) return;
+    setLoaded(false);
     const [cRes, gRes, rRes, coRes, reqMine, reqMyRev, tRes, rtRes] = await Promise.all([
       supabase.from("review_cycles").select("*").order("period_start", { ascending: false }),
       supabase.from("performance_goals").select("*").eq("employee_id", empId).order("created_at", { ascending: false }),
@@ -99,6 +106,7 @@ function PerformancePage() {
     } else {
       setFeedbackByReview({});
     }
+    setLoaded(true);
   }
   useEffect(() => { load(); }, [empId, tenantId]);
 
@@ -237,7 +245,13 @@ function PerformancePage() {
                     <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => removeGoal(g.id)}>Delete</Button></TableCell>
                   </TableRow>
                 ))}
-                {goals.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">No goals yet.</TableCell></TableRow>}
+                {goals.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground">
+                      {loaded ? "No goals yet." : "Loading your goals…"}
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>

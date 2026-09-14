@@ -303,13 +303,23 @@ describe("the trend surface", () => {
 });
 
 describe("payslip delivery is discoverable", () => {
-  const page = readFileSync("src/routes/org.payroll.tsx", "utf8");
+  /**
+   * Whitespace-collapsed before matching. These assertions are about SENTENCES
+   * the page shows, and JSX text is free to wrap across lines — Prettier moved
+   * "…and cannot be emailed until it is approved." onto two lines and the
+   * regexes started failing on copy that had not changed at all. Collapsing
+   * runs of whitespace keeps the test about what the user reads rather than
+   * about where the formatter chose to break the line.
+   */
+  const page = readFileSync("src/routes/org.payroll.tsx", "utf8").replace(/\s+/g, " ");
 
   it("shows the email action even when the run is not yet approved", () => {
     // It used to render only for an approved run, so on a pending run nothing
     // on the page mentioned sending payslips at all — which reads as the
     // feature not existing.
-    expect(page).not.toMatch(/isOrgAdmin && selected\.status === "approved" && payslips\.length > 0/);
+    expect(page).not.toMatch(
+      /isOrgAdmin && selected\.status === "approved" && payslips\.length > 0/,
+    );
     expect(page).toMatch(/Payslips can be sent once the run is approved/);
   });
 

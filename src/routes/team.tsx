@@ -90,6 +90,12 @@ function TeamPage() {
   const navigate = useNavigate();
   const [me, setMe] = useState<{ id: string; tenant_id: string } | null>(null);
   const [reports, setReports] = useState<Emp[]>([]);
+  /**
+   * False until load() has answered. `reports` starts as `[]`, so a manager was
+   * told "No direct reports yet." while their reports were loading — on the
+   * page whose entire purpose is their reports.
+   */
+  const [loaded, setLoaded] = useState(false);
   const [depts, setDepts] = useState<Dept[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [pendingLeave, setPendingLeave] = useState<LeaveReq[]>([]);
@@ -204,6 +210,7 @@ function TeamPage() {
     setGrievances((gr.data ?? []) as Grievance[]);
     setExpenses((ex.data ?? []) as Expense[]);
     void userIds;
+    setLoaded(true);
   }
   useEffect(() => { load(); }, [me]);
 
@@ -487,7 +494,11 @@ function TeamPage() {
                     })}
                     {filteredReports.length === 0 && (
                       <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                        {reports.length === 0 ? "No direct reports yet." : "No matches."}
+                        {!loaded
+                          ? "Loading your team…"
+                          : reports.length === 0
+                            ? "No direct reports yet."
+                            : "No matches."}
                       </TableCell></TableRow>
                     )}
                   </TableBody>
