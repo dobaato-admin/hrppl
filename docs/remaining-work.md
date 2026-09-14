@@ -254,9 +254,38 @@ envelopes or is not offered. No third outcome — and in particular, not an empt
 callable by every role that page's feature key admits. That is the axis with no coverage, and it
 is what would have caught both this and X-07 before a human did.
 
-*(Partly done 2026-09-14: `tests/documents-access.test.ts` does exactly this for the documents
-domain — every server fn in the module, guard by guard, against the feature key. Generalising it
-across all 102 modules is still open, and is the single most valuable test left to write.)*
+**DONE 2026-09-14** — `tests/server-fn-role-parity.test.ts`. It resolves each page's feature key,
+finds the server fns that page calls **as it loads** (inside `useQuery` / `useEffect` / a
+`queryFn`), recovers each fn's guard role set, and fails when the fn refuses a role the page
+admits.
+
+**It only checks on-mount reads, and that is the point.** A page may legitimately admit six roles
+to read and three to write — `/org/documents/templates` does exactly that, deliberately. Checking
+every call site produces **143 findings**, almost all correct by design, which is how a check stops
+being read. A write behind a button that refuses gives an error toast: visible and actionable. A
+read that refuses gives an empty table: neither. Filtering to on-mount reads takes it from 143 to
+**24**, and the ones hand-checked are all real.
+
+**24 live gaps are recorded in `KNOWN_GAPS`, and the list may only shrink.** Each is X-07's shape
+and each needs the same decision its twin needed — **widen the guard** if the role should
+administer that domain, **narrow the key** if it should not. Getting it backwards either leaks or
+removes a working page, so none was fixed in passing. Worst offenders by breadth:
+
+| Page | Loads | Roles the page admits and the fn refuses |
+| --- | --- | --- |
+| `admin.employees.$employeeId` | `audit.listEventAccessLog`, `audit.accessLogSummary` | branch_admin, finance, hr, manager |
+| `org.reports` | `reports.getOrgReports` | branch_admin, finance, hr |
+| `org.performance` | `performance.previewReviewReminderSchedule` | branch_admin, hr, manager |
+| `admin.review-cycles` | three `kpi-cycles` reads | hr |
+| `admin.departments` | `departments.listDepartments` | hr |
+
+Hand-verified: `org.departments` admits `hr`, and `listDepartments` throws
+*"Forbidden: organisation admin only"*. HR opens the page and reads an empty list of departments.
+
+The analysis is deliberately conservative — a gate it cannot resolve is **skipped, not passed** —
+and it asserts how much it *can* resolve (36 on-mount call sites) so that a refactor which blinds
+it fails loudly rather than turning the file green. Verified non-vacuous in both directions:
+widening one guard makes the shrink-check name the exact entry to delete.
 
 **Two more open observations from the same sweep — CHASED 2026-09-14, and both look like
 artefacts of the sweep itself.**
