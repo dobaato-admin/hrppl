@@ -69,8 +69,31 @@ const APP_ROLES = [
   "employee",
 ] as const;
 
-/** Role names named by a literal, or implied by a tenant-scoped RPC helper. */
-function rolesIn(text: string): Set<string> {
+/**
+ * Role names a piece of code uses to make an authorization DECISION.
+ *
+ * A `role` filter counts only when the same statement also narrows to the
+ * CALLER. `assertHrOrAdmin` reads `user_roles` where `user_id = userId` and
+ * throws if nothing comes back — that is a guard. `discipline.listHrUsers`
+ * reads `user_roles` for a whole tenant to populate an assignment dropdown —
+ * that is data, and it gates nobody.
+ *
+ * Without the distinction this test reported a page as locking HR out of a
+ * function that has no role check at all, which would have been "fixed" by
+ * widening a filter and quietly changing what the dropdown lists.
+ */
+function rolesIn(raw: string): Set<string> {
+  const text = raw
+    .split(";")
+    .map((stmt) =>
+      /\brole\b/.test(stmt) && !/\buserId\b|\b_user_id\b|auth\.uid/.test(stmt)
+        ? stmt.replace(/\.in\(\s*["']role["']\s*,[\s\S]*?\)/g, "").replace(
+            /\.eq\(\s*["']role["']\s*,[^)]*\)/g,
+            "",
+          )
+        : stmt,
+    )
+    .join(";");
   const found = new Set<string>();
   for (const r of APP_ROLES) {
     if (new RegExp(`["']${r}["']`).test(text)) found.add(r);
@@ -272,29 +295,17 @@ const { findings, resolved, unresolved } = analyse();
  * HR opens the page and reads an empty list of departments.
  */
 const KNOWN_GAPS = new Set<string>([
-  "admin.departments.tsx :: departments.listDepartments :: hr",
-  "admin.discipline.tsx :: discipline.listHrUsers :: hr",
-  "admin.duty-reviews.tsx :: duty-reviews.getDutyReview :: hr",
-  "admin.duty-reviews.tsx :: employee-duties.listEmployeesForDuties :: hr",
-  "admin.duty-reviews.tsx :: kpi-cycles.listCycles :: hr",
-  "admin.employee-duties.tsx :: employee-duties.listEmployeesForDuties :: hr",
+  // Group A (white-label, payroll setup, org reports) was closed 2026-09-14,
+  // guards and RLS together — see 20260914100000.
   "admin.employees.$employeeId.tsx :: audit.accessLogSummary :: branch_admin,finance,hr,manager",
   "admin.employees.$employeeId.tsx :: audit.listEventAccessLog :: branch_admin,finance,hr,manager",
   "admin.employees.$employeeId.tsx :: timeline.listEmployeeTimeline :: branch_admin,finance",
-  "admin.holiday-categories.tsx :: holiday-categories.listHolidayCategories :: hr",
   "admin.id-requests.tsx :: teams.listAllDocumentRequests :: branch_admin",
-  "admin.payroll-setup.tsx :: payroll-setup.getPayrollSetup :: finance",
-  "admin.review-cycles.tsx :: kpi-cycles.getCycleSubmissionStatus :: hr",
-  "admin.review-cycles.tsx :: kpi-cycles.getKpiWeightSettings :: hr",
-  "admin.review-cycles.tsx :: kpi-cycles.listCycles :: hr",
-  "admin.team-assignments.tsx :: team-assignments.listTeamData :: hr",
   "admin.teams.tsx :: teams.listEmployeeRecord :: branch_admin",
   "admin.teams.tsx :: teams.listTeamMembers :: branch_admin",
   "admin.assets.tsx :: timeline.listEmployeesForAdmin :: branch_admin,finance",
   "org.performance.tsx :: performance.getReviewAuditTrail :: branch_admin,hr",
   "org.performance.tsx :: performance.previewReviewReminderSchedule :: branch_admin,hr,manager",
-  "org.reports.tsx :: reports.getOrgReports :: branch_admin,finance,hr",
-  "org.white-label.tsx :: super-admin.getMyWhiteLabel :: org_admin",
   "practice.time.tsx :: departments.listDepartments :: finance",
 ]);
 

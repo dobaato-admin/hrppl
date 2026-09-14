@@ -1,18 +1,36 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
+import { getMyRoles, getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
-async function assertOrgAdmin(context: any) {
+/**
+ * Who may configure payroll.
+ *
+ * `org.payrollSetup` admits super_admin, org_admin AND **finance** — finance
+ * deliberately, because deciding pay components and pay cadence is that role's
+ * job. This guard admitted only the first two, so a finance user opened
+ * `/admin/payroll-setup` and the wizard came back empty: the page said the
+ * tenant had nothing configured when it had.
+ *
+ * The database split differently again. "tenant members read …" on
+ * `tenant_payroll_settings` and `payroll_components` lets any member SELECT, so
+ * finance could always have READ this and it was purely this guard refusing
+ * them. The write policies were org_admin-only, which is why widening here
+ * needed `20260914100000` in the same change — otherwise finance would fill the
+ * wizard in and hit a row-level-security error on Save.
+ */
+async function assertPayrollSetupAdmin(context: any) {
   const { supabase, userId } = context;
-  const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-  const r = (roles ?? []).map((x: any) => x.role);
-  if (!r.some((x: string) => ["org_admin", "super_admin"].includes(x))) {
-    throw new Error("Forbidden: organisation admin only");
+  const roles = await getMyRoles(supabase, userId);
+  if (!roles.some((r) => PAYROLL_SETUP_ROLES.includes(r as (typeof PAYROLL_SETUP_ROLES)[number]))) {
+    throw new Error("Forbidden: payroll administrator required (org admin or finance)");
   }
   const callerTenantId = await requireTenantId(supabase, userId);
   return { tenantId: callerTenantId as string, userId: userId as string };
 }
+
+/** Mirrors `org.payrollSetup` in rbac.ts and the policies in 20260914100000. */
+const PAYROLL_SETUP_ROLES = ["super_admin", "org_admin", "finance"] as const;
 
 async function writeAudit(
   context: any,
@@ -35,7 +53,7 @@ async function writeAudit(
 export const getPayrollSetup = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { tenantId } = await assertOrgAdmin(context);
+    const { tenantId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     // The wizard needs to show what is already configured at each step, not
     // just a count of it — an admin returning to "9 pay items configured"
@@ -83,7 +101,7 @@ export const upsertPayrollSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => SettingsSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     const { data: row, error } = await supabase
       .from("tenant_payroll_settings")
@@ -114,7 +132,7 @@ export const upsertPayrollComponent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ComponentSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     if (data.department_id) {
       const { data: dept } = await supabase
@@ -141,7 +159,7 @@ export const togglePayrollComponent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), is_active: z.boolean() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     const { error } = await supabase
       .from("payroll_components").update({ is_active: data.is_active })
@@ -156,7 +174,7 @@ export const deletePayrollComponent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     const { error } = await supabase
       .from("payroll_components").delete().eq("id", data.id).eq("tenant_id", tenantId);
@@ -176,7 +194,7 @@ export const logPayrollScenarioEvent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ScenarioLogSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     await writeAudit(context, tenantId, userId, "payroll_scenario", data.action, "scenario", data.scenarioId, {
       name: data.name, gross: data.gross, overrideCount: data.overrideCount,
     });
@@ -192,7 +210,7 @@ export const logPayrollExportEvent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ExportLogSchema.parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     await writeAudit(context, tenantId, userId, "payroll_export", data.format, "bundle", null, {
       sections: data.sections, scenarios: data.scenarios ?? [],
     });
@@ -208,7 +226,7 @@ export const getAdminAuditLog = createServerFn({ method: "GET" })
     }).parse(d ?? {}),
   )
   .handler(async ({ data, context }) => {
-    const { tenantId } = await assertOrgAdmin(context);
+    const { tenantId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     let q = supabase.from("admin_audit_log").select("*").eq("tenant_id", tenantId)
       .order("created_at", { ascending: false }).limit(data.limit ?? 100);
@@ -221,7 +239,7 @@ export const getAdminAuditLog = createServerFn({ method: "GET" })
 export const getPayrollExportBundle = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { tenantId } = await assertOrgAdmin(context);
+    const { tenantId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     const { data: tenant } = await supabase
       .from("tenants").select("id,name,country_code,currency_code").eq("id", tenantId).maybeSingle();
@@ -362,7 +380,7 @@ export const updateTenantCurrency = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ currency_code: z.string().trim().length(3).regex(/^[A-Za-z]{3}$/) }).parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     const code = data.currency_code.toUpperCase();
     const { error } = await supabase.from("tenants").update({ currency_code: code }).eq("id", tenantId);
@@ -380,7 +398,7 @@ export const upsertOvertimeRateQuick = createServerFn({ method: "POST" })
     rate_multiplier: z.number().min(0.5).max(10),
   }).parse(d))
   .handler(async ({ data, context }) => {
-    const { tenantId, userId } = await assertOrgAdmin(context);
+    const { tenantId, userId } = await assertPayrollSetupAdmin(context);
     const { supabase } = context as any;
     const { data: tenant } = await supabase
       .from("tenants").select("country_code").eq("id", tenantId).maybeSingle();
