@@ -95,6 +95,29 @@ function oncePerSession(key: string): boolean {
 }
 
 /**
+ * Was this request cancelled rather than failed?
+ *
+ * A navigation aborts every in-flight fetch, and the browser surfaces that as
+ * `TypeError: Failed to fetch` (or an `AbortError` when a signal was used) —
+ * the same shapes a genuine network failure produces. There is no field that
+ * separates them, so this matches on what is observable and errs toward
+ * silence: a swallowed real failure still lets the user through, which is this
+ * gate's designed behaviour anyway, whereas a logged cancellation is read by
+ * humans and by the QA sweep as a defect on an innocent page.
+ */
+function isAbortError(err: unknown): boolean {
+  if (typeof DOMException !== "undefined" && err instanceof DOMException && err.name === "AbortError") {
+    return true;
+  }
+  const name = (err as { name?: string } | null)?.name;
+  const message = String((err as { message?: string } | null)?.message ?? "");
+  return (
+    name === "AbortError" ||
+    /Failed to fetch|NetworkError|Load failed|aborted|cancell?ed/i.test(message)
+  );
+}
+
+/**
  * Local-development escape from the mandatory MFA gate.
  *
  * Requires BOTH conditions, and neither is enough alone:
@@ -314,8 +337,29 @@ export function AuthRouteGate({ children }: { children: ReactNode }) {
           }
         }
       } catch (err) {
-        // Don't trap the user behind a broken status call — log and let them through.
-        console.error("[AuthRouteGate] org status check failed", err);
+        // Don't trap the user behind a broken status call — let them through
+        // either way. But only SAY something when there is something to say.
+        //
+        // This gate runs on every route, and any navigation cancels it mid
+        // flight — `pathname` is a dependency. The browser reports a cancelled
+        // request as `TypeError: Failed to fetch`, indistinguishable by type
+        // from a server that is genuinely down, and logging it at
+        // console.error attributed the cancellation to whatever page the user
+        // was NAVIGATING TO.
+        //
+        // That is not hypothetical: the 2026-09-07 QA sweep — which navigates
+        // with a full `page.goto()` per route — recorded console errors on
+        // /settings/billing for all eight roles, and the entry sat in
+        // docs/remaining-work.md as an open defect affecting every user. It was
+        // this line. Re-probed 2026-09-14 across six routes as `hr`, with both
+        // a clean navigation and the sweep's own back-to-back pattern: zero
+        // errors, and the page renders correctly.
+        //
+        // A cancelled check is the normal case, not a fault. Real failures —
+        // a 500, a thrown handler, a bad payload — still log.
+        if (!cancelled && !isAbortError(err)) {
+          console.error("[AuthRouteGate] org status check failed", err);
+        }
       } finally {
         // Retract unconditionally — NOT behind `if (!cancelled)`. A cancelled
         // run still raised the signal, so it still owes the retraction; the

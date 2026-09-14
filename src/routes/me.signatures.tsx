@@ -16,8 +16,33 @@ export const Route = createFileRoute("/me/signatures")({
 function SignaturesPage() {
   const list = useServerFn(myPendingEnvelopes);
   const [items, setItems] = useState<any[]>([]);
+  /**
+   * `list().then(...)` had no `.catch` and no loading state, so a failed read
+   * raised an unhandled promise rejection AND left the page saying
+   * "All caught up." — telling somebody there is nothing waiting for their
+   * signature at the exact moment the page could not find out. A contract
+   * nobody signs because they were told there was nothing to sign is the
+   * expensive version of this codebase's recurring defect.
+   */
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
 
-  useEffect(() => { list().then((r) => setItems(r.items)); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    list()
+      .then((r) => {
+        if (cancelled) return;
+        setItems(Array.isArray(r?.items) ? r.items : []);
+        setState("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("[signatures] could not load pending envelopes", err);
+        setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [list]);
 
   const pending = items.filter((i) => i.status !== "signed");
   const done = items.filter((i) => i.status === "signed");
@@ -30,7 +55,15 @@ function SignaturesPage() {
           <CardDescription>Open each document, review it, then sign or decline.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          {pending.length === 0 ? <div className="text-sm text-muted-foreground">All caught up.</div> : pending.map((i) => (
+          {pending.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              {state === "loading"
+                ? "Checking for documents awaiting your signature…"
+                : state === "error"
+                  ? "Could not load your documents. This list is incomplete — do not take it as nothing being outstanding."
+                  : "All caught up."}
+            </div>
+          ) : pending.map((i) => (
             <div key={i.id} className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <div className="font-medium">{i.envelope?.subject}</div>

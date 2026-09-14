@@ -101,6 +101,33 @@ function BillingPage() {
     );
   }
 
+  // A failed read used to fall straight through to the render below, which then
+  // drew a plan card with every field blank and an empty payment history. That
+  // is this codebase's recurring defect — a failure that looks like an answer —
+  // and on a billing page it is the answer somebody acts on.
+  if (billing.isError || plans.isError) {
+    return (
+      <AppShell title="Billing & subscription" subtitle="Plan, payment history, and renewals">
+        <div className="mx-auto max-w-lg py-12 text-center">
+          <p className="text-sm text-muted-foreground">
+            Could not load your billing details. This page is incomplete — nothing shown here is
+            reliable, and no charge or plan change has been made.
+          </p>
+          <Button
+            variant="outline"
+            className="mt-4"
+            onClick={() => {
+              void billing.refetch();
+              void plans.refetch();
+            }}
+          >
+            Try again
+          </Button>
+        </div>
+      </AppShell>
+    );
+  }
+
   const sub = billing.data?.subscription;
   const plan = billing.data?.plan;
   const tenant = billing.data?.tenant;

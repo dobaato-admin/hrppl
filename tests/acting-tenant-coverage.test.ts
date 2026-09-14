@@ -63,14 +63,20 @@ type Site = { file: string; line: number; who: string | null; select: string };
 
 function scan(): Site[] {
   const files = globSync("src/lib/**/*.ts", { cwd: ROOT }).sort();
-  const chain = /\.from\(\s*"profiles"\s*\)\s*((?:\.\w+\([^()]*(?:\([^()]*\))?[^()]*\)\s*){1,6})/gs;
+  // Both quote styles. billing.functions.ts is written with single quotes
+  // throughout, so a double-quote-only scanner reported it clean while it held
+  // eight of exactly the reads this test exists to find — the Wave 5 lesson
+  // ("a check comparing two things reports nothing when one of them is
+  // absent") turning up inside the check itself.
+  const chain =
+    /\.from\(\s*["']profiles["']\s*\)\s*((?:\.\w+\([^()]*(?:\([^()]*\))?[^()]*\)\s*){1,6})/gs;
   const sites: Site[] = [];
   for (const rel of files) {
     const src = readFileSync(join(ROOT, rel), "utf8");
     for (const m of src.matchAll(chain)) {
-      const sel = /\.select\(\s*"([^"]*)"/.exec(m[1]);
+      const sel = /\.select\(\s*["']([^"']*)["']/.exec(m[1]);
       if (!sel || !sel[1].includes("tenant_id")) continue;
-      const eq = /\.eq\(\s*"id"\s*,\s*([^)]+?)\s*\)/.exec(m[1]);
+      const eq = /\.eq\(\s*["']id["']\s*,\s*([^)]+?)\s*\)/.exec(m[1]);
       const who = eq ? eq[1].trim() : null;
       sites.push({
         file: rel.split("\\").join("/"),

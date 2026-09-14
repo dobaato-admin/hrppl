@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { z } from 'zod';
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId, requireTenantId } from '@/lib/tenant-scope';
 
 const DEBIT_REGIONS = ['ach', 'becs', 'sepa', 'bacs'] as const;
 
@@ -38,9 +39,7 @@ export const getMyBilling = createServerFn({ method: 'GET' })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as { supabase: any; userId: string };
-    const { data: profile } = await supabase
-      .from('profiles').select('tenant_id').eq('id', userId).maybeSingle();
-    const tenantId = profile?.tenant_id ?? null;
+    const tenantId = await getTenantId(supabase, userId);
     if (!tenantId) {
       return { tenant: null, subscription: null, plan: null, employeeCount: 0, history: [] };
     }
@@ -75,9 +74,7 @@ export const changeMyPlan = createServerFn({ method: 'POST' })
     const { supabase, userId } = context as { supabase: any; userId: string };
     const roles = await callerRoles(supabase, userId);
     if (!roles.isOrg && !roles.isSuper) throw new Error('Forbidden');
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', userId).maybeSingle();
-    const tenantId = profile?.tenant_id;
-    if (!tenantId) throw new Error('No organization');
+    const tenantId = await requireTenantId(supabase, userId);
     const admin = await loadAdmin();
     const { data: plan, error: planErr } = await admin
       .from('subscription_plans').select('id, code').eq('code', data.plan_code).eq('is_active', true).maybeSingle();
@@ -107,9 +104,7 @@ export const cancelMyPlan = createServerFn({ method: 'POST' })
     const { supabase, userId } = context as { supabase: any; userId: string };
     const roles = await callerRoles(supabase, userId);
     if (!roles.isOrg && !roles.isSuper) throw new Error('Forbidden');
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', userId).maybeSingle();
-    const tenantId = profile?.tenant_id;
-    if (!tenantId) throw new Error('No organization');
+    const tenantId = await requireTenantId(supabase, userId);
     const admin = await loadAdmin();
     const { error } = await admin.from('tenant_subscriptions').update({ cancel_at_period_end: true }).eq('tenant_id', tenantId);
     if (error) throw new Error(error.message);
@@ -125,9 +120,7 @@ export const resumeMyPlan = createServerFn({ method: 'POST' })
     const { supabase, userId } = context as { supabase: any; userId: string };
     const roles = await callerRoles(supabase, userId);
     if (!roles.isOrg && !roles.isSuper) throw new Error('Forbidden');
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', userId).maybeSingle();
-    const tenantId = profile?.tenant_id;
-    if (!tenantId) throw new Error('No organization');
+    const tenantId = await requireTenantId(supabase, userId);
     const admin = await loadAdmin();
     const { error } = await admin.from('tenant_subscriptions').update({ cancel_at_period_end: false, status: 'active' }).eq('tenant_id', tenantId);
     if (error) throw new Error(error.message);
@@ -161,9 +154,7 @@ export const startTenantSubscription = createServerFn({ method: 'POST' })
     const admin = await loadAdmin();
     const { getStripe, paymentMethodTypesFor } = await import('@/lib/stripe.server');
 
-    const { data: prof } = await supabase.from('profiles').select('tenant_id').eq('id', userId).single();
-    const tenantId = prof?.tenant_id;
-    if (!tenantId) throw new Error('No tenant for current user');
+    const tenantId = await requireTenantId(supabase, userId);
 
     const { data: isOrgAdmin } = await supabase
       .rpc('is_org_admin', { _user_id: userId, _tenant_id: tenantId });
@@ -277,9 +268,7 @@ export const createBillingSetupLink = createServerFn({ method: 'POST' })
     const { supabase, userId } = context as { supabase: any; userId: string };
     const admin = await loadAdmin();
     const { getStripe, paymentMethodTypesFor } = await import('@/lib/stripe.server');
-    const { data: prof } = await supabase.from('profiles').select('tenant_id').eq('id', userId).single();
-    const tenantId = prof?.tenant_id;
-    if (!tenantId) throw new Error('No tenant');
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: sub } = await admin.from('tenant_subscriptions').select('*').eq('tenant_id', tenantId).single();
     if (!sub?.stripe_customer_id) throw new Error('No Stripe customer; start a subscription first');
     const stripe = getStripe();
@@ -320,13 +309,12 @@ export const previewTenantHeadcount = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as { supabase: any; userId: string };
-    const { data: prof } = await supabase.from('profiles').select('tenant_id').eq('id', userId).single();
-    if (!prof?.tenant_id) throw new Error('No tenant');
+    const callerTenantId = await requireTenantId(supabase, userId);
     const now = new Date();
     const year = data.year ?? now.getUTCFullYear();
     const month = data.month ?? now.getUTCMonth() + 1;
     const { data: rows, error } = await supabase
-      .rpc('tenant_net_headcount', { _tenant: prof.tenant_id, _year: year, _month: month });
+      .rpc('tenant_net_headcount', { _tenant: callerTenantId, _year: year, _month: month });
     if (error) throw error;
     return { year, month, ...(rows?.[0] ?? { net_employees: 0, joined_count: 0, left_count: 0 }) };
   });
@@ -335,11 +323,13 @@ export const listTenantBillingSnapshots = createServerFn({ method: 'GET' })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as { supabase: any; userId: string };
-    const { data: prof } = await supabase.from('profiles').select('tenant_id').eq('id', userId).single();
-    if (!prof?.tenant_id) return { items: [] };
+    // 'no tenant' is a legitimate answer here — a platform account with
+    // nothing selected has no snapshots, which is not an error.
+    const callerTenantId = await getTenantId(supabase, userId);
+    if (!callerTenantId) return { items: [] };
     const { data, error } = await supabase
       .from('tenant_billing_snapshots').select('*')
-      .eq('tenant_id', prof.tenant_id)
+      .eq('tenant_id', callerTenantId)
       .order('period_year', { ascending: false })
       .order('period_month', { ascending: false })
       .limit(24);
