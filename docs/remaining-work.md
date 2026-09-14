@@ -316,10 +316,41 @@ is latent in every one of the 39 effect-based loaders above.
 documented default `staleTime` on the query client with per-query overrides where they matter,
 which `src/router.tsx` has had since before 4b was corrected.
 
-**What is genuinely left in Priority 2:** the 39 `useEffect` blocks issuing 77 direct Supabase
-queries. Thirteen of the worst were the tenant waterfall and are now gone; the rest bypass React
-Query entirely — no caching, no `isLoading`, refetched on every mount — and carry §4d's
-`null`-as-an-answer shape with them. That is the largest remaining client-side win.
+**Progress on the `useEffect` blocks (2026-09-14).** The doc's "39 blocks / 77 queries, four
+admin pages at 6 each" was measured before the tenant-waterfall work. Re-measured after it, those
+four admin pages are at **4 each** — exactly the `profiles` → `tenants` pair removed — which
+corroborates both counts.
+
+Converted since, the two with real sequential waterfalls:
+
+- **`/my-payslips`** ran four queries strictly in series (employees → tenants → payslips → runs).
+  Only two of those steps genuinely depend on each other; the tenant read depended on nothing but
+  the tenant id and is now the shared cached record, so it is gone rather than reordered.
+- **`/org/payroll`** held the tenant id **twice** — `useMyTenantId` *and* a `useState` the effect
+  mirrored it into — and could render with the two disagreeing for a tick. Its three reads
+  (`tenants`, `tenant_payroll_settings`, `tenant_subscriptions`) ran in series although none
+  depended on another. One is now cached and the other two run together.
+
+**§4d is closed on the five pages where it mattered most.** `/leave`, `/attendance`,
+`/performance`, `/team` and `/my-payslips` each stated an empty result while still loading — "No
+goals yet." to somebody who has goals, "No approved payslips yet." to somebody who has been paid.
+`/leave` also conflated "this organisation has no leave types" with "your account has no employee
+record"; those are now different sentences. Pinned by a new describe block in
+`tests/tenant-loading-state.test.ts`, verified non-vacuous.
+
+Two things worth knowing for whoever continues:
+
+- A repo-wide scan finds **29 "No …" strings across 13 effect-loaded pages**, of which five were
+  defects. The rest are honest labels ("No limit", "No scopes", "No reset token found in that
+  link"). That is why the test lists its claims explicitly rather than detecting them — a checker
+  that cannot tell a claim from a label produces noise, and noisy checks stop being read.
+- `auAddon` on `/org/payroll` was the same bug in a different costume: the AU upsell banner keys
+  on `auAddon === false`, so defaulting it to `false` flashed "you do not have the add-on" at
+  tenants that have it. It stays `null` until the answer arrives.
+
+**Still left:** the remaining effect-based loaders, none of which is a multi-query waterfall any
+more — they are single uncached reads. Converting them is caching work, not correctness work, and
+should be measured before it is done.
 
 ---
 
