@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { defineTool, type ToolContext } from "@lovable.dev/mcp-js";
 import { z } from "zod";
+import { getTenantId } from "@/lib/tenant-scope";
 
 function supabaseForUser(ctx: ToolContext) {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
@@ -47,12 +48,7 @@ export default defineTool({
     if (!userId) {
       return { content: [{ type: "text", text: "Not authenticated" }], isError: true };
     }
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", userId)
-      .maybeSingle();
-    const tenantId = profile?.tenant_id as string | undefined;
+    const tenantId = (await getTenantId(supabase, userId)) ?? undefined;
     if (!tenantId) {
       return {
         content: [{ type: "text", text: "Your account is not attached to an organisation." }],

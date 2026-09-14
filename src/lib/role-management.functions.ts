@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -44,12 +45,11 @@ async function revokeSessionsForRoleChange(admin: any, targetUserId: string): Pr
 }
 
 async function assertOrgAdmin(supabase: any, userId: string): Promise<string> {
-  const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile?.tenant_id) throw new Error("No organization");
+  const tenantId = await requireTenantId(supabase, userId);
   const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const has = (roles ?? []).some((r: any) => r.role === "org_admin" || r.role === "super_admin");
   if (!has) throw new Error("Not authorized — Org Admin required");
-  return profile.tenant_id as string;
+  return tenantId as string;
 }
 
 // ---------- listTenantMembers ----------

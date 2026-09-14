@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 // ---------------- Clients ----------------
 export const listClients = createServerFn({ method: "GET" })
@@ -34,9 +35,8 @@ export const upsertClient = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => clientSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    const tenantId = prof?.tenant_id;
+    const callerTenantId = await getTenantId(supabase, userId);
+    const tenantId = callerTenantId;
     if (!tenantId) throw new Error("No organization");
     const payload: any = { ...data, tenant_id: tenantId, created_by: userId };
     if (payload.contact_email === "") payload.contact_email = null;
@@ -137,10 +137,8 @@ export const upsertProject = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => projectSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No organization");
-    const payload: any = { ...data, tenant_id: prof.tenant_id };
+    const tenantId = await requireTenantId(supabase, userId);
+    const payload: any = { ...data, tenant_id: tenantId };
     for (const k of ["currency_code", "start_date", "end_date"]) if (payload[k] === "") payload[k] = null;
     return { project: await writeRow(supabase, "projects", payload) };
   });
@@ -178,10 +176,8 @@ export const upsertJob = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => jobSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No organization");
-    const payload: any = { ...data, tenant_id: prof.tenant_id };
+    const tenantId = await requireTenantId(supabase, userId);
+    const payload: any = { ...data, tenant_id: tenantId };
     if (payload.due_date === "") payload.due_date = null;
     return { job: await writeRow(supabase, "client_jobs", payload) };
   });
@@ -280,9 +276,7 @@ export const upsertInvoice = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => invoiceSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No organization");
+    const tenantId = await requireTenantId(supabase, userId);
 
     const subtotal = data.lines.reduce((s, l) => s + l.quantity * l.unit_price, 0);
     const taxTotal = data.lines.reduce((s, l) => s + (l.quantity * l.unit_price * (l.tax_rate / 100)), 0);
@@ -290,7 +284,7 @@ export const upsertInvoice = createServerFn({ method: "POST" })
 
     const invoicePayload: any = {
       id: data.id,
-      tenant_id: prof.tenant_id,
+      tenant_id: tenantId,
       client_id: data.client_id,
       invoice_number: data.invoice_number,
       status: data.status,
@@ -309,7 +303,7 @@ export const upsertInvoice = createServerFn({ method: "POST" })
     // Replace lines
     await supabase.from("invoice_lines").delete().eq("invoice_id", inv.id);
     const lineRows = data.lines.map((l, i) => ({
-      tenant_id: prof.tenant_id,
+      tenant_id: tenantId,
       invoice_id: inv.id,
       project_id: l.project_id ?? null,
       description: l.description,
@@ -353,12 +347,8 @@ export const markInvoicePaid = createServerFn({ method: "POST" })
     }
 
     // Tenant scope: resolve caller's tenant and scope the update to it.
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", userId)
-      .maybeSingle();
-    const tenantId = prof?.tenant_id;
+    const callerTenantId = await getTenantId(supabase, userId);
+    const tenantId = callerTenantId;
     if (!tenantId && !roles.includes("super_admin")) {
       throw new Error("No organization");
     }

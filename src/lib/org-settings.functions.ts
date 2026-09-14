@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -8,9 +9,8 @@ async function loadAdmin() {
 }
 
 async function getCallerTenantAndRole(supabase: any, userId: string) {
-  const { data: prof } = await supabase
-    .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  const tenantId = (prof?.tenant_id as string | null) ?? null;
+  const callerTenantId = await getTenantId(supabase, userId);
+  const tenantId = (callerTenantId as string | null) ?? null;
   const { data: roleRows } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const roles = (roleRows ?? []).map((r: any) => r.role as string);
   return { tenantId, roles };

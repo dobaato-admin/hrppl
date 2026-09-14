@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -36,16 +37,11 @@ export const createReviewCycle = createServerFn({ method: "POST" })
     const roles = await getRoles(supabase, userId);
     if (!roles.some((r) => ["org_admin", "super_admin"].includes(r)))
       throw new Error("Not authorized");
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", userId)
-      .maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: row, error } = await supabase
       .from("review_cycles")
       .insert({
-        tenant_id: prof.tenant_id,
+        tenant_id: tenantId,
         name: data.name,
         period_start: data.periodStart,
         period_end: data.periodEnd,
@@ -592,19 +588,14 @@ export const upsertReviewTemplate = createServerFn({ method: "POST" })
     const roles = await getRoles(supabase, userId);
     if (!roles.some((r) => ["org_admin", "super_admin"].includes(r)))
       throw new Error("Not authorized");
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", userId)
-      .maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     if (data.scaleMax <= data.scaleMin) throw new Error("scaleMax must be greater than scaleMin");
 
     if (data.isDefault) {
       await supabase
         .from("review_templates" as any)
         .update({ is_default: false })
-        .eq("tenant_id", prof.tenant_id);
+        .eq("tenant_id", tenantId);
     }
 
     if (data.id && data.bumpVersion) {
@@ -622,7 +613,7 @@ export const upsertReviewTemplate = createServerFn({ method: "POST" })
       const { data: row, error } = await supabase
         .from("review_templates" as any)
         .insert({
-          tenant_id: prof.tenant_id,
+          tenant_id: tenantId,
           name: data.name,
           description: data.description ?? null,
           industry: data.industry ?? null,
@@ -669,7 +660,7 @@ export const upsertReviewTemplate = createServerFn({ method: "POST" })
     const { data: row, error } = await supabase
       .from("review_templates" as any)
       .insert({
-        tenant_id: prof.tenant_id,
+        tenant_id: tenantId,
         name: data.name,
         description: data.description ?? null,
         industry: data.industry ?? null,

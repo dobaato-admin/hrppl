@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -14,13 +15,13 @@ async function loadAdmin() {
  */
 async function assertOrgAdmin(context: { supabase: any; userId: string }, tenantId: string) {
   const { supabase, userId } = context;
-  const [{ data: superRow }, { data: profile }, { data: adminRow }] = await Promise.all([
+  const [{ data: superRow }, callerTenant, { data: adminRow }] = await Promise.all([
     supabase.rpc("has_role", { _user_id: userId, _role: "super_admin" }),
-    supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle(),
+    getTenantId(supabase, userId),
     supabase.rpc("has_role", { _user_id: userId, _role: "org_admin" }),
   ]);
   const isSuper = superRow === true;
-  const isOrgAdmin = adminRow === true && profile?.tenant_id === tenantId;
+  const isOrgAdmin = adminRow === true && callerTenant === tenantId;
   if (!isSuper && !isOrgAdmin) throw new Error("Forbidden — org admin required.");
   return { isSuper, userId };
 }

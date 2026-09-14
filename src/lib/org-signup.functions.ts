@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth, requireAuthAllowSuspended } from "@/lib/auth-guard";
 import { validateBusinessRegistrationNumber } from "@/lib/payroll-validation";
-import { getActingTenantId } from "@/lib/tenant-scope";
+import { getActingTenantId, getTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -256,9 +256,8 @@ export const createOrganization = createServerFn({ method: "POST" })
     const email = (claims?.email as string | undefined)?.toLowerCase() ?? null;
 
     // Already in a tenant? Don't create another
-    const { data: existingProfile } = await admin
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (existingProfile?.tenant_id) {
+    const callerTenantId = await getTenantId(admin, userId);
+    if (callerTenantId) {
       throw new Error("You already belong to an organization.");
     }
 
@@ -405,9 +404,8 @@ const updateOrgProfileSchema = z.object({
 });
 
 async function assertOrgAdmin(supabase: any, userId: string): Promise<string> {
-  const { data: profile } = await supabase
-    .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  const tenantId = profile?.tenant_id as string | null;
+  const callerTenantId = await getTenantId(supabase, userId);
+  const tenantId = callerTenantId as string | null;
   if (!tenantId) throw new Error("No organization");
   const { data: roleRows } = await supabase
     .from("user_roles").select("role").eq("user_id", userId);
@@ -642,9 +640,8 @@ export const resetMyOrgSetup = createServerFn({ method: "POST" })
     const { userId } = context as any;
     const admin = await loadAdmin();
 
-    const { data: profile } = await admin
-      .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    const tenantId = profile?.tenant_id as string | null;
+    const callerTenantId = await getTenantId(admin, userId);
+    const tenantId = callerTenantId as string | null;
     if (!tenantId) return { ok: true, reset: false, reason: "no_tenant" };
 
     const { count: empCount } = await admin

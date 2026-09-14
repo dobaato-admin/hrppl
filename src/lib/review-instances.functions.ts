@@ -401,16 +401,24 @@ export const logTemplateAuditEvent = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
     if (!roles.some((r) => ["org_admin","super_admin"].includes(r))) throw new Error("Not authorized");
-    const { data: prof } = await supabase.from("profiles").select("tenant_id,email").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const auditTenantId = await requireTenantId(supabase, userId);
+    // The actor's own email, for the audit row. Read on its own now that the
+    // tenant comes from tenant-scope — a platform admin acting as a tenant has
+    // no `profiles.tenant_id`, but they do have an email, and the audit trail
+    // wants the person rather than the tenant.
+    const { data: actor } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", userId)
+      .maybeSingle();
     const { error } = await supabase.from("review_template_audit_log" as any).insert({
-      tenant_id: prof.tenant_id,
+      tenant_id: auditTenantId,
       template_id: data.templateId,
       template_name: data.templateName,
       action: data.action,
       file_name: data.fileName ?? null,
       actor_id: userId,
-      actor_email: (prof as any).email ?? null,
+      actor_email: (actor as any)?.email ?? null,
       snapshot: data.snapshot ?? null,
     });
     if (error) throw new Error(error.message);
@@ -446,10 +454,9 @@ export const reviewDashboardSummary = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     await requireAdmin(context.supabase, context.userId);
-    const { data: prof } = await context.supabase.from("profiles").select("tenant_id").eq("id", context.userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(context.supabase, context.userId);
     let q = context.supabase.from("review_instances" as any).select("*")
-      .eq("tenant_id", prof.tenant_id)
+      .eq("tenant_id", tenantId)
       .gte("scheduled_for", data.from)
       .lte("scheduled_for", data.to);
     if (data.templateId) q = q.eq("template_id", data.templateId);
@@ -543,10 +550,9 @@ export const exportReviewInstances = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     await requireAdmin(context.supabase, context.userId);
-    const { data: prof } = await context.supabase.from("profiles").select("tenant_id").eq("id", context.userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(context.supabase, context.userId);
     let q = context.supabase.from("review_instances" as any).select("*")
-      .eq("tenant_id", prof.tenant_id)
+      .eq("tenant_id", tenantId)
       .gte("scheduled_for", data.from)
       .lte("scheduled_for", data.to)
       .order("scheduled_for", { ascending: true });

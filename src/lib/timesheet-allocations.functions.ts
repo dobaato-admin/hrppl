@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId } from "@/lib/tenant-scope";
 
 // ---------- Schemas ----------
 const allocationSchema = z.object({
@@ -99,8 +100,8 @@ export const listVarianceQueue = createServerFn({ method: "GET" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    const tenantId = prof?.tenant_id;
+    const callerTenantId = await getTenantId(supabase, userId);
+    const tenantId = callerTenantId;
     if (!tenantId) throw new Error("No organization");
 
     let q = supabase
@@ -135,8 +136,8 @@ export const allocationRollup = createServerFn({ method: "GET" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    const tenantId = prof?.tenant_id;
+    const callerTenantId = await getTenantId(supabase, userId);
+    const tenantId = callerTenantId;
     if (!tenantId) throw new Error("No organization");
 
     let q = supabase

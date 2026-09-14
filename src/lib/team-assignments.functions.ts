@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -14,9 +15,8 @@ async function assertOrgAdmin(context: any) {
   if (!r.some((x: string) => ["org_admin", "regional_admin", "super_admin"].includes(x))) {
     throw new Error("Forbidden: organisation admin only");
   }
-  const { data: prof } = await supabase
-    .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  return { tenantId: prof?.tenant_id as string | null, roles: r };
+  const callerTenantId = await getTenantId(supabase, userId);
+  return { tenantId: callerTenantId as string | null, roles: r };
 }
 
 export const listTeamData = createServerFn({ method: "GET" })

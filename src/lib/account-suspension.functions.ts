@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantAndRoles } from "@/lib/tenant-scope";
 
 /**
  * Suspend / reinstate user accounts (Finalization Plan §1 #4, §5 "Day 1").
@@ -25,18 +26,14 @@ type Actor = { userId: string; isSuper: boolean; tenantId: string | null };
 
 async function resolveActor(userId: string): Promise<Actor> {
   const admin = await loadAdmin();
-  const [{ data: roles }, { data: profile }] = await Promise.all([
-    admin.from("user_roles").select("role").eq("user_id", userId),
-    admin.from("profiles").select("tenant_id").eq("id", userId).maybeSingle(),
-  ]);
-  const held = (roles ?? []).map((r: { role: string }) => r.role);
+  const { tenantId, roles: held } = await getTenantAndRoles(admin, userId);
   if (!held.includes("super_admin") && !held.includes("org_admin")) {
     throw new Error("Forbidden");
   }
   return {
     userId,
     isSuper: held.includes("super_admin"),
-    tenantId: (profile?.tenant_id as string | null) ?? null,
+    tenantId,
   };
 }
 

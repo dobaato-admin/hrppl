@@ -5,14 +5,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 export const getAuStpAudit = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
-    const { data: tenant } = await supabase.from("tenants").select("id, name, country_code").eq("id", prof.tenant_id).maybeSingle();
+    const tenantId = await requireTenantId(supabase, userId);
+    const { data: tenant } = await supabase.from("tenants").select("id, name, country_code").eq("id", tenantId).maybeSingle();
     if (!tenant) throw new Error("Tenant not found");
     if (tenant.country_code !== "AU") {
       return { ok: false, reason: "Tenant is not configured for Australia", tenant };

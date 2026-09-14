@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function getRoles(supabase: any, userId: string): Promise<string[]> {
   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
@@ -27,9 +28,8 @@ export const getOrgReports = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
     ensureAccess(roles);
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
-    const tenantId = prof.tenant_id;
+    const callerTenantId = await requireTenantId(supabase, userId);
+    const tenantId = callerTenantId;
 
     const from = new Date();
     from.setUTCMonth(from.getUTCMonth() - (data.monthsBack - 1));

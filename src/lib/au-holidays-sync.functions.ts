@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 // Australian Government — Australian public holidays machine-readable dataset
 // https://data.gov.au/dataset/australian-holidays-machine-readable-dataset
@@ -33,11 +34,6 @@ function parseCsv(text: string): string[][] {
   return rows;
 }
 
-async function getTenantId(supabase: any, userId: string): Promise<string | null> {
-  const { data } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  return data?.tenant_id ?? null;
-}
-
 export const syncAuHolidays = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ year: z.number().int().min(2020).max(2035) }).parse(d))
@@ -49,7 +45,7 @@ export const syncAuHolidays = createServerFn({ method: "POST" })
       throw new Error("Admin only");
     }
 
-    const tenantId = await getTenantId(supabase, userId);
+    const tenantId = await requireTenantId(supabase, userId);
     const startedAt = new Date().toISOString();
     const parseErrors: { row: number; reason: string; raw?: string }[] = [];
 

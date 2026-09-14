@@ -3,6 +3,7 @@ import { z } from "zod";
 import DOMPurify from "isomorphic-dompurify";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { enforcePublicRateLimit } from "@/lib/rate-limit.functions";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 const JOB_HTML_SANITIZE_CONFIG = {
   ALLOWED_TAGS: ["h1","h2","h3","h4","h5","h6","p","span","strong","em","b","i","u","br","hr","ul","ol","li","blockquote","a","code","pre"],
@@ -66,14 +67,14 @@ export const upsertRecruitmentJob = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const admin = await loadAdmin();
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
+    const tenantId = await requireTenantId(supabase, userId);
     const slug = data.slug || slugify(data.title);
     const payload: any = {
       ...data,
       description_html: sanitizeJobHtml(data.description_html),
       requirements_html: sanitizeJobHtml(data.requirements_html),
       slug,
-      tenant_id: profile.tenant_id,
+      tenant_id: tenantId,
     };
     if (data.status === "open" && !data.id) payload.published_at = new Date().toISOString();
     let row;
@@ -88,7 +89,7 @@ export const upsertRecruitmentJob = createServerFn({ method: "POST" })
       row = r;
       // seed default stages
       const stagePayload = DEFAULT_STAGES.map((s, i) => ({
-        tenant_id: profile.tenant_id, job_id: r.id, name: s.name, kind: s.kind, sort_order: i,
+        tenant_id: tenantId, job_id: r.id, name: s.name, kind: s.kind, sort_order: i,
         is_terminal: (s as any).is_terminal ?? false,
       }));
       await admin.from("recruitment_stages").insert(stagePayload);
@@ -235,7 +236,7 @@ export const upsertStage = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
+    const tenantId = await requireTenantId(supabase, userId);
     if (data.id) {
       const { data: row, error } = await supabase.from("recruitment_stages")
         .update({ name: data.name, kind: data.kind, sort_order: data.sort_order, is_terminal: data.is_terminal })
@@ -244,7 +245,7 @@ export const upsertStage = createServerFn({ method: "POST" })
       return { stage: row };
     }
     const { data: row, error } = await supabase.from("recruitment_stages").insert({
-      tenant_id: profile.tenant_id, job_id: data.job_id, name: data.name, kind: data.kind,
+      tenant_id: tenantId, job_id: data.job_id, name: data.name, kind: data.kind,
       sort_order: data.sort_order, is_terminal: data.is_terminal,
     }).select().single();
     if (error) throw error;
@@ -310,13 +311,13 @@ export const convertCandidateToEmployee = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: cand, error: cErr } = await supabase.from("recruitment_candidates")
       .select("*").eq("id", data.candidate_id).single();
     if (cErr) throw cErr;
     if (cand.hired_employee_id) throw new Error("Candidate already converted");
     const { data: emp, error: eErr } = await supabase.from("employees").insert({
-      tenant_id: profile.tenant_id,
+      tenant_id: tenantId,
       employee_number: data.employee_number,
       first_name: cand.first_name,
       last_name: cand.last_name,

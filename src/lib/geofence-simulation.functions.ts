@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 const PointSchema = z.object({
   lat: z.number(),
@@ -30,9 +31,9 @@ export const saveSimTrace = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => TraceSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
+    const tenantId = await requireTenantId(supabase, userId);
     const payload = {
-      tenant_id: profile.tenant_id,
+      tenant_id: tenantId,
       name: data.name,
       description: data.description ?? null,
       points: data.points,

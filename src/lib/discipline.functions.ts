@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId } from "@/lib/tenant-scope";
 
 async function getTenant(supabase: any, userId: string) {
-  const { data } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
-  return data?.tenant_id as string;
+  const tenantId = await getTenantId(supabase, userId);
+  return tenantId as string;
 }
 
 async function notify(opts: {

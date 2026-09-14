@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function getEmployee(supabase: any, userId: string) {
   const { data } = await supabase
@@ -26,12 +27,8 @@ export const getToilSettings = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
     const emp = await getEmployee(supabase, userId);
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", userId)
-      .single();
-    const tenantId = emp?.tenant_id ?? profile?.tenant_id;
+    const callerTenantId = await getTenantId(supabase, userId);
+    const tenantId = emp?.tenant_id ?? callerTenantId;
     if (!tenantId) return { settings: null };
     const { data } = await supabase
       .from("toil_settings")
@@ -60,12 +57,8 @@ export const updateToilSettings = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     if (!(await isAdmin(supabase, userId))) throw new Error("Forbidden");
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", userId)
-      .single();
-    const payload = { ...data, tenant_id: profile.tenant_id };
+    const tenantId = await requireTenantId(supabase, userId);
+    const payload = { ...data, tenant_id: tenantId };
     const { data: row, error } = await supabase
       .from("toil_settings")
       .upsert(payload, { onConflict: "tenant_id" })

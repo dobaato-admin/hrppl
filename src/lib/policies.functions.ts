@@ -24,7 +24,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { requireTenantId, getMyEmployeeId } from "@/lib/tenant-scope";
+import { getMyEmployeeId, requireTenantId } from "@/lib/tenant-scope";
 
 export const POLICY_CATEGORIES = [
   "conduct",

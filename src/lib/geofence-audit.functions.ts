@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 const ACTIONS = [
   "create", "update", "delete",
@@ -54,10 +55,8 @@ export const logGeofenceEvent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => LogSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: profile } = await supabase
-      .from("profiles").select("tenant_id").eq("id", userId).single();
-    if (!profile?.tenant_id) throw new Error("No tenant for user");
-    const tenantId = profile.tenant_id as string;
+    const callerTenantId = await requireTenantId(supabase, userId);
+    const tenantId = callerTenantId as string;
     const { data: row, error } = await supabase.from("geofence_audit_log").insert({
       tenant_id: tenantId,
       actor_user_id: userId,

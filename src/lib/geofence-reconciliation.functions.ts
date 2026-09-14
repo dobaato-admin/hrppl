@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { distanceMeters } from "@/lib/geofences.functions";
+import { getTenantId } from "@/lib/tenant-scope";
 
 export const listReconciliation = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -53,8 +54,8 @@ export const runReconciliation = createServerFn({ method: "POST" })
     z.object({ lookback_hours: z.number().int().min(1).max(720).default(48) }).parse(d ?? {}))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
-    const tenantId = profile?.tenant_id;
+    const callerTenantId = await getTenantId(supabase, userId);
+    const tenantId = callerTenantId;
     if (!tenantId) throw new Error("No tenant");
     return doReconcile(supabase, tenantId, data.lookback_hours);
   });

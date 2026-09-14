@@ -92,7 +92,8 @@ describe("every documents server fn resolves its tenant through a named guard", 
     declineEnvelope: "same token surface",
     getCertificate: "the signed copy, readable by the parties to it",
     listStarterTemplates: "a static in-code catalogue; reads no tenant row",
-    getEnvelope: "no tenant filter to scope — RLS decides per envelope, via can_read_document_envelope",
+    getEnvelope:
+      "no tenant filter to scope — RLS decides per envelope, via can_read_document_envelope",
   };
 
   const serverFns = Array.from(code.matchAll(/export const (\w+) = createServerFn/g)).map(

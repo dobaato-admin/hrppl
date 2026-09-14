@@ -104,10 +104,7 @@ export const EMPLOYEE_DOCUMENT_ADMIN_ROLES = [
 ] as const;
 
 /** May read `employee_documents`. Still no `finance` — no policy admits it. */
-export const EMPLOYEE_DOCUMENT_READ_ROLES = [
-  ...EMPLOYEE_DOCUMENT_ADMIN_ROLES,
-  "manager",
-] as const;
+export const EMPLOYEE_DOCUMENT_READ_ROLES = [...EMPLOYEE_DOCUMENT_ADMIN_ROLES, "manager"] as const;
 
 /**
  * Roles are read through the **caller's own client** and memoised per request
@@ -149,10 +146,7 @@ export function requireDocumentReadTenant(supabase: any, userId: string): Promis
 }
 
 /** Tenant for a caller who may **verify** employee documents. */
-export function requireEmployeeDocumentAdminTenant(
-  supabase: any,
-  userId: string,
-): Promise<string> {
+export function requireEmployeeDocumentAdminTenant(supabase: any, userId: string): Promise<string> {
   return tenantForRoles(
     supabase,
     userId,
@@ -162,10 +156,7 @@ export function requireEmployeeDocumentAdminTenant(
 }
 
 /** Tenant for a caller who may **read** employee documents. */
-export function requireEmployeeDocumentReadTenant(
-  supabase: any,
-  userId: string,
-): Promise<string> {
+export function requireEmployeeDocumentReadTenant(supabase: any, userId: string): Promise<string> {
   return tenantForRoles(
     supabase,
     userId,

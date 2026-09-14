@@ -31,7 +31,50 @@ defects found underneath X-07 that were larger than X-07, is in `docs/plan-waves
 
 ---
 
-## Priority 1 — Acting-tenant coverage: 14 of 97 modules
+## Priority 1 — Acting-tenant coverage: code half DONE (2026-09-14), RLS half open
+
+**The code half is complete.** 92 direct `profiles.tenant_id` reads across 52 server modules
+now resolve through `requireTenantId()` / `getTenantId()`. **65 of 104 `*.functions.ts` modules
+import `tenant-scope`** (was 14 of 97); the rest legitimately need no tenant.
+`tests/acting-tenant-coverage.test.ts` is the test this section asked for, and it fails with the
+offending file and line.
+
+Four reads remain and are allow-listed **with reasons**, per the Wave 5 rule:
+
+- `tenant-scope.ts` — the helper itself.
+- `profile.functions.ts` — returns the profile row *as data*; `tenant_id` is a field of the thing
+  being fetched, not a scope being resolved.
+- `org-signup.functions.ts` (×2) — needs the **raw** home tenant to answer "do you already belong
+  to an org?". An acting tenant must not answer yes, or a platform admin acting as Acme could
+  never create a second org.
+
+Reads of **another user's** profile are explicitly out of scope and the test says so:
+`account-suspension` and `role-management` need the tenant of the user being acted *on*, and an
+acting-tenant fallback there would be a bug, not a fix.
+
+Three things the conversion exposed that were not in the original write-up:
+
+1. **Eight sites could write `tenant_id: null`.** `getTenantId` returns `string | null`, and
+   TypeScript did not catch the null reaching a Supabase payload because these are spread-built
+   objects on loosely-typed `.insert()` calls. They now use `requireTenantId`, and the test has a
+   second check that fails on any new one.
+2. **Two modules had their own `getTenantId` wrapper** — `csv-export-jobs`'s was `requireTenantId`
+   spelled out by hand. Both deleted.
+3. **`account-status.server.ts` selected `tenant_id` and never used it.** Dropped.
+
+**Still open: the routes.** Thirteen `*.tsx` route files resolve the tenant themselves. That is
+the same defect but it is also §4c's "two-query tenant waterfall", so it is tracked there —
+`useMyTenantId()` fixes both at once and `tests/tenant-loading-state.test.ts` already lists them.
+
+**Still open, and larger: the RLS half** — see the end of this section. Measured 2026-09-14:
+**262 of 700 policies, across 148 tables**, are keyed on `user_tenant_id(auth.uid())`, which is
+NULL for a platform account. A correctly-converted module still reads nothing through those.
+
+The original write-up follows.
+
+### The original entry
+
+
 
 **What.** `TenantSwitcher`, `ActingTenantBanner` and `platform_acting_tenant` all exist and work.
 Only the modules calling `requireTenantId()` / `getTenantId()` honour them; the rest read

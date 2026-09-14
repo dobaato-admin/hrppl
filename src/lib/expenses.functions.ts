@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { resolveApprovalScope, scopeCovers, refusalReason } from "@/lib/approval-scope";
 import { recordApprovalAction } from "@/lib/approval-audit";
-import { getTenantId } from "@/lib/tenant-scope";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -66,8 +66,8 @@ export const upsertExpenseCategory = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     await requireOrgAdmin(supabase, userId);
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
-    const payload = { ...data, tenant_id: profile.tenant_id };
+    const tenantId = await requireTenantId(supabase, userId);
+    const payload = { ...data, tenant_id: tenantId };
     const { data: row, error } = data.id
       ? await supabase.from("expense_categories").update(payload).eq("id", data.id).select().single()
       : await supabase.from("expense_categories").insert(payload).select().single();
@@ -118,8 +118,8 @@ export const upsertApprovalRule = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     await requireOrgAdmin(supabase, userId);
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
-    const payload = { ...data, tenant_id: profile.tenant_id };
+    const tenantId = await requireTenantId(supabase, userId);
+    const payload = { ...data, tenant_id: tenantId };
     const { data: row, error } = data.id
       ? await supabase.from("expense_approval_rules").update(payload).eq("id", data.id).select().single()
       : await supabase.from("expense_approval_rules").insert(payload).select().single();

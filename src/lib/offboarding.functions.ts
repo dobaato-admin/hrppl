@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { requireTenantId, getTenantId, getMyEmployeeId } from "@/lib/tenant-scope";
+import { getMyEmployeeId, getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 export const listOffboarding = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -194,9 +194,8 @@ export const myOffboarding = createServerFn({ method: "GET" })
 // ===== Phase 8: Offboarding checklist templates (per tenant + department + reason) =====
 
 async function offbTenantId(ctx: any): Promise<string> {
-  const { data } = await ctx.supabase.from("profiles").select("tenant_id").eq("id", ctx.userId).maybeSingle();
-  if (!data?.tenant_id) throw new Error("No tenant");
-  return data.tenant_id as string;
+  const tenantId = await requireTenantId(ctx.supabase, ctx.userId);
+  return tenantId as string;
 }
 
 export const listOffboardingTemplates = createServerFn({ method: "GET" })

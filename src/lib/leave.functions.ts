@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { resolveApprovalScope, scopeCovers, refusalReason } from "@/lib/approval-scope";
 import { recordApprovalAction } from "@/lib/approval-audit";
+import { getTenantId } from "@/lib/tenant-scope";
 
 // ---------- Notification helpers ----------
 async function loadLeaveContext(admin: any, requestId: string) {
@@ -267,8 +268,8 @@ export async function assertApproverForRequest(
   const rs = await getRoles(ctxSupabase, userId);
   if (rs.includes("super_admin")) return { isFinalTier: true, roleUsed: "super_admin" };
 
-  const { data: profile } = await ctxSupabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile || profile.tenant_id !== req.tenant_id) throw new Error("Forbidden: tenant mismatch");
+  const callerTenant = await getTenantId(ctxSupabase, userId);
+  if (!callerTenant || callerTenant !== req.tenant_id) throw new Error("Forbidden: tenant mismatch");
 
   const myEmployee = await getEmployeeForUser(ctxSupabase, userId);
   if (myEmployee && myEmployee.id === req.employee_id) {

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -12,8 +13,8 @@ async function assertOrgAdmin(ctxSupabase: any, userId: string, tenantId: string
   const r = (roles ?? []).map((x: any) => x.role);
   if (r.includes("super_admin")) return;
   if (!r.includes("org_admin")) throw new Error("Forbidden: org admin role required");
-  const { data: prof } = await ctxSupabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!prof || prof.tenant_id !== tenantId) throw new Error("Forbidden: tenant mismatch");
+  const callerTenant = await getTenantId(ctxSupabase, userId);
+  if (!callerTenant || callerTenant !== tenantId) throw new Error("Forbidden: tenant mismatch");
 }
 
 async function getOrCreateBalance(admin: any, tenantId: string, employeeId: string, leaveTypeId: string, year: number) {
@@ -106,9 +107,8 @@ export const runMonthlyLeaveAccrual = createServerFn({ method: "POST" })
     let tenantId = data.tenantId;
     if (!r.includes("super_admin")) {
       if (!r.includes("org_admin")) throw new Error("Forbidden: org admin role required");
-      const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-      if (!prof?.tenant_id) throw new Error("Tenant not found");
-      tenantId = prof.tenant_id;
+      const callerTenantId = await requireTenantId(supabase, userId);
+      tenantId = callerTenantId;
     }
     const now = new Date();
     const year = data.year ?? now.getUTCFullYear();
@@ -186,9 +186,8 @@ export const runYearEndCarryOver = createServerFn({ method: "POST" })
     let tenantId = data.tenantId;
     if (!r.includes("super_admin")) {
       if (!r.includes("org_admin")) throw new Error("Forbidden: org admin role required");
-      const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-      if (!prof?.tenant_id) throw new Error("Tenant not found");
-      tenantId = prof.tenant_id;
+      const callerTenantId = await requireTenantId(supabase, userId);
+      tenantId = callerTenantId;
     }
     const fromYear = data.fromYear ?? (new Date().getUTCFullYear() - 1);
     const summary = await runCarryOverImpl({ tenantId, fromYear, actorId: userId });
@@ -265,9 +264,9 @@ export const projectLeaveBalances = createServerFn({ method: "POST" })
       // Authorisation: self, manager/org_admin of tenant, or super_admin
       const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
       const r = (roles ?? []).map((x: any) => x.role);
-      const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
+      const callerTenantId = await getTenantId(supabase, userId);
       const isPriv = r.includes("super_admin") ||
-        ((r.includes("org_admin") || r.includes("manager")) && prof?.tenant_id === tenantId);
+        ((r.includes("org_admin") || r.includes("manager")) && callerTenantId === tenantId);
       const { data: self } = await supabase.from("employees").select("id").eq("user_id", userId).eq("id", empId).maybeSingle();
       if (!isPriv && !self) throw new Error("Forbidden");
     }
