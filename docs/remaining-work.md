@@ -266,18 +266,39 @@ being read. A write behind a button that refuses gives an error toast: visible a
 read that refuses gives an empty table: neither. Filtering to on-mount reads takes it from 143 to
 **24**, and the ones hand-checked are all real.
 
-**24 live gaps are recorded in `KNOWN_GAPS`, and the list may only shrink.** Each is X-07's shape
-and each needs the same decision its twin needed — **widen the guard** if the role should
-administer that domain, **narrow the key** if it should not. Getting it backwards either leaks or
-removes a working page, so none was fixed in passing. Worst offenders by breadth:
+**19 of the 24 are now closed (2026-09-14/15); five remain and are one question.**
 
-| Page | Loads | Roles the page admits and the fn refuses |
+| Group | What | Outcome |
 | --- | --- | --- |
-| `admin.employees.$employeeId` | `audit.listEventAccessLog`, `audit.accessLogSummary` | branch_admin, finance, hr, manager |
-| `org.reports` | `reports.getOrgReports` | branch_admin, finance, hr |
-| `org.performance` | `performance.previewReviewReminderSchedule` | branch_admin, hr, manager |
-| `admin.review-cycles` | three `kpi-cycles` reads | hr |
-| `admin.departments` | `departments.listDepartments` | hr |
+| A | white-label, payroll setup, org reports — guard behind its key | Widened, with `20260914100000` for the two tables whose policies also refused |
+| B | seven pages admit `hr`, every one refused it | Widened, with `20260914110000` for the five tables that had no hr policy |
+| C | performance audit trail, departments picker | Widened — RLS already served those roles, no migration needed |
+| D | access-audit panel, reminder-schedule preview | **Panel gated, permission unmoved** — see below |
+
+**Group D is the interesting one**, because both the options the doc named were
+wrong. `/admin/employees/$id` offered an "Access audit" tab to all six roles
+`org.employees` admits, while the fn answers to org_admin and super_admin.
+Widening would let a manager see which colleagues had viewed an employee's
+confidential records — weakening the deterrent the log exists to be. Narrowing
+`org.employees` would remove five roles from employee records, which they have
+legitimate reasons to open. So the **panel** carries the narrower answer and the
+**page** keeps the broader one. Same shape on `/org/performance`'s reminder
+preview.
+
+**The five that remain are a documented decision the keys never caught up with.**
+`timeline.functions.ts` says beside its guard: *"finance and branch_admin are
+deliberately excluded — finance holds read-only access to employees and
+branch_admin is scoped to a branch, neither of which matches what these
+endpoints do."* `teams.functions.ts` carries the same set and says it matches
+timeline's.
+
+So the honest repair is **narrowing `org.teams`, `org.idRequests`, `org.assets`
+and `org.employees`** to drop branch_admin and finance — not widening four
+guards and reversing a reasoned decision in passing. Widening is doubly wrong
+here: these endpoints are tenant-wide by construction, so admitting a branch
+admin admits them to *every* branch, which is exactly what that comment rules
+out. Left open deliberately — removing a role's access to four destinations is a
+product call.
 
 Hand-verified: `org.departments` admits `hr`, and `listDepartments` throws
 *"Forbidden: organisation admin only"*. HR opens the page and reads an empty list of departments.
