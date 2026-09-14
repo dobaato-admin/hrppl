@@ -37,6 +37,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Building2, Plus, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { TIMEZONES, TIMEZONE_GROUPS } from "@/lib/timezones";
+import { useMyTenant } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/org/branches")({
   head: () => ({ meta: [{ title: "Branches — Organization" }] }),
@@ -121,9 +122,13 @@ function BranchesPage() {
   // rather than by coincidence.
   const canManage = can("org.branches", roles);
 
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  // Was a profiles.tenant_id read inside refresh(), re-run on every mount and
+  // NULL for a platform account. The hook is cached for the session and falls
+  // back to the acting tenant; `isLoading` is still the thing that separates
+  // "we have not found out yet" from "there is no organisation" — see save().
+  const { tenantId, isLoading: tenantLoading } = useMyTenant();
   /** False until the lookup has answered — see the guard in save(). */
-  const [tenantLoaded, setTenantLoaded] = useState(false);
+  const tenantLoaded = !tenantLoading;
   const [branches, setBranches] = useState<Branch[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
   const [holidayCats, setHolidayCats] = useState<HolidayCategory[]>([]);
@@ -138,14 +143,7 @@ function BranchesPage() {
 
   async function refresh() {
     if (!user) return;
-    const { data: prof } = await supabase
-      .from("profiles")
-      .select("tenant_id")
-      .eq("id", user.id)
-      .maybeSingle();
-    const tid = prof?.tenant_id ?? null;
-    setTenantId(tid);
-    setTenantLoaded(true);
+    const tid = tenantId ?? null;
     const [b, c, h] = await Promise.all([
       tid
         ? supabase
@@ -164,8 +162,11 @@ function BranchesPage() {
   }
 
   useEffect(() => {
-    if (rolesLoaded && user) refresh();
-  }, [rolesLoaded, user]);
+    // Waits for the tenant rather than racing it: refresh() used to resolve the
+    // tenant itself, so it could not run before the answer existed.
+    if (rolesLoaded && user && !tenantLoading) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rolesLoaded, user, tenantId, tenantLoading]);
 
   function openCreate() {
     setEditing(null);
@@ -200,7 +201,8 @@ function BranchesPage() {
     // is no organisation. Saying "No organization found" for the first is a
     // false accusation the user can only resolve by refreshing — the same
     // defect /org and /org/employees had. `tenantLoaded` separates them.
-    if (!tenantLoaded) return toast.error("Still loading your organization — try again in a moment");
+    if (!tenantLoaded)
+      return toast.error("Still loading your organization — try again in a moment");
     if (!tenantId) return toast.error("No organization found");
     if (!form.name || !form.code || !form.country_code || !form.currency_code) {
       return toast.error("Name, code, country and currency are required");

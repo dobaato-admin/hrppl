@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { approveTimesheet, rejectTimesheet } from "@/lib/attendance.functions";
+import { useMyTenant } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/org/timesheets")({
   head: () => ({ meta: [{ title: "Timesheets — hrppl" }] }),
@@ -65,8 +66,10 @@ interface PenaltyRate {
 function OrgTimesheets() {
   const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
-  const [tenantId, setTenantId] = useState<string | null>(null);
-  const [countryCode, setCountryCode] = useState<string | null>(null);
+  // Was profiles -> tenants in series inside an effect, on every mount, and
+  // NULL for a platform account. Both values now come from the shared cache.
+  const { tenant, tenantId } = useMyTenant();
+  const countryCode = (tenant?.country_code as string | null | undefined) ?? null;
   const [rows, setRows] = useState<Timesheet[]>([]);
   const [emps, setEmps] = useState<Record<string, Emp>>({});
   const [rates, setRates] = useState<PenaltyRate[]>([]);
@@ -88,26 +91,6 @@ function OrgTimesheets() {
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (prof?.tenant_id) {
-        setTenantId(prof.tenant_id);
-        const { data: t } = await supabase
-          .from("tenants")
-          .select("country_code")
-          .eq("id", prof.tenant_id)
-          .maybeSingle();
-        if (t?.country_code) setCountryCode(t.country_code);
-      }
-    })();
-  }, [user]);
-
   async function load() {
     if (!tenantId) return;
     const [tRes, eRes] = await Promise.all([

@@ -28,6 +28,7 @@ import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 
 import { AppShell } from "@/components/AppShell";
+import { useMyTenantCountry } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/admin/payroll-settings")({
   head: () => ({ meta: [{ title: "Payroll Settings — hrppl" }] }),
@@ -94,6 +95,7 @@ function PayrollSettingsPage() {
   const isSuper = roles.includes("super_admin");
   const isRegional = roles.includes("regional_admin");
   const isOrg = roles.includes("org_admin");
+  const { country: myCountry } = useMyTenantCountry();
 
   useEffect(() => {
     const allowed =
@@ -117,22 +119,13 @@ function PayrollSettingsPage() {
       }
 
       if (isOrg) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (!prof?.tenant_id) return;
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("country_code")
-          .eq("id", prof.tenant_id)
-          .maybeSingle();
-        if (!tenant?.country_code) return;
+        // Was profiles -> tenants in series, here and in four other admin
+        // pages. useMyTenantCountry is that pair, cached and acting-tenant aware.
+        if (!myCountry) return;
         const { data } = await supabase
           .from("countries")
           .select("*")
-          .eq("code", tenant.country_code)
+          .eq("code", myCountry)
           .order("name");
         setCountries((data ?? []) as Country[]);
         if (data && data.length > 0 && !selected) setSelected(data[0].code as string);

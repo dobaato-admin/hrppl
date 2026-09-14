@@ -46,6 +46,7 @@ import {
 import { downloadChecklistPdf } from "@/lib/checklist-pdf";
 import { AdminGate } from "@/components/AdminGate";
 import { can } from "@/lib/rbac";
+import { useMyTenant } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/admin/onboarding-packs")({
   head: () => ({ meta: [{ title: "Onboarding & offboarding packs — hrppl" }] }),
@@ -108,7 +109,17 @@ function OnboardingPacksPage() {
   const [filterBranch, setFilterBranch] = useState<string>(ANY);
   const [filterDept, setFilterDept] = useState<string>(ANY);
   const [filterEmp, setFilterEmp] = useState<string>(ANY);
-  const [tenantName, setTenantName] = useState("hrppl");
+  // Was `supabase.from("profiles").select("tenant_id").maybeSingle()` with NO
+  // id filter — whichever profile row RLS happened to return. It worked by
+  // accident for an org_admin, who can read exactly one profile: their own.
+  //
+  // `org.onboardingPacks` admits super_admin too, and a super_admin reads all
+  // 20 (measured). PostgREST answers .maybeSingle() over 20 rows with an error,
+  // so `tenantName` never left its "hrppl" default — the generated pack was
+  // branded hrppl for precisely the platform account, and correct for everyone
+  // else. A read that depends on how few rows you can see is not a read.
+  const { tenant } = useMyTenant();
+  const tenantName = (tenant?.name as string | undefined) || "hrppl";
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -132,16 +143,8 @@ function OnboardingPacksPage() {
 
   useEffect(() => {
     (async () => {
-      const [c, t] = await Promise.all([
-        supabase.from("countries").select("code,name").order("name"),
-        supabase.from("profiles").select("tenant_id").maybeSingle(),
-      ]);
+      const c = await supabase.from("countries").select("code,name").order("name");
       setCountries((c.data ?? []) as any);
-      const tid = (t.data as any)?.tenant_id;
-      if (tid) {
-        const { data } = await supabase.from("tenants").select("name").eq("id", tid).maybeSingle();
-        if (data?.name) setTenantName(data.name);
-      }
     })();
   }, []);
 

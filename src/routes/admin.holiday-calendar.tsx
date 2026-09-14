@@ -24,6 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AdminGate } from "@/components/AdminGate";
 
 import { AppShell } from "@/components/AppShell";
+import { useMyTenantCountry } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/admin/holiday-calendar")({
   head: () => ({ meta: [{ title: "Holiday calendar — hrppl" }] }),
@@ -78,6 +79,7 @@ function HolidayCalendar() {
   const isSuper = roles.includes("super_admin");
   const isRegional = roles.includes("regional_admin");
   const isOrg = roles.includes("org_admin");
+  const { country: myCountry } = useMyTenantCountry();
   // W5 P1 · Two different questions, previously conflated into one.
   //
   // Everyone in the org has a legitimate reason to LOOK at the public holiday
@@ -111,22 +113,14 @@ function HolidayCalendar() {
         const { data } = await supabase.from("countries").select("code,name").order("name");
         setCountries((data ?? []) as Country[]);
       } else if (isOrg) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (!prof?.tenant_id) return;
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("country_code")
-          .eq("id", prof.tenant_id)
-          .maybeSingle();
-        if (!tenant?.country_code) return;
+        // Was profiles -> tenants in series, here and in four other admin
+        // pages. useMyTenantCountry is that pair, cached on the shared tenant
+        // id and acting-tenant aware.
+        if (!myCountry) return;
         const { data } = await supabase
           .from("countries")
           .select("code,name")
-          .eq("code", tenant.country_code)
+          .eq("code", myCountry)
           .order("name");
         setCountries((data ?? []) as Country[]);
       } else {
@@ -144,7 +138,7 @@ function HolidayCalendar() {
         setCountries((data ?? []) as Country[]);
       }
     })();
-  }, [canManage, isOrg, isSuper, user]);
+  }, [canManage, isOrg, isSuper, myCountry, user]);
 
   useEffect(() => {
     if (countries.length && !country) setCountry(countries[0].code);

@@ -62,9 +62,21 @@ Three things the conversion exposed that were not in the original write-up:
    spelled out by hand. Both deleted.
 3. **`account-status.server.ts` selected `tenant_id` and never used it.** Dropped.
 
-**Still open: the routes.** Thirteen `*.tsx` route files resolve the tenant themselves. That is
-the same defect but it is also §4c's "two-query tenant waterfall", so it is tracked there —
-`useMyTenantId()` fixes both at once and `tests/tenant-loading-state.test.ts` already lists them.
+**The routes are done too** (2026-09-14). All thirteen `*.tsx` files now use `useMyTenantId()` /
+`useMyTenant()` / `useMyTenantCountry()`, so `HANDROLLED_TENANT_LOOKUP` in
+`tests/tenant-loading-state.test.ts` is **empty**. This closed three separate items at once: the
+route half of Priority 1, §4c's two-query waterfall, and §4d's latent `null`-as-an-answer.
+
+Five of the thirteen were the *same* two-query country lookup (`profiles` → `tenants.country_code`)
+copied into five admin pages; that is `useMyTenantCountry()`, cached on the shared tenant id.
+
+One real defect surfaced on the way. `admin.onboarding-packs` read
+`.select("tenant_id").maybeSingle()` on `profiles` with **no id filter at all** — whichever row RLS
+happened to return. It worked by accident for an `org_admin`, who can read exactly one profile:
+their own. But `org.onboardingPacks` admits `super_admin`, who reads all 20 (measured), and
+PostgREST answers `.maybeSingle()` over 20 rows with an error — so `tenantName` never left its
+`"hrppl"` default and the generated pack was branded **hrppl for precisely the platform account**,
+and correct for everybody else. A read that depends on how few rows you can see is not a read.
 
 **The RLS half is also DONE** (2026-09-14), in one function rather than 262 policy rewrites.
 `user_tenant_id(uid)` now returns `COALESCE(profiles.tenant_id, <the tenant selected in the
@@ -252,11 +264,16 @@ is what would have caught both this and X-07 before a human did.
 
 Measured 2026-09-03, not guessed. Neither item bites at demo scale; both are real at tenant scale.
 
-**4a. 36 loop-with-query sites.** `payroll.functions.ts` has 8 — the hottest path in the product.
-The pattern is a per-row lookup inside a `for` loop where one `.in()` would do. The fix is
-mechanical and was already applied to the sharpest instance
-(`generateSuperContributionsForRun`: 500 sequential round trips on a 500-employee run, now one
-query). Work through `payroll.functions.ts` first.
+**4a. ~~36 loop-with-query sites, 8 in `payroll.functions.ts`~~ — the payroll half is already
+done.** Re-measured 2026-09-14: `payroll.functions.ts` contains **zero** queries inside a loop.
+`computePayrollRun` batch-fetches holidays, attendance, timesheets, penalties, leave, rates and
+components up front and then loops over arrays in memory, which is the shape this item was asking
+for. The detector is not broken — it finds **16 such loops across 13 other modules**, the largest
+being `payroll-emails` (2), `leave-accruals` (2) and `billing-admin` (2).
+
+So this item's stated "done when" — *no query inside a loop in `payroll.functions.ts`* — is
+**satisfied**. The remaining 16 are outside the hot path; none has been measured as a problem, and
+the honest next step is to measure before converting rather than to convert on principle.
 
 **4b. ~~194 `useQuery` sites, 19 with `staleTime`~~ — this was wrong.** `src/router.tsx` sets a
 **60-second `staleTime` and `refetchOnWindowFocus: false` as the client default**, so the queries
@@ -270,10 +287,13 @@ without an explicit `staleTime` were never refetching on every mount. Corrected 
   told the same story: 873,534 sequential scans of the 20-row `profiles` table, 8.36M rows read.
   Hoisting into scalar subqueries took that query to ~21ms and `tests/rbac.test.ts` from 28.46s to
   14.15s. See `20260908090000_rls_hoist_auth_uid.sql`.
-- **The two-query tenant waterfall — 2 of 16 pages fixed.** Every page reading `profiles.tenant_id`
-  then `tenants` pays two round trips *in series before its own query*, uncached, on every mount.
-  `useMyTenantId()` / `useMyTenant()` already hold that value with `staleTime: Infinity`.
-  `tests/tenant-loading-state.test.ts` lists the 14 remaining, and the list may only shrink.
+- **The two-query tenant waterfall — DONE (2026-09-14), 16 of 16 pages.** Every page reading
+  `profiles.tenant_id` then `tenants` paid two round trips *in series before its own query*,
+  uncached, on every mount. All of them now use `useMyTenantId()` / `useMyTenant()` /
+  `useMyTenantCountry()`, which hold those values with `staleTime: Infinity`.
+  `HANDROLLED_TENANT_LOOKUP` in `tests/tenant-loading-state.test.ts` is empty, and that test's
+  scanner now strips comments before matching — a comment explaining what a page *used* to do has
+  to quote the code it replaced, and the checker failed on its own documentation otherwise.
 - **39 `useEffect` blocks issue 77 direct Supabase queries**, 15 of them sequential waterfalls of
   2–6 queries (`admin.holiday-calendar`, `admin.holidays`, `admin.overtime-rates`,
   `admin.payroll-settings` are 6 each). These bypass React Query entirely: no caching, no
@@ -292,8 +312,14 @@ isn't linked to an organization yet"* for 400ms on every visit. Fixed on `/org`,
 `/org/danger` and `/org/branches`; pinned by `tests/tenant-loading-state.test.ts`. The same shape
 is latent in every one of the 39 effect-based loaders above.
 
-**Done when.** No query inside a loop in `payroll.functions.ts`, and a documented default
-`staleTime` on the query client with per-query overrides where they matter.
+**Done when.** ~~No query inside a loop in `payroll.functions.ts`~~ — satisfied, see 4a — and a
+documented default `staleTime` on the query client with per-query overrides where they matter,
+which `src/router.tsx` has had since before 4b was corrected.
+
+**What is genuinely left in Priority 2:** the 39 `useEffect` blocks issuing 77 direct Supabase
+queries. Thirteen of the worst were the tenant waterfall and are now gone; the rest bypass React
+Query entirely — no caching, no `isLoading`, refetched on every mount — and carry §4d's
+`null`-as-an-answer shape with them. That is the largest remaining client-side win.
 
 ---
 

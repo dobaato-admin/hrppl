@@ -28,6 +28,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { can } from "@/lib/rbac";
 
 import { AppShell } from "@/components/AppShell";
+import { useMyTenantCountry } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/admin/overtime-rates")({
   head: () => ({ meta: [{ title: "Overtime & penalty rates — hrppl" }] }),
@@ -61,6 +62,7 @@ function OvertimeRatesAdmin() {
   const isSuper = roles.includes("super_admin");
   const isRegional = roles.includes("regional_admin");
   const isOrg = roles.includes("org_admin");
+  const { country: myCountry } = useMyTenantCountry();
   // W5 · Derived from the same feature key the route gate quotes. The
   // hand-rolled list omitted `finance` — the role D-4 added — so widening the
   // route gate alone left finance admitted by AdminGate and bounced here.
@@ -95,22 +97,14 @@ function OvertimeRatesAdmin() {
         const { data } = await supabase.from("countries").select("code,name").order("name");
         setCountries((data ?? []) as Country[]);
       } else if (isOrg) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (!prof?.tenant_id) return;
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("country_code")
-          .eq("id", prof.tenant_id)
-          .maybeSingle();
-        if (!tenant?.country_code) return;
+        // Was profiles -> tenants in series, here and in four other admin
+        // pages. useMyTenantCountry is that pair, cached on the shared tenant
+        // id and acting-tenant aware.
+        if (!myCountry) return;
         const { data } = await supabase
           .from("countries")
           .select("code,name")
-          .eq("code", tenant.country_code)
+          .eq("code", myCountry)
           .order("name");
         setCountries((data ?? []) as Country[]);
       } else {
@@ -128,7 +122,7 @@ function OvertimeRatesAdmin() {
         setCountries((data ?? []) as Country[]);
       }
     })();
-  }, [canManage, isOrg, isSuper, user]);
+  }, [canManage, isOrg, isSuper, myCountry, user]);
 
   useEffect(() => {
     if (countries.length && !country) setCountry(countries[0].code);

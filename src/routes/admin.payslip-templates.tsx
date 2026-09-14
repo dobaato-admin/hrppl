@@ -30,6 +30,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { AdminGate } from "@/components/AdminGate";
 
 import { AppShell } from "@/components/AppShell";
+import { useMyTenantCountry } from "@/hooks/use-tenant";
 
 const SANITIZE_CONFIG = {
   ALLOWED_TAGS: [
@@ -131,6 +132,7 @@ const DATE_FORMATS = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MMM-YYYY"];
 
 function PayslipTemplatesPage() {
   const { user, roles, loading, rolesLoaded } = useAuth();
+  const { country: myCountry } = useMyTenantCountry();
   const navigate = useNavigate();
   const canEdit =
     roles.includes("super_admin") ||
@@ -173,18 +175,9 @@ function PayslipTemplatesPage() {
         !roles.includes("super_admin") &&
         !roles.includes("regional_admin")
       ) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (!prof?.tenant_id) return;
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("country_code")
-          .eq("id", prof.tenant_id)
-          .maybeSingle();
-        const allowed = tenant?.country_code ? [tenant.country_code] : [];
+        // Was profiles -> tenants in series. useMyTenantCountry is that pair,
+        // cached on the shared tenant id and acting-tenant aware.
+        const allowed = myCountry ? [myCountry] : [];
         setScopedCountries(allowed);
         if (allowed.length && !country) setCountry(allowed[0]);
       } else if (roles.includes("regional_admin") && !roles.includes("super_admin")) {
@@ -196,7 +189,7 @@ function PayslipTemplatesPage() {
         setCountry(c.data[0].code);
       }
     })();
-  }, [canEdit, user, roles]);
+  }, [canEdit, user, roles, myCountry]);
 
   if (loading || (user && !rolesLoaded)) {
     return (

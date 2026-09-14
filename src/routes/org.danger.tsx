@@ -29,6 +29,7 @@ import {
   transferOwnership,
 } from "@/lib/danger-zone.functions";
 import { AdminGate } from "@/components/AdminGate";
+import { useMyTenant } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/org/danger")({
   head: () => ({ meta: [{ title: "Danger zone — hrppl" }] }),
@@ -43,21 +44,11 @@ function DangerZonePage() {
   const { roles, user } = useAuth();
   const allowed = can("org.danger", roles);
 
-  const profileQ = useQuery({
-    queryKey: ["danger-profile", user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("tenant_id, tenants:tenant_id(id, name)")
-        .eq("id", user!.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const tenant = (profileQ.data as any)?.tenants as { id: string; name: string } | null;
+  // This was already a React Query, so it never had the "null renders as an
+  // answer" problem — but it read profiles.tenant_id directly, which is NULL
+  // for a platform account, so a super_admin acting as a tenant was told they
+  // had no organisation on the one page where that matters most.
+  const { tenant, isLoading: tenantLoading } = useMyTenant();
   const tenantId = tenant?.id;
 
   return (
@@ -73,11 +64,11 @@ function DangerZonePage() {
           </Alert>
         )}
 
-        {/* `profileQ.isLoading` is the difference between "you are not scoped to
+        {/* `tenantLoading` is the difference between "you are not scoped to
             an organisation" and "we have not found out yet". Without it this
             alert accused every org admin of the former for the duration of the
             latter. */}
-        {allowed && !tenantId && !profileQ.isLoading && (
+        {allowed && !tenantId && !tenantLoading && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>No organization</AlertTitle>

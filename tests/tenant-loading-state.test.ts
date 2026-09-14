@@ -56,27 +56,29 @@ const rel = (p: string) => p.slice(ROOT.length + 1);
  * slow" means. This list is the remaining work, in the order someone should
  * pick it up; it must only ever shrink.
  */
-const HANDROLLED_TENANT_LOOKUP = new Set([
-  "src/routes/admin.holiday-calendar.tsx",
-  "src/routes/admin.holidays.tsx",
-  "src/routes/admin.leave-types.tsx",
-  "src/routes/admin.onboarding-packs.tsx",
-  "src/routes/admin.overtime-rates.tsx",
-  "src/routes/admin.payroll-settings.tsx",
-  "src/routes/admin.payslip-templates.tsx",
-  "src/routes/org.branches.tsx",
-  "src/routes/org.danger.tsx",
-  "src/routes/org.leave.tsx",
-  "src/routes/org.onboarding.index.tsx",
-  "src/routes/org.performance.tsx",
-  "src/routes/org.timesheets.tsx",
+const HANDROLLED_TENANT_LOOKUP = new Set<string>([
+  // Empty as of 2026-09-14. All thirteen now use useMyTenantId() / useMyTenant()
+  // / useMyTenantCountry(), which also made them honour the tenant switcher —
+  // the same defect as Priority 1, in the route layer.
 ]);
 
 describe("the tenant comes from the shared cached hook", () => {
+  /**
+   * Comments are stripped before scanning, for the same reason the second
+   * describe below does it: a comment explaining what a page USED to do has to
+   * quote the code it replaced, and a checker that cannot tell prose from code
+   * fails on its own documentation. That happened here, on the very commit that
+   * emptied this list.
+   */
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
   const offenders = routeFiles().filter((p) => {
     if (p.includes(`${"api"}/public`)) return false;
-    const src = readFileSync(p, "utf8");
-    return src.includes('from("profiles")') && src.includes("tenant_id");
+    const src = strip(readFileSync(p, "utf8"));
+    // Only a tenant lookup counts. Reading `profiles` for something else —
+    // payslip-templates resolves audit actors' emails — is not this defect.
+    const m = /\.from\("profiles"\)[\s\S]{0,200}?\.select\("([^"]*)"/.exec(src);
+    return !!m && m[1].includes("tenant_id");
   });
 
   it("no NEW page hand-rolls the profiles → tenant lookup", () => {
