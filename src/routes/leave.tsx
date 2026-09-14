@@ -42,6 +42,13 @@ function MyLeave() {
   const [projection, setProjection] = useState<any[] | null>(null);
   const [projecting, setProjecting] = useState(false);
   const [holidayDates, setHolidayDates] = useState<Set<string>>(new Set());
+  /**
+   * False until loadAll has answered. `types` starts as `[]`, so without this
+   * the page rendered "No leave types configured yet." as the answer while the
+   * answer was still in flight — telling an employee their organisation has no
+   * leave set up, on the page they opened to book leave.
+   */
+  const [loaded, setLoaded] = useState(false);
 
   const submit = useServerFn(submitLeaveRequest);
   const cancel = useServerFn(cancelLeaveRequest);
@@ -52,7 +59,12 @@ function MyLeave() {
   async function loadAll() {
     if (!user) return;
     const { data: e } = await supabase.from("employees").select("id,tenant_id").eq("user_id", user.id).maybeSingle();
-    if (!e) return;
+    if (!e) {
+      // No employee record — a platform account, usually. That is a different
+      // fact from "this org has no leave types", and the page says which.
+      setLoaded(true);
+      return;
+    }
     setEmp(e as any);
     const [tRes, bRes, rRes, tenantRes] = await Promise.all([
       supabase.from("leave_types").select("*").eq("tenant_id", e.tenant_id).eq("is_active", true).order("name"),
@@ -63,6 +75,7 @@ function MyLeave() {
     setTypes((tRes.data ?? []) as LeaveType[]);
     setBalances((bRes.data ?? []) as Balance[]);
     setRequests((rRes.data ?? []) as Request[]);
+    setLoaded(true);
 
     // Fetched once per session (not re-fetched as the form's dates change) so
     // the balance preview below can recompute instantly — must match what
@@ -200,7 +213,15 @@ function MyLeave() {
                   </div>
                 );
               })}
-              {types.length === 0 && <div className="text-sm text-muted-foreground">No leave types configured yet.</div>}
+              {types.length === 0 && (
+                <div className="text-sm text-muted-foreground">
+                  {!loaded
+                    ? "Loading your leave balances…"
+                    : !emp
+                      ? "Your account has no employee record, so there is no leave to show."
+                      : "No leave types configured yet."}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -87,6 +87,12 @@ function AttendancePage() {
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
   const [entries, setEntries] = useState<Entry[]>([]);
   const [timesheets, setTimesheets] = useState<Timesheet[]>([]);
+  /**
+   * False until loadWeek has answered. Attendance is the input to pay, so
+   * "No timesheets yet." while the week is still loading is the one empty state
+   * on this page an employee would reasonably act on.
+   */
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const fnClockIn = useServerFn(clockIn);
@@ -118,6 +124,7 @@ function AttendancePage() {
     ]);
     setEntries((eRes.data ?? []) as Entry[]);
     setTimesheets((tRes.data ?? []) as Timesheet[]);
+    setLoaded(true);
   }
   useEffect(() => { loadWeek(); }, [empId, weekStart]);
 
@@ -346,7 +353,13 @@ function AttendancePage() {
                     </TableRow>
                   );
                 })}
-                {timesheets.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground">No timesheets yet.</TableCell></TableRow>}
+                {timesheets.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground">
+                      {loaded ? "No timesheets yet." : "Loading your timesheets…"}
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </CardContent>

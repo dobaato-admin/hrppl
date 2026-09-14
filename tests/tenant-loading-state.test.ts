@@ -149,3 +149,52 @@ describe("a page never claims 'no organisation' before it knows", () => {
     ).toBe(true);
   });
 });
+
+/**
+ * The same rule, applied to the employee-facing pages where an empty list is
+ * itself a claim about the person's own record.
+ *
+ * "No organisation" was only the loudest instance. Each sentence below was
+ * being rendered off a `useState([])` that an effect had not filled yet, so it
+ * stated something false for as long as the query took — and every one of them
+ * is a statement an employee would reasonably act on:
+ *
+ *   /leave        "No leave types configured yet."  → your employer has set up no leave
+ *   /attendance   "No timesheets yet."              → attendance is the input to pay
+ *   /performance  "No goals yet."                   → you have no objectives
+ *   /team         "No direct reports yet."          → you manage nobody
+ *   /my-payslips  "No approved payslips yet."       → you have never been paid
+ *
+ * They are listed explicitly rather than detected by a general rule, because
+ * "No …" appears all over the codebase as a perfectly honest label — "No limit",
+ * "No scopes", "No reset token found in that link" — and a checker that cannot
+ * tell a claim from a label produces noise, which is how a check stops being
+ * read at all.
+ */
+describe("an empty list is not rendered as an answer before it is one", () => {
+  const PAGE_CLAIMS: Array<[string, RegExp]> = [
+    ["src/routes/leave.tsx", /No leave types configured yet/],
+    ["src/routes/attendance.tsx", /No timesheets yet/],
+    ["src/routes/performance.tsx", /No goals yet/],
+    ["src/routes/team.tsx", /No direct reports yet/],
+    ["src/routes/my-payslips.tsx", /No approved payslips yet/],
+  ];
+
+  const codeOf2 = (p: string) =>
+    readFileSync(p, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+
+  it.each(PAGE_CLAIMS)("%s guards its empty state", (file, claim) => {
+    const src = codeOf2(join(ROOT, file));
+    const idx = src.search(claim);
+    expect(idx, `${file} no longer contains the sentence this test is about`).toBeGreaterThan(-1);
+    const window = src.slice(Math.max(0, idx - 600), idx + 200);
+    expect(
+      /isLoading|isPending|[Ll]oaded|isFetching/.test(window),
+      `${file} states an empty result with no nearby loading guard. The list ` +
+        "starts as [], so this sentence is rendered as the answer while the " +
+        "answer is still in flight.",
+    ).toBe(true);
+  });
+});
