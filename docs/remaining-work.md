@@ -39,6 +39,12 @@ import `tenant-scope`** (was 14 of 97); the rest legitimately need no tenant.
 `tests/acting-tenant-coverage.test.ts` is the test this section asked for, and it fails with the
 offending file and line.
 
+A hole in this work, found and closed the same day: **`billing.functions.ts` is written with
+single quotes**, so a `.from("profiles")` scanner reported it clean while it held **eight** of
+exactly the reads this test exists to find. The scanner now accepts both quote styles — the Wave 5
+lesson (*a check comparing two things reports nothing when one of them is absent*) turning up
+inside the check itself.
+
 Four reads remain and are allow-listed **with reasons**, per the Wave 5 rule:
 
 - `tenant-scope.ts` — the helper itself.
@@ -244,19 +250,45 @@ same domain, same admins", which is true of the two keys and false of the module
 **Done when.** As `mia.acme` (manager) and `hana.acme` (hr), `/org/documents` either lists
 envelopes or is not offered. No third outcome — and in particular, not an empty table.
 
-**Two more open observations from the same sweep — STILL OPEN, neither chased:**
-
-- `/settings/billing` reports console errors for **every one of the eight roles**, usually two.
-  Something on that page fails for everybody, including super_admin, which rules out a permission
-  gate. Cheapest of the three to diagnose and the only one that affects all users.
-- `/me/signatures` reports 3 console errors for `hr` and `branch_admin` and none for `employee`,
-  `manager` or `super_admin` — verified clean by hand as a manager. Two roles at the same count is
-  a pattern rather than noise, and it is *not* the guard above: the page's only server fn
-  (`myPendingEnvelopes`) does not use `getOrgAdminTenant`.
-
 **Worth doing at the same time:** a test asserting that every server fn reachable from a page is
 callable by every role that page's feature key admits. That is the axis with no coverage, and it
 is what would have caught both this and X-07 before a human did.
+
+*(Partly done 2026-09-14: `tests/documents-access.test.ts` does exactly this for the documents
+domain — every server fn in the module, guard by guard, against the feature key. Generalising it
+across all 102 modules is still open, and is the single most valuable test left to write.)*
+
+**Two more open observations from the same sweep — CHASED 2026-09-14, and both look like
+artefacts of the sweep itself.**
+
+Neither reproduces. Probed with Playwright against the live dev server, signed in as real seeded
+accounts, both with a clean navigation and with the sweep's own back-to-back `page.goto()`
+pattern: **zero console errors** on `/settings/billing` (org_admin, hr) and on `/me/signatures`
+(hr, branch_admin, manager, employee), and both pages render correctly.
+
+**The likely cause, now fixed.** `AuthRouteGate`'s status check runs on *every* route and is
+cancelled by any navigation — `pathname` is one of its dependencies. The browser reports a
+cancelled request as `TypeError: Failed to fetch`, indistinguishable by type from a server that is
+genuinely down, and the gate logged it at `console.error`. Because the sweep navigates with a full
+page load per route, one page's cancellation was recorded against the page being *navigated to*.
+That explains both shapes: every role hitting it on one page, two roles on another. The gate now
+stays silent for a cancelled or aborted check and still logs real failures.
+
+I saw exactly one such error while probing — `[AuthRouteGate] org status check failed TypeError:
+Failed to fetch` on `/settings/billing` as `hr` — and it did not recur. That is the fingerprint.
+
+**Not proof.** The sweep report is from 2026-09-07 and the code has moved a lot since. If these
+reappear in the next sweep they are real, and the gate is no longer the explanation.
+
+**Two genuine defects were found underneath them anyway**, both of the recurring shape:
+
+- `/settings/billing` never handled `isError`. A failed read fell through to the normal render and
+  drew a plan card with every field blank and an empty payment history — a failure that looks like
+  an answer, on the page where somebody acts on the answer.
+- `/me/signatures` called `list().then(...)` with **no `.catch` and no loading state**, so a failed
+  read raised an unhandled promise rejection *and* left the page saying "All caught up." A contract
+  nobody signs because they were told there was nothing to sign is the expensive version of this
+  defect.
 
 ---
 
