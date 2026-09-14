@@ -575,6 +575,19 @@ tables in the domains it flags.
 - **`src/server.ts`** wraps the Nitro/TanStack SSR entry to catch an h3 failure mode (in-handler
   throws silently becoming a JSON 500) and to apply security headers to every response, including
   the framework-bypassing 500 path. Do not simplify it away.
+- **`bun run build` needs a bigger node heap than the default.** On a 16 GB machine it aborts
+  with a bare `SIGABRT` and a V8 stack trace — the giveaway is
+  `CollectGarbageAndRetryAllocation` / `AllocateInYoungGeneration` partway down. It is an
+  out-of-memory, not a code error, and it says nothing about what it was building. Use:
+
+  ```sh
+  NODE_OPTIONS="--max-old-space-size=8192" bun run build   # ~38s, clean
+  ```
+
+  Worth knowing because the failure looks like a toolchain crash and invites a hunt through
+  whatever you last changed. It also has nothing to do with the two-dev-servers `routeTree.gen.ts`
+  hazard below — it reproduces with nothing else running.
+
 - **`bunfig.toml`** enforces a 24h supply-chain delay (`minimumReleaseAge`). Only
   `@lovable.dev/vite-tanstack-config` and `@lovable.dev/mcp-js` are excluded; another exclusion
   needs explicit user confirmation.
