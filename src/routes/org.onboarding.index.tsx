@@ -51,6 +51,7 @@ import {
   sendTestOnboardingOverdueEmail,
 } from "@/lib/onboarding-email-admin.functions";
 import { PaySetupPanel } from "@/components/onboarding/PaySetupPanel";
+import { useMyTenant } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/org/onboarding/")({
   head: () => ({ meta: [{ title: "Onboarding admin — hrppl" }] }),
@@ -128,8 +129,12 @@ interface DefaultRule {
 function OrgOnboarding() {
   const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
-  const [tenantId, setTenantId] = useState<string | null>(null);
-  const [tenantCurrency, setTenantCurrency] = useState<string>("");
+  // Two sequential round trips (profiles, then tenants) before this page's own
+  // query, on every mount, uncached — and NULL for a platform account, so the
+  // tenant switcher did nothing here. useMyTenant holds both, keyed on the
+  // shared tenant id with staleTime: Infinity.
+  const { tenant, tenantId } = useMyTenant();
+  const tenantCurrency = (tenant?.currency_code as string | undefined) ?? "";
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [emps, setEmps] = useState<Emp[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -184,26 +189,6 @@ function OrgOnboarding() {
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (data?.tenant_id) {
-        setTenantId(data.tenant_id);
-        const { data: t } = await supabase
-          .from("tenants")
-          .select("currency_code")
-          .eq("id", data.tenant_id)
-          .maybeSingle();
-        if (t?.currency_code) setTenantCurrency(t.currency_code);
-      }
-    })();
-  }, [user]);
-
   async function load() {
     if (!tenantId) return;
     const [cRes, eRes, pRes, aRes, dRes, depRes, rRes] = await Promise.all([

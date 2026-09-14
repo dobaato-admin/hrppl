@@ -52,6 +52,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useMyTenantId } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/org/performance")({
   head: () => ({ meta: [{ title: "Performance — hrppl" }] }),
@@ -115,7 +116,11 @@ interface ReviewTemplate {
 function OrgPerformance() {
   const { user, roles, loading } = useAuth();
   const navigate = useNavigate();
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  // Shared, cached for the session with staleTime: Infinity, and acting-tenant
+  // aware. This was a useState filled by an effect that read profiles.tenant_id
+  // — a round trip in series before the page's own query, on every mount, and
+  // NULL for a platform account so the switcher did nothing here.
+  const { tenantId } = useMyTenantId();
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [activeCycle, setActiveCycle] = useState<string>("");
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -176,18 +181,6 @@ function OrgPerformance() {
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (data?.tenant_id) setTenantId(data.tenant_id);
-    })();
-  }, [user]);
-
   async function load() {
     if (!tenantId) return;
     const [cRes, eRes, tRes] = await Promise.all([

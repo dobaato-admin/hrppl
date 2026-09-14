@@ -37,6 +37,7 @@ import { AdminGate } from "@/components/AdminGate";
 import { can } from "@/lib/rbac";
 
 import { AppShell } from "@/components/AppShell";
+import { useMyTenantId } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/admin/leave-types")({
   head: () => ({ meta: [{ title: "Leave types — hrppl" }] }),
@@ -78,7 +79,11 @@ const PRESET_COLORS = [
 function LeaveTypesAdmin() {
   const { user, roles, loading, rolesLoaded } = useAuth();
   const navigate = useNavigate();
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  // Shared, cached for the session with staleTime: Infinity, and acting-tenant
+  // aware. This was a useState filled by an effect that read profiles.tenant_id
+  // — a round trip in series before the page's own query, on every mount, and
+  // NULL for a platform account so the switcher did nothing here.
+  const { tenantId } = useMyTenantId();
   const [types, setTypes] = useState<LeaveType[]>([]);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
@@ -119,18 +124,6 @@ function LeaveTypesAdmin() {
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
   }, [loading, user, navigate]);
-
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("tenant_id")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (data?.tenant_id) setTenantId(data.tenant_id);
-    })();
-  }, [user]);
 
   async function load() {
     if (!tenantId) return;

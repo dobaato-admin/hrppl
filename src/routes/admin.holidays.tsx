@@ -27,6 +27,7 @@ import { toast } from "sonner";
 import { AdminGate } from "@/components/AdminGate";
 
 import { AppShell } from "@/components/AppShell";
+import { useMyTenantCountry } from "@/hooks/use-tenant";
 
 export const Route = createFileRoute("/admin/holidays")({
   head: () => ({ meta: [{ title: "Public holidays — hrppl" }] }),
@@ -58,6 +59,7 @@ function HolidaysAdmin() {
   const isSuper = roles.includes("super_admin");
   const isRegional = roles.includes("regional_admin");
   const isOrg = roles.includes("org_admin");
+  const { country: myCountry } = useMyTenantCountry();
   // W5 · Same read/edit split as /admin/holiday-calendar, of which this is the
   // flat "List view" sibling. org.publicHolidays admits everyone because every
   // employee has a reason to look at the holiday list; canManage stays the
@@ -90,22 +92,14 @@ function HolidaysAdmin() {
         const { data } = await supabase.from("countries").select("code,name").order("name");
         setCountries((data ?? []) as Country[]);
       } else if (isOrg) {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("tenant_id")
-          .eq("id", user.id)
-          .maybeSingle();
-        if (!prof?.tenant_id) return;
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("country_code")
-          .eq("id", prof.tenant_id)
-          .maybeSingle();
-        if (!tenant?.country_code) return;
+        // Was profiles -> tenants in series, here and in four other admin
+        // pages. useMyTenantCountry is that pair, cached on the shared tenant
+        // id and acting-tenant aware.
+        if (!myCountry) return;
         const { data } = await supabase
           .from("countries")
           .select("code,name")
-          .eq("code", tenant.country_code)
+          .eq("code", myCountry)
           .order("name");
         setCountries((data ?? []) as Country[]);
       } else {
@@ -123,7 +117,7 @@ function HolidaysAdmin() {
         setCountries((data ?? []) as Country[]);
       }
     })();
-  }, [canManage, isOrg, isSuper, user]);
+  }, [canManage, isOrg, isSuper, myCountry, user]);
 
   useEffect(() => {
     if (countries.length && !country) setCountry(countries[0].code);
