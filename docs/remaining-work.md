@@ -66,9 +66,33 @@ Three things the conversion exposed that were not in the original write-up:
 the same defect but it is also §4c's "two-query tenant waterfall", so it is tracked there —
 `useMyTenantId()` fixes both at once and `tests/tenant-loading-state.test.ts` already lists them.
 
-**Still open, and larger: the RLS half** — see the end of this section. Measured 2026-09-14:
-**262 of 700 policies, across 148 tables**, are keyed on `user_tenant_id(auth.uid())`, which is
-NULL for a platform account. A correctly-converted module still reads nothing through those.
+**The RLS half is also DONE** (2026-09-14), in one function rather than 262 policy rewrites.
+`user_tenant_id(uid)` now returns `COALESCE(profiles.tenant_id, <the tenant selected in the
+switcher>)`, so all 262 policies across 148 tables inherit the fix — see
+`20260914090000_user_tenant_id_acting_tenant.sql` for the full argument.
+
+Blast radius is exactly platform admins, and provably: the fallback fires **only** when
+`profiles.tenant_id IS NULL`, so COALESCE never reaches it for a tenant member; and RLS on
+`platform_acting_tenant` means only a `super_admin` or a country-scoped `regional_admin` can ever
+have a row. No policy in the schema uses `user_tenant_id` negatively (no `IS NULL`, no `<>`, no
+`NOT` — checked against `pg_policies`), so the change can only widen, never narrow.
+
+Measured live as `sam.platform` acting as Globex Nepal, before → after:
+
+| Table | Before | After | Globex actually has |
+| --- | --- | --- | --- |
+| `training_courses` | **0** | **7** | 7 |
+| `expense_categories` | **0** | **12** | 12 |
+
+Every Acme role's counts were identical either side of the migration, and no tenant member can
+see more than one tenant.
+
+**What this does NOT fix, and must not be mistaken for it.** The same measurement showed the
+*other* wrong answer: `departments` returned **22** rows — every tenant's — both before and after,
+because `super_admin`'s policy there is `FOR ALL USING has_role(...)` with **no tenant predicate
+at all**. That is the CLAUDE.md "RLS is the boundary, not the scope" rule, and the fix for it is
+the query filtering `tenant_id` itself, which the server layer now does everywhere after the code
+half. A platform admin reading through a module that forgets the filter still sees every tenant.
 
 The original write-up follows.
 

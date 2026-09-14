@@ -184,6 +184,71 @@ describe("a resolved tenant never reaches a write as null", () => {
   });
 });
 
+describe("the RLS half: user_tenant_id follows the tenant switcher", () => {
+  /**
+   * Converting the server layer fixed the *scoping* but not the *reading*. 262
+   * of 700 policies, across 148 tables, are keyed on
+   * `tenant_id = user_tenant_id(auth.uid())`, and that function returned
+   * `profiles.tenant_id` — NULL for a platform account. `x = NULL` is NULL, not
+   * true, so every one of those policies denied. A correctly converted module
+   * asked exactly the right question and got nothing back.
+   *
+   * Measured against the live database as `sam.platform` acting as Globex,
+   * before and after `20260914090000`:
+   *
+   *   training_courses     0 -> 7    (Globex has 7)
+   *   expense_categories   0 -> 12   (Globex has 12)
+   *
+   * and every Acme role's counts were byte-identical either side, because the
+   * COALESCE never reaches its second argument for a user who has a stored
+   * tenant.
+   *
+   * **This is exactly the shape of the `security_invoker` defect**: one word in
+   * one function, reverted by a later well-meaning migration, silently emptying
+   * whole surfaces. The last migration to define the function is the one that
+   * wins, so that is what this asserts — not merely that the string appears
+   * somewhere in history.
+   */
+  function latestUserTenantIdBody(): { file: string; body: string } | null {
+    let latest: { file: string; body: string } | null = null;
+    for (const f of globSync("supabase/migrations/*.sql", { cwd: ROOT }).sort()) {
+      const sql = readFileSync(join(ROOT, f), "utf8").replace(/--.*$/gm, "");
+      const m =
+        /CREATE OR REPLACE FUNCTION\s+public\.user_tenant_id\s*\([^)]*\)([\s\S]*?)\$\$;/i.exec(sql);
+      if (m) latest = { file: f, body: m[1] };
+    }
+    return latest;
+  }
+
+  it("the live definition falls back to the acting tenant", () => {
+    const latest = latestUserTenantIdBody();
+    expect(latest, "user_tenant_id has no definition in migrations").not.toBeNull();
+    expect(latest!.body).toMatch(/platform_acting_tenant/);
+    expect(latest!.body).toMatch(/COALESCE/i);
+  });
+
+  it("the fallback is second, so a stored tenant always wins", () => {
+    // Order is the safety property, not a style choice. If the acting tenant
+    // came first, a platform admin who left the switcher set could act as that
+    // tenant even after being given a real one — and, worse, the function would
+    // stop being a pure function of the caller's own profile for everybody.
+    const body = latestUserTenantIdBody()!.body;
+    const profilesAt = body.indexOf("profiles");
+    const actingAt = body.indexOf("platform_acting_tenant");
+    expect(profilesAt).toBeGreaterThan(-1);
+    expect(actingAt).toBeGreaterThan(profilesAt);
+  });
+
+  it("it is still SECURITY DEFINER, or it cannot read the switcher at all", () => {
+    const latest = latestUserTenantIdBody()!;
+    const sql = readFileSync(join(ROOT, latest.file), "utf8");
+    expect(sql).toMatch(/SECURITY DEFINER/);
+    // An invoker-rights function would hit platform_acting_tenant's own RLS and,
+    // for the policies that call it, recurse or deny.
+    expect(sql).not.toMatch(/security_invoker\s*=\s*on/i);
+  });
+});
+
 describe("the conversion actually happened", () => {
   it("tenant-scope is the common path across the server layer", () => {
     const modules = globSync("src/lib/*.functions.ts", { cwd: ROOT });
