@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function getRoles(supabase: any, userId: string): Promise<string[]> {
   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
@@ -44,8 +45,7 @@ export const upsertFeedbackTemplate = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
 
     // Editing → create a new version in the same family
     if (data.id) {
@@ -55,7 +55,7 @@ export const upsertFeedbackTemplate = createServerFn({ method: "POST" })
         .eq("id", data.id)
         .maybeSingle();
       if (eErr || !existing) throw new Error("Template not found");
-      if (existing.tenant_id !== profile.tenant_id) throw new Error("Forbidden");
+      if (existing.tenant_id !== tenantId) throw new Error("Forbidden");
 
       const familyRoot = (existing as any).parent_template_id ?? existing.id;
       const { data: maxRow } = await supabase
@@ -78,13 +78,13 @@ export const upsertFeedbackTemplate = createServerFn({ method: "POST" })
         await supabase
           .from("feedback_question_templates")
           .update({ is_default: false })
-          .eq("tenant_id", profile.tenant_id);
+          .eq("tenant_id", tenantId);
       }
 
       const { data: ins, error: iErr } = await supabase
         .from("feedback_question_templates")
         .insert({
-          tenant_id: profile.tenant_id,
+          tenant_id: tenantId,
           name: data.name,
           description: data.description ?? null,
           is_default: data.isDefault,
@@ -107,12 +107,12 @@ export const upsertFeedbackTemplate = createServerFn({ method: "POST" })
       await supabase
         .from("feedback_question_templates")
         .update({ is_default: false })
-        .eq("tenant_id", profile.tenant_id);
+        .eq("tenant_id", tenantId);
     }
     const { data: ins, error } = await supabase
       .from("feedback_question_templates")
       .insert({
-        tenant_id: profile.tenant_id,
+        tenant_id: tenantId,
         name: data.name,
         description: data.description ?? null,
         is_default: data.isDefault,
@@ -164,14 +164,13 @@ export const getFeedbackTemplateHistory = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ templateId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: row } = await supabase
       .from("feedback_question_templates")
       .select("id,parent_template_id,tenant_id")
       .eq("id", data.templateId)
       .maybeSingle();
-    if (!row || (row as any).tenant_id !== profile.tenant_id) throw new Error("Not found");
+    if (!row || (row as any).tenant_id !== tenantId) throw new Error("Not found");
     const familyRoot = (row as any).parent_template_id ?? row.id;
     const { data: versions, error } = await supabase
       .from("feedback_question_templates")
@@ -191,19 +190,18 @@ export const archiveFeedbackTemplate = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: row } = await supabase
       .from("feedback_question_templates")
       .select("id,parent_template_id,tenant_id")
       .eq("id", data.id).maybeSingle();
-    if (!row || (row as any).tenant_id !== profile.tenant_id) throw new Error("Not found");
+    if (!row || (row as any).tenant_id !== tenantId) throw new Error("Not found");
     const familyRoot = (row as any).parent_template_id ?? row.id;
     const { error } = await supabase
       .from("feedback_question_templates")
       .update({ is_current: false, is_default: false } as any)
       .or(`id.eq.${familyRoot},parent_template_id.eq.${familyRoot}`)
-      .eq("tenant_id", profile.tenant_id);
+      .eq("tenant_id", tenantId);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -216,19 +214,18 @@ export const restoreFeedbackTemplate = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: row } = await supabase
       .from("feedback_question_templates")
       .select("id,parent_template_id,tenant_id")
       .eq("id", data.id).maybeSingle();
-    if (!row || (row as any).tenant_id !== profile.tenant_id) throw new Error("Not found");
+    if (!row || (row as any).tenant_id !== tenantId) throw new Error("Not found");
     const familyRoot = (row as any).parent_template_id ?? row.id;
     const { data: latest } = await supabase
       .from("feedback_question_templates")
       .select("id")
       .or(`id.eq.${familyRoot},parent_template_id.eq.${familyRoot}`)
-      .eq("tenant_id", profile.tenant_id)
+      .eq("tenant_id", tenantId)
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -246,12 +243,11 @@ export const listArchivedFeedbackTemplates = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: rows } = await supabase
       .from("feedback_question_templates")
       .select("id,parent_template_id,name,description,version,questions,created_at")
-      .eq("tenant_id", profile.tenant_id)
+      .eq("tenant_id", tenantId)
       .eq("is_current", false)
       .order("created_at", { ascending: false });
     const seen = new Set<string>();
@@ -418,14 +414,13 @@ export const sendFeedbackReminders = createServerFn({ method: "POST" })
     if (!roles.some((r) => ["org_admin", "super_admin", "manager"].includes(r))) {
       throw new Error("Not authorized");
     }
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
 
     const today = new Date().toISOString().slice(0, 10);
     const { data: pending } = await supabase
       .from("review_feedback_requests")
       .select("id,due_date,reminder_count,last_reminder_at")
-      .eq("tenant_id", profile.tenant_id)
+      .eq("tenant_id", tenantId)
       .eq("status", "pending");
 
     let bumped = 0;
@@ -457,8 +452,7 @@ export const getFeedback360Analytics = createServerFn({ method: "GET" })
     if (!roles.some((r) => ["org_admin", "super_admin", "manager"].includes(r))) {
       throw new Error("Not authorized");
     }
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
 
     let reviewIds: string[] | null = null;
     if (data.cycleId) {
@@ -473,14 +467,14 @@ export const getFeedback360Analytics = createServerFn({ method: "GET" })
     let reqQuery = supabase
       .from("review_feedback_requests")
       .select("id,status,kind,due_date,subject_employee_id,review_id")
-      .eq("tenant_id", profile.tenant_id);
+      .eq("tenant_id", tenantId);
     if (reviewIds) reqQuery = reqQuery.in("review_id", reviewIds);
     const { data: requests } = await reqQuery;
 
     let fbQuery = supabase
       .from("review_feedback")
       .select("id,avg_rating,kind,review_id")
-      .eq("tenant_id", profile.tenant_id)
+      .eq("tenant_id", tenantId)
       .not("avg_rating", "is", null);
     if (reviewIds) fbQuery = fbQuery.in("review_id", reviewIds);
     const { data: feedbacks } = await fbQuery;
@@ -528,8 +522,7 @@ export const getFeedback360AuditTrail = createServerFn({ method: "GET" })
     if (!roles.some((r) => ["org_admin", "super_admin", "manager"].includes(r))) {
       throw new Error("Not authorized");
     }
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
 
     let q = supabase
       .from("audit_log")
@@ -541,7 +534,7 @@ export const getFeedback360AuditTrail = createServerFn({ method: "GET" })
     // Filter by tenant client-side from metadata, and by reviewId if provided
     const filtered = (rows ?? []).filter((r: any) => {
       const meta = r.metadata ?? {};
-      if (meta.tenant_id && meta.tenant_id !== profile.tenant_id) return false;
+      if (meta.tenant_id && meta.tenant_id !== tenantId) return false;
       if (data.reviewId && meta.review_id && meta.review_id !== data.reviewId) return false;
       return true;
     });

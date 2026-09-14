@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { requireTenantId, getMyEmployeeId, isNoTenantScope } from "@/lib/tenant-scope";
+import { getMyEmployeeId, isNoTenantScope, requireTenantId } from "@/lib/tenant-scope";
 
 const ListInput = z.object({
   employeeId: z.string().uuid(),

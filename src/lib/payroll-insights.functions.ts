@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { requireTenantId } from "@/lib/tenant-scope";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -15,8 +15,8 @@ async function assertTenantAccess(supabase: any, userId: string, tenantId: strin
   if (!rs.includes("org_admin") && !rs.includes("manager")) {
     throw new Error("Forbidden: org admin or manager role required");
   }
-  const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile || profile.tenant_id !== tenantId) throw new Error("Forbidden: tenant mismatch");
+  const callerTenant = await getTenantId(supabase, userId);
+  if (!callerTenant || callerTenant !== tenantId) throw new Error("Forbidden: tenant mismatch");
 }
 
 // ---------- Variance: compare a run to the previous approved run ----------

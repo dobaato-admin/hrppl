@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -13,9 +14,8 @@ async function assertOrgAdmin(supabase: any, userId: string): Promise<string> {
     .from("user_roles").select("role").eq("user_id", userId)
     .in("role", ["org_admin", "super_admin"]);
   if (!roles?.length) throw new Error("Forbidden");
-  const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
-  if (!profile?.tenant_id) throw new Error("Forbidden");
-  return profile.tenant_id as string;
+  const tenantId = await requireTenantId(supabase, userId);
+  return tenantId as string;
 }
 
 export const listBiometricDevices = createServerFn({ method: "GET" })

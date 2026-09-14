@@ -6,6 +6,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 const Input = z.object({
   source: z.enum(["onboarding", "offboarding"]),
@@ -34,12 +35,11 @@ export const getAuditDetail = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => Input.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: me } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!me?.tenant_id) throw new Error("No tenant scope");
+    const tenantId = await requireTenantId(supabase, userId);
 
     if (data.source === "onboarding") {
       const table = data.includeArchive ? "onboarding_control_room_audit_archive" : "onboarding_control_room_audit";
-      const { data: row, error } = await supabase.from(table).select("*").eq("id", data.id).eq("tenant_id", me.tenant_id).maybeSingle();
+      const { data: row, error } = await supabase.from(table).select("*").eq("id", data.id).eq("tenant_id", tenantId).maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) throw new Error("Audit entry not found.");
       const details = (row as any).details ?? {};
@@ -48,7 +48,7 @@ export const getAuditDetail = createServerFn({ method: "GET" })
       return { row, before, after, diff: summarizeDiff(before, after) };
     } else {
       const table = data.includeArchive ? "offboarding_comms_removal_audit_archive" : "offboarding_comms_removal_audit";
-      const { data: row, error } = await supabase.from(table).select("*").eq("id", data.id).eq("tenant_id", me.tenant_id).maybeSingle();
+      const { data: row, error } = await supabase.from(table).select("*").eq("id", data.id).eq("tenant_id", tenantId).maybeSingle();
       if (error) throw new Error(error.message);
       if (!row) throw new Error("Audit entry not found.");
       return { row, before: (row as any).before ?? null, after: (row as any).after ?? null, diff: summarizeDiff((row as any).before, (row as any).after) };

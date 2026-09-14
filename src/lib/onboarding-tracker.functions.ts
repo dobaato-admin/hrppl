@@ -5,6 +5,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { enforceRateLimit, validateEvidenceUrl } from "./rate-limit.functions";
+import { getTenantId } from "@/lib/tenant-scope";
 
 async function recordAudit(supabase: any, userId: string, assignment_id: string, task_id: string | null, action: string, details: Record<string, any>) {
   const { data: p } = await supabase.from("profiles").select("email, full_name").eq("id", userId).maybeSingle();
@@ -24,15 +25,15 @@ export const listOnboardingTrackerRows = createServerFn({ method: "GET" })
   }).partial().parse(d ?? {}))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: me } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!me?.tenant_id) return { rows: [] };
+    const tenantId = await getTenantId(supabase, userId);
+    if (!tenantId) return { rows: [] };
 
     const { data: assignments } = await supabase
       .from("onboarding_assignments")
       .select("id, status, due_date, employee:employee_id(id, first_name, last_name, employee_number, hire_date, branch_id, tenant_id, job_title)")
       .order("due_date", { ascending: true, nullsFirst: false })
       .limit(500);
-    let rows = (assignments ?? []).filter((a: any) => a.employee?.tenant_id === me.tenant_id);
+    let rows = (assignments ?? []).filter((a: any) => a.employee?.tenant_id === tenantId);
     if (data?.status) rows = rows.filter((r: any) => r.status === data.status);
     if (data?.branchId) rows = rows.filter((r: any) => r.employee?.branch_id === data.branchId);
 

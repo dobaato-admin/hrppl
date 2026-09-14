@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 export const listGeofences = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -28,8 +29,8 @@ export const upsertGeofence = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => FenceSchema.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).single();
-    const payload = { ...data, tenant_id: profile.tenant_id };
+    const tenantId = await requireTenantId(supabase, userId);
+    const payload = { ...data, tenant_id: tenantId };
     const { data: row, error } = data.id
       ? await supabase.from("sign_geofences").update(payload).eq("id", data.id).select().single()
       : await supabase.from("sign_geofences").insert(payload).select().single();

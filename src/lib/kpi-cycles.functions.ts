@@ -1,15 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function getCtx(context: any) {
   const { supabase, userId } = context;
-  const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!prof?.tenant_id) throw new Error("No organisation");
+  const callerTenantId = await requireTenantId(supabase, userId);
   const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const r = (roles ?? []).map((x: any) => x.role as string);
   const isAdmin = r.some((x: string) => ["org_admin", "super_admin", "manager"].includes(x));
-  return { tenantId: prof.tenant_id as string, isAdmin, userId, supabase };
+  return { tenantId: callerTenantId as string, isAdmin, userId, supabase };
 }
 
 async function loadAdmin() {
@@ -34,13 +34,13 @@ export const listOpenCyclesForMe = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) return { cycles: [] };
+    const tenantId = await getTenantId(supabase, userId);
+    if (!tenantId) return { cycles: [] };
     const today = new Date().toISOString().slice(0, 10);
     const { data, error } = await supabase
       .from("kpi_review_cycles")
       .select("id, label, starts_on, ends_on, status")
-      .eq("tenant_id", prof.tenant_id)
+      .eq("tenant_id", tenantId)
       .eq("status", "open")
       .lte("starts_on", today)
       .gte("ends_on", today)

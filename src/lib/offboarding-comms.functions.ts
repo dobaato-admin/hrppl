@@ -7,6 +7,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { enforceRateLimit, validateEvidenceUrl, CSV_MAX_ROWS } from "./rate-limit.functions";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 export const listCommsRemoval = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -115,13 +116,12 @@ export const exportCommsRemovalCsv = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     await enforceRateLimit(supabase, "audit_export", 5, 60);
-    const { data: me } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!me?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
 
     let query = supabase
       .from("offboarding_comms_removal")
       .select("id, case_id, channel, channel_label, is_mandatory, removed, removed_at, evidence_url, attestation_signature, attested_at, due_date, notes, case:case_id(employee_id, status, last_working_day, employee:employee_id(first_name, last_name, employee_number))")
-      .eq("tenant_id", me.tenant_id)
+      .eq("tenant_id", tenantId)
       .limit(CSV_MAX_ROWS);
     if (data.caseId) query = query.eq("case_id", data.caseId);
     const { data: rows, error } = await query;

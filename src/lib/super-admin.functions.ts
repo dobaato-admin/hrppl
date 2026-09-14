@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -63,9 +64,9 @@ export const getMyWhiteLabel = createServerFn({ method: "GET" })
     if (!(roles ?? []).some((r: any) => r.role === "super_admin")) {
       throw new Error("Forbidden");
     }
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) return { settings: null };
-    const { data } = await supabase.from("white_label_settings").select("*").eq("tenant_id", prof.tenant_id).maybeSingle();
+    const tenantId = await getTenantId(supabase, userId);
+    if (!tenantId) return { settings: null };
+    const { data } = await supabase.from("white_label_settings").select("*").eq("tenant_id", tenantId).maybeSingle();
     return { settings: data };
   });
 
@@ -88,10 +89,9 @@ export const upsertMyWhiteLabel = createServerFn({ method: "POST" })
     const { supabase, userId } = context as any;
     const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
     if (!(roles ?? []).some((r: any) => r.role === "super_admin")) throw new Error("Forbidden");
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No organization");
+    const tenantId = await requireTenantId(supabase, userId);
     const admin = await loadAdmin();
-    const payload: any = { ...data, tenant_id: prof.tenant_id };
+    const payload: any = { ...data, tenant_id: tenantId };
     for (const k of ["logo_url", "email_from_address", "support_email"]) if (payload[k] === "") payload[k] = null;
     const { error } = await admin.from("white_label_settings").upsert(payload, { onConflict: "tenant_id" } as any);
     if (error) throw new Error(error.message);

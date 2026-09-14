@@ -7,6 +7,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { enforceRateLimit, CSV_MAX_ROWS } from "./rate-limit.functions";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 const FilterSchema = z.object({
   source: z.enum(["onboarding", "offboarding", "all"]).default("all"),
@@ -30,12 +31,6 @@ function csvEscape(v: any): string {
   if (v === null || v === undefined) return "";
   const s = typeof v === "object" ? JSON.stringify(v) : String(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-async function getTenantId(supabase: any, userId: string): Promise<string> {
-  const { data } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!data?.tenant_id) throw new Error("No tenant scope");
-  return data.tenant_id;
 }
 
 async function getRetentionDays(supabase: any, tenantId: string): Promise<number> {
@@ -151,7 +146,7 @@ export const enqueueAuditExportJob = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     await enforceRateLimit(supabase, "csv_export_job", 10, 60);
-    const tenantId = await getTenantId(supabase, userId);
+    const tenantId = await requireTenantId(supabase, userId);
     const retentionDays = await getRetentionDays(supabase, tenantId);
     const { data: job, error } = await supabase.from("csv_export_jobs").insert({
       tenant_id: tenantId, requested_by: userId,
@@ -325,7 +320,7 @@ export const getCsvExportRetention = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
-    const tenantId = await getTenantId(supabase, userId);
+    const tenantId = await requireTenantId(supabase, userId);
     const { data, error } = await supabase.from("tenants")
       .select("csv_export_retention_days").eq("id", tenantId).maybeSingle();
     if (error) throw new Error(error.message);
@@ -341,7 +336,7 @@ export const updateCsvExportRetention = createServerFn({ method: "POST" })
     const { supabase, userId } = context as any;
     const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
     if (!isAdmin) throw new Error("Only admins can change the CSV export retention window.");
-    const tenantId = await getTenantId(supabase, userId);
+    const tenantId = await requireTenantId(supabase, userId);
     const { error } = await supabase.from("tenants")
       .update({ csv_export_retention_days: data.retentionDays })
       .eq("id", tenantId);

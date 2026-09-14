@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { renderPayslipPdfBytes } from "@/lib/payslip-pdf";
 import { sendInternalEmail } from "@/lib/email/send-internal.server";
+import { getTenantId } from "@/lib/tenant-scope";
 
 const SIGNED_URL_TTL_SECONDS = 72 * 3600;
 const SIGNED_URL_EXPIRES_HOURS = 72;
@@ -17,8 +18,8 @@ async function assertOrgAdminForTenant(ctxSupabase: any, userId: string, tenantI
   const rs = (roles ?? []).map((r: any) => r.role);
   if (rs.includes("super_admin")) return;
   if (!rs.includes("org_admin")) throw new Error("Forbidden: org admin role required");
-  const { data: profile } = await ctxSupabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile || profile.tenant_id !== tenantId) throw new Error("Forbidden: tenant mismatch");
+  const callerTenant = await getTenantId(ctxSupabase, userId);
+  if (!callerTenant || callerTenant !== tenantId) throw new Error("Forbidden: tenant mismatch");
 }
 
 function formatMoney(n: number, currency: string): string {
@@ -294,13 +295,13 @@ export const bulkResendPayslipsInRange = createServerFn({ method: "POST" })
 
     let tenantId = data.tenantId ?? null;
     if (!tenantId) {
-      const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-      tenantId = profile?.tenant_id ?? null;
+      const callerTenantId = await getTenantId(supabase, userId);
+      tenantId = callerTenantId ?? null;
     }
     if (!tenantId) throw new Error("Tenant not resolved");
     if (!isSuper) {
-      const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-      if (!profile || profile.tenant_id !== tenantId) throw new Error("Forbidden: tenant mismatch");
+      const callerTenant = await getTenantId(supabase, userId);
+      if (!callerTenant || callerTenant !== tenantId) throw new Error("Forbidden: tenant mismatch");
     }
 
     if (data.from > data.to) throw new Error("Invalid date range");

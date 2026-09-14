@@ -5,6 +5,7 @@ import { validateInvitationDetails } from "@/lib/payroll-validation";
 import { enforcePublicRateLimit } from "@/lib/rate-limit.functions";
 import { outstandingSetupItems } from "@/lib/payroll-readiness";
 import { plainDbMessage } from "@/lib/db-error";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -36,8 +37,7 @@ async function getInviterContext(
   supabase: any,
   userId: string,
 ): Promise<{ tenantId: string; inviterRoles: string[]; isElevated: boolean }> {
-  const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!profile?.tenant_id) throw new Error("No organization");
+  const callerTenantId = await requireTenantId(supabase, userId);
   const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const inviterRoles: string[] = (roles ?? []).map((r: any) => r.role as string);
   const allowed = ["org_admin", "super_admin", "branch_admin", "hr"];
@@ -45,7 +45,7 @@ async function getInviterContext(
     throw new Error("Not authorized to send invitations");
   }
   const isElevated = inviterRoles.some((r: string) => r === "org_admin" || r === "super_admin");
-  return { tenantId: profile.tenant_id as string, inviterRoles, isElevated };
+  return { tenantId: callerTenantId as string, inviterRoles, isElevated };
 }
 
 // Back-compat: some functions only need the tenant id with admin authority.

@@ -8,6 +8,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 // FY 2081/82 (2024/25) slabs in NPR (annual). Source: IRD Nepal.
 const NP_SLABS_SINGLE = [
@@ -50,16 +51,15 @@ export const runNepalPayrollWizard = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
 
     // Guard: org admin only
-    const { data: isAdmin } = await supabase.rpc("is_org_admin", { _user_id: userId, _tenant_id: prof.tenant_id } as any);
+    const { data: isAdmin } = await supabase.rpc("is_org_admin", { _user_id: userId, _tenant_id: tenantId } as any);
     if (!isAdmin) throw new Error("Forbidden: org admin required");
 
     // Log wizard run
     await supabase.from("np_payroll_wizard_runs").insert({
-      tenant_id: prof.tenant_id,
+      tenant_id: tenantId,
       fiscal_year: "2081/82",
       marital_default: data.marital_default,
       ssf_enrolled: data.ssf_enrolled,
@@ -72,7 +72,7 @@ export const runNepalPayrollWizard = createServerFn({ method: "POST" })
     });
 
     // Try the existing DB seed RPC if available; ignore if not present
-    try { await supabase.rpc("seed_nepal_payroll", { _tenant: prof.tenant_id } as any); } catch {}
+    try { await supabase.rpc("seed_nepal_payroll", { _tenant: tenantId } as any); } catch {}
 
     return { ok: true, seeded: { slabs: data.marital_default, ssf: data.ssf_enrolled, cit: data.cit_percent } };
   });

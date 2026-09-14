@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { getTenantId, requireTenantId } from "@/lib/tenant-scope";
 
 async function loadAdmin() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -40,10 +41,9 @@ export const upsertChecklist = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
     if (!roles.some((r) => ["org_admin", "super_admin"].includes(r))) throw new Error("Not authorized");
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const payload: any = {
-      tenant_id: prof.tenant_id,
+      tenant_id: tenantId,
       name: data.name,
       description: data.description ?? null,
       is_default: data.isDefault,
@@ -70,17 +70,17 @@ export const listChecklistPacks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) return { packs: [], branches: [], departments: [] };
+    const tenantId = await getTenantId(supabase, userId);
+    if (!tenantId) return { packs: [], branches: [], departments: [] };
     const [packsRes, branchesRes, deptsRes] = await Promise.all([
       supabase.from("onboarding_checklists")
         .select("id,name,description,country_code,branch_id,department_id,employment_type,priority,is_default,is_system_seed,items,stages,updated_at")
-        .eq("tenant_id", prof.tenant_id)
+        .eq("tenant_id", tenantId)
         .order("country_code", { ascending: true, nullsFirst: true })
         .order("priority", { ascending: true })
         .order("updated_at", { ascending: false }),
-      supabase.from("tenant_branches").select("id,name,country_code").eq("tenant_id", prof.tenant_id).order("name"),
-      supabase.from("departments").select("id,name").eq("tenant_id", prof.tenant_id).order("name"),
+      supabase.from("tenant_branches").select("id,name,country_code").eq("tenant_id", tenantId).order("name"),
+      supabase.from("departments").select("id,name").eq("tenant_id", tenantId).order("name"),
     ]);
     return {
       packs: packsRes.data ?? [],
@@ -99,12 +99,11 @@ export const reorderChecklistPacks = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
     if (!roles.some((r) => ["org_admin", "super_admin"].includes(r))) throw new Error("Not authorized");
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     for (const row of data.ordered) {
       const { error } = await supabase.from("onboarding_checklists")
         .update({ priority: row.priority })
-        .eq("id", row.id).eq("tenant_id", prof.tenant_id);
+        .eq("id", row.id).eq("tenant_id", tenantId);
       if (error) throw new Error(error.message);
     }
     return { ok: true };
@@ -127,13 +126,12 @@ export const cloneChecklistPack = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
     if (!roles.some((r) => ["org_admin", "super_admin"].includes(r))) throw new Error("Not authorized");
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const { data: src, error: srcErr } = await supabase.from("onboarding_checklists")
       .select("items,stages,description").eq("id", data.sourceId).maybeSingle();
     if (srcErr || !src) throw new Error("Source pack not found");
     const { data: row, error } = await supabase.from("onboarding_checklists").insert({
-      tenant_id: prof.tenant_id,
+      tenant_id: tenantId,
       name: data.name,
       description: (src as any).description ?? null,
       is_default: false,
@@ -185,10 +183,9 @@ export const upsertDefaultAssignmentRule = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
     if (!roles.some((r) => ["org_admin", "super_admin"].includes(r))) throw new Error("Not authorized");
-    const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!prof?.tenant_id) throw new Error("No tenant");
+    const tenantId = await requireTenantId(supabase, userId);
     const payload = {
-      tenant_id: prof.tenant_id,
+      tenant_id: tenantId,
       checklist_id: data.checklistId,
       department_id: data.departmentId ?? null,
       job_title: data.jobTitle?.trim() ? data.jobTitle.trim() : null,

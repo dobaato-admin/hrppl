@@ -4,7 +4,7 @@
  * with filters by employee, channel, date range, actor, and free-text search.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { requireTenantId } from "@/lib/tenant-scope";
+import { NoTenantScopeError, requireTenantId } from "@/lib/tenant-scope";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
 import { enforceRateLimit, CSV_MAX_ROWS } from "./rate-limit.functions";

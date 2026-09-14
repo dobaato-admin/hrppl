@@ -104,14 +104,13 @@ export async function getAccountStatus(supabase: Client, userId: string): Promis
   // blank wall. Reading one's own profile row is always permitted.
   const { data: profile } = await supabase
     .from("profiles")
-    .select("status, suspension_reason, tenant_id")
+    .select("status, suspension_reason")
     .eq("id", userId)
     .maybeSingle();
 
   const row = (profile ?? null) as {
     status?: "active" | "suspended";
     suspension_reason?: string | null;
-    tenant_id?: string | null;
   } | null;
 
   // If the profile itself is active, the tenant is what blocked them.

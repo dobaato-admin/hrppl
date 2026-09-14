@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function assertOrgAdmin(context: any) {
   const { supabase, userId } = context;
@@ -9,9 +10,8 @@ async function assertOrgAdmin(context: any) {
   if (!r.some((x: string) => ["org_admin", "super_admin"].includes(x))) {
     throw new Error("Forbidden: organisation admin only");
   }
-  const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!prof?.tenant_id) throw new Error("No organisation");
-  return { tenantId: prof.tenant_id as string, userId: userId as string };
+  const callerTenantId = await requireTenantId(supabase, userId);
+  return { tenantId: callerTenantId as string, userId: userId as string };
 }
 
 export type LeaveReadinessSteps = {
@@ -63,9 +63,8 @@ export const getLeaveReadiness = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context as any;
-    const { data: profile } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-    if (!profile?.tenant_id) throw new Error("No organisation");
-    const readiness = await checkLeaveReadiness(supabase, profile.tenant_id as string);
+    const tenantId = await requireTenantId(supabase, userId);
+    const readiness = await checkLeaveReadiness(supabase, tenantId as string);
     // The wizard shows what already exists at each step rather than only a
     // count — an admin returning to "leave types configured" cannot otherwise
     // tell whether the one they meant to add is among them, and the safe move
@@ -73,7 +72,7 @@ export const getLeaveReadiness = createServerFn({ method: "GET" })
     const { data: types } = await supabase
       .from("leave_types")
       .select("id, code, name, annual_quota_days, accrual_per_month, is_paid, requires_approval, is_active")
-      .eq("tenant_id", profile.tenant_id)
+      .eq("tenant_id", tenantId)
       .order("name");
     return { ...readiness, types: types ?? [] };
   });

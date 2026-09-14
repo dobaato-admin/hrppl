@@ -1,15 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function getCtx(context: any) {
   const { supabase, userId } = context;
-  const { data: prof } = await supabase.from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!prof?.tenant_id) throw new Error("No organisation");
+  const callerTenantId = await requireTenantId(supabase, userId);
   const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const r = (roles ?? []).map((x: any) => x.role as string);
   const isAdmin = r.some((x: string) => ["org_admin", "super_admin", "manager"].includes(x));
-  return { tenantId: prof.tenant_id as string, isAdmin, userId, supabase };
+  return { tenantId: callerTenantId as string, isAdmin, userId, supabase };
 }
 
 export const listEmployeesWithState = createServerFn({ method: "GET" })

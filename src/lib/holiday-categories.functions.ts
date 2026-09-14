@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
+import { requireTenantId } from "@/lib/tenant-scope";
 
 async function assertOrgAdmin(context: any) {
   const { supabase, userId } = context;
@@ -9,10 +10,8 @@ async function assertOrgAdmin(context: any) {
   if (!r.some((x: string) => ["org_admin", "super_admin"].includes(x))) {
     throw new Error("Forbidden: organisation admin only");
   }
-  const { data: prof } = await supabase
-    .from("profiles").select("tenant_id").eq("id", userId).maybeSingle();
-  if (!prof?.tenant_id) throw new Error("No organisation");
-  return { tenantId: prof.tenant_id as string };
+  const callerTenantId = await requireTenantId(supabase, userId);
+  return { tenantId: callerTenantId as string };
 }
 
 export const listHolidayCategories = createServerFn({ method: "GET" })
