@@ -95,11 +95,11 @@ function Page() {
     }
   }, [settingsQ.data]);
 
-  const [selectedCycleLabel, setSelectedCycleLabel] = useState<string>("");
+  const [selectedCycleId, setSelectedCycleId] = useState<string>("");
   const statusQ = useQuery({
-    queryKey: ["kpi-cycle-status", selectedCycleLabel],
-    queryFn: () => statusListFn({ data: { cycleLabel: selectedCycleLabel } }),
-    enabled: canAccess && !!selectedCycleLabel,
+    queryKey: ["kpi-cycle-status", selectedCycleId],
+    queryFn: () => statusListFn({ data: { cycleId: selectedCycleId } }),
+    enabled: canAccess && !!selectedCycleId,
   });
 
   async function create() {
@@ -276,7 +276,7 @@ function Page() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => setSelectedCycleLabel(c.label)}>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedCycleId(c.label)}>
                     <Users className="h-3 w-3 mr-1" />
                     Submissions
                   </Button>
@@ -312,19 +312,19 @@ function Page() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Select value={selectedCycleLabel} onValueChange={setSelectedCycleLabel}>
+            <Select value={selectedCycleId} onValueChange={setSelectedCycleId}>
               <SelectTrigger className="max-w-xs">
                 <SelectValue placeholder="Pick a cycle" />
               </SelectTrigger>
               <SelectContent>
                 {cycles.map((c: any) => (
-                  <SelectItem key={c.id} value={c.label}>
+                  <SelectItem key={c.id} value={c.id}>
                     {c.label} · {c.status}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {selectedCycleLabel && (
+            {selectedCycleId && (
               <div className="rounded border">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/40 text-left">

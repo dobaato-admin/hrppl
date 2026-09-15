@@ -57,15 +57,17 @@ function Page() {
     queryFn: () => cyclesFn({}),
     enabled: !!user,
   });
-  const [cycleLabel, setCycleLabel] = useState<string>("");
+  // Keyed on the cycle's id since 20260915090000. It used to be the label, which
+  // stopped resolving the moment anybody renamed a cycle.
+  const [cycleId, setCycleId] = useState<string>("");
   useEffect(() => {
-    if (!cycleLabel && cyclesQ.data?.cycles?.[0]) setCycleLabel(cyclesQ.data.cycles[0].label);
-  }, [cyclesQ.data, cycleLabel]);
+    if (!cycleId && cyclesQ.data?.cycles?.[0]) setCycleId(cyclesQ.data.cycles[0].id);
+  }, [cyclesQ.data, cycleId]);
 
   const reviewQ = useQuery({
-    queryKey: ["my-duty-review", cycleLabel],
-    queryFn: () => reviewFn({ data: { cycleLabel } }),
-    enabled: !!user && !!cycleLabel,
+    queryKey: ["my-duty-review", cycleId],
+    queryFn: () => reviewFn({ data: { cycleId } }),
+    enabled: !!user && !!cycleId,
   });
 
   const [drafts, setDrafts] = useState<Record<string, { score: string; comments: string }>>({});
@@ -102,9 +104,9 @@ function Page() {
       return;
     }
     try {
-      await submitFn({ data: { dutyId, cycleLabel, score, comments: d.comments || "" } });
+      await submitFn({ data: { dutyId, cycleId, score, comments: d.comments || "" } });
       toast.success("Saved");
-      qc.invalidateQueries({ queryKey: ["my-duty-review", cycleLabel] });
+      qc.invalidateQueries({ queryKey: ["my-duty-review", cycleId] });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed");
     }
@@ -149,7 +151,7 @@ function Page() {
                 <CardDescription>Pick the active cycle to submit self-scores for.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Select value={cycleLabel} onValueChange={setCycleLabel}>
+                <Select value={cycleId} onValueChange={setCycleId}>
                   <SelectTrigger className="max-w-xs">
                     <SelectValue />
                   </SelectTrigger>
