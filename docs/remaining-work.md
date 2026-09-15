@@ -285,23 +285,39 @@ legitimate reasons to open. So the **panel** carries the narrower answer and the
 **page** keeps the broader one. Same shape on `/org/performance`'s reminder
 preview.
 
-**The five that remain are a documented decision the keys never caught up with.**
-`timeline.functions.ts` says beside its guard: *"finance and branch_admin are
-deliberately excluded — finance holds read-only access to employees and
-branch_admin is scoped to a branch, neither of which matches what these
-endpoints do."* `teams.functions.ts` carries the same set and says it matches
-timeline's.
+**All twenty-four are now closed (2026-09-15), and `KNOWN_GAPS` is empty.**
 
-So the honest repair is **narrowing `org.teams`, `org.idRequests`, `org.assets`
-and `org.employees`** to drop branch_admin and finance — not widening four
-guards and reversing a reasoned decision in passing. Widening is doubly wrong
-here: these endpoints are tenant-wide by construction, so admitting a branch
-admin admits them to *every* branch, which is exactly what that comment rules
-out. Left open deliberately — removing a role's access to four destinations is a
-product call.
+The last five were the interesting ones, because they were **not oversights**.
+`timeline.functions.ts` and `teams.functions.ts` both stated, beside their
+guards, that finance and branch_admin were deliberately excluded — *"finance
+holds read-only access to employees and branch_admin is scoped to a branch,
+neither of which matches what these endpoints do"*. Both halves of that were
+true, and `org.teams`, `org.idRequests`, `org.assets` and `org.employees`
+admitted both roles to the pages regardless.
 
-Hand-verified: `org.departments` admits `hr`, and `listDepartments` throws
-*"Forbidden: organisation admin only"*. HR opens the page and reads an empty list of departments.
+So the endpoints were changed to fit the roles rather than the guards widened to
+ignore the objection:
+
+- **`branch_admin` is admitted with the rows narrowed** to the branches they
+  administer, via `resolveBranchScope` / `branchFilter` in `tenant-scope.ts` — a
+  server-side mirror of `has_branch_access`. The objection was that these
+  endpoints are tenant-wide; they are no longer tenant-wide for that role.
+- **`finance` is admitted tenant-wide**, because "read-only" was never an
+  argument against a *read*. Everything behind that guard is a read.
+
+**The rule that decides whether this fixes a page or empties it:** an untagged
+row stays visible. `has_branch_access` returns true for `branch_id IS NULL`
+("row not yet branch-tagged; defer to the tenant check"), and in this database
+*nothing* is tagged — all 19 seeded employees have `branch_id = NULL`. A plain
+`.in("branch_id", ids)` matches no NULL in Postgres, so it would have hidden
+every employee from every branch admin and turned a scoping fix into exactly the
+empty page this whole exercise exists to stop. `tests/branch-scope.test.ts`
+pins it.
+
+Verified against the live database: `bruce.acme` (branch_admin) has no
+`role_scope` row and every employee is untagged, so he sees all nine of his
+tenant's — no regression. With two branches tagged and Bruce scoped to Sydney,
+he sees **6 of 9** and Melbourne's three are hidden.
 
 The analysis is deliberately conservative — a gate it cannot resolve is **skipped, not passed** —
 and it asserts how much it *can* resolve (36 on-mount call sites) so that a refactor which blinds

@@ -320,42 +320,26 @@ function analyse(): { findings: Finding[]; resolved: number; unresolved: number 
 const { findings, resolved, unresolved } = analyse();
 
 /**
- * The five that remain, all of them one question. **This list may only shrink.**
+ * **Empty as of 2026-09-15.** All twenty-four gaps this test found on the day it
+ * was written are closed. The list may only shrink, and this entry exists so
+ * that "empty" is a recorded state rather than an unwritten one.
  *
- * Nineteen of the original twenty-four are closed (2026-09-14/15). These five
- * are not "unlooked-at" — they are a **documented decision that the feature keys
- * never caught up with**, and they need a product answer rather than a patch.
+ * Four of the five closed last were not oversights — `timeline.functions.ts`
+ * and `teams.functions.ts` both stated, in comments beside their guards, that
+ * finance and branch_admin were deliberately excluded because "finance holds
+ * read-only access to employees and branch_admin is scoped to a branch, neither
+ * of which matches what these endpoints do".
  *
- * `timeline.functions.ts` says it outright, beside the guard:
+ * Both halves of that were true, so the endpoints were changed to fit the roles
+ * rather than the guards widened to ignore it: `branch_admin` is admitted with
+ * the ROWS narrowed to the branches they administer, and `finance` is admitted
+ * tenant-wide because "read-only" was never an argument against a read. See
+ * `resolveBranchScope` in tenant-scope.ts.
  *
- *   "`finance` and `branch_admin` are deliberately excluded — finance holds
- *    read-only access to employees and branch_admin is scoped to a branch,
- *    neither of which matches what these endpoints do."
- *
- * `teams.functions.ts` carries the same set and says "Matches the guard in
- * timeline.functions.ts". So the guards are not behind the keys by oversight;
- * somebody decided, wrote down why, and the keys were never narrowed to agree.
- *
- * That makes the honest repair **narrowing `org.teams`, `org.idRequests`,
- * `org.assets` and `org.employees`** to drop branch_admin and finance — not
- * widening the guards, which would reverse a reasoned decision in passing. It is
- * left open deliberately: removing a role's access to four destinations is a
- * product call, and this file's job is to make sure it is a call somebody makes
- * rather than a drift nobody notices.
- *
- * Widening is the wrong instinct here for a second reason: these endpoints are
- * tenant-wide by construction, so admitting a branch admin means admitting them
- * to every branch — which is precisely what the comment above rules out.
+ * If you are adding an entry here, read the failure message first: the fix is
+ * almost never to add an entry.
  */
-const KNOWN_GAPS = new Set<string>([
-  // Group A (white-label, payroll setup, org reports) was closed 2026-09-14,
-  // guards and RLS together — see 20260914100000.
-  "admin.employees.$employeeId.tsx :: timeline.listEmployeeTimeline :: branch_admin,finance",
-  "admin.id-requests.tsx :: teams.listAllDocumentRequests :: branch_admin",
-  "admin.teams.tsx :: teams.listEmployeeRecord :: branch_admin",
-  "admin.teams.tsx :: teams.listTeamMembers :: branch_admin",
-  "admin.assets.tsx :: timeline.listEmployeesForAdmin :: branch_admin,finance",
-]);
+const KNOWN_GAPS = new Set<string>([]);
 
 const key = (f: Finding) => `${f.page.split("/").pop()} :: ${f.fn} :: ${f.missing.join(",")}`;
 

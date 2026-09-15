@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { getTenantId } from "@/lib/tenant-scope";
+import { branchFilter, getTenantId, resolveBranchScope } from "@/lib/tenant-scope";
 
 const DOC_TYPES = [
   "national_id",
@@ -45,12 +45,54 @@ async function assertHrOrAdmin(supabase: any, userId: string): Promise<string[]>
   // tenant access to employees ("hr manages tenant employees",
   // 20260613140101:7-10). Omitting it meant HR got Forbidden from the very
   // screens built for them. Matches the guard in timeline.functions.ts.
-  if (!roles.some((r: string) => ["manager", "org_admin", "super_admin", "hr"].includes(r))) {
+  //
+  // `branch_admin` is admitted too, and the reason it was not is still true:
+  // these endpoints are tenant-wide and a branch admin is not. So the rows are
+  // narrowed instead of the guard being widened — see `resolveBranchScope`, and
+  // note these handlers enrich through the SERVICE-ROLE client, where RLS is no
+  // backstop and the query's own filter is the whole of the scoping.
+  if (
+    !roles.some((r: string) =>
+      ["manager", "org_admin", "super_admin", "hr", "branch_admin"].includes(r),
+    )
+  ) {
     throw new Error("Forbidden");
   }
   return roles;
 }
 
+
+/**
+ * Employee ids this caller may see, or `null` for the whole tenant.
+ *
+ * Rows elsewhere (document requests, events) reference an employee rather than
+ * carrying a branch of their own, so they are scoped by resolving the employees
+ * first. Returns `null` — not the full list — when unrestricted, so the caller
+ * can skip the filter entirely rather than paginate a list of every employee.
+ */
+async function employeeIdsInScope(
+  supabase: any,
+  userId: string,
+  tenantId: string | null,
+): Promise<string[] | null> {
+  if (!tenantId) return [];
+  const branchIds = await resolveBranchScope(supabase, userId, tenantId);
+  const scope = branchFilter(branchIds);
+  if (!scope) return null;
+  let q = supabase.from("employees").select("id").eq("tenant_id", tenantId);
+  q = q.or(scope);
+  const { data } = await q;
+  return ((data ?? []) as Array<{ id: string }>).map((e) => e.id);
+}
+
+/** Throws unless the caller's branch scope covers this employee. */
+async function assertEmployeeInScope(supabase: any, userId: string, employeeId: string) {
+  const tenantId = await getTenantId(supabase, userId);
+  const ids = await employeeIdsInScope(supabase, userId, tenantId);
+  if (ids !== null && !ids.includes(employeeId)) {
+    throw new Error("Forbidden: that employee is outside the branches you administer");
+  }
+}
 
 export const listTeamMembers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -65,13 +107,16 @@ export const listTeamMembers = createServerFn({ method: "GET" })
     const tenantId = await getTenantId(supabase, context.userId);
     if (!tenantId) return { employees: [], departments: [], pendingByEmployee: {} };
 
-    const { data: employees, error } = await supabase
+    const branchIds = await resolveBranchScope(supabase, context.userId, tenantId);
+    const scope = branchFilter(branchIds);
+    let empQ = supabase
       .from("employees")
       .select(
         "id,first_name,last_name,email,phone,job_title,employment_type,status,hire_date,department_id,manager_id",
       )
-      .eq("tenant_id", tenantId)
-      .order("first_name");
+      .eq("tenant_id", tenantId);
+    if (scope) empQ = empQ.or(scope);
+    const { data: employees, error } = await empQ.order("first_name");
     if (error) throw new Error(error.message);
 
     const ids = (employees ?? []).map((e) => e.id);
@@ -137,6 +182,7 @@ export const listEmployeeRecord = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     await assertHrOrAdmin(context.supabase, context.userId);
     const { supabase } = context;
+    await assertEmployeeInScope(supabase, context.userId, data.employeeId);
     const page = data.page ?? 1;
     const pageSize = data.pageSize ?? 25;
     const offset = (page - 1) * pageSize;
@@ -482,6 +528,8 @@ export const listAllDocumentRequests = createServerFn({ method: "GET" })
   .handler(async ({ data, context }) => {
     await assertHrOrAdmin(context.supabase, context.userId);
     const { supabase } = context;
+    const reqTenantId = await getTenantId(supabase, context.userId);
+    const visibleEmployeeIds = await employeeIdsInScope(supabase, context.userId, reqTenantId);
     let q = supabase
       .from("id_document_requests")
       .select(
@@ -490,6 +538,9 @@ export const listAllDocumentRequests = createServerFn({ method: "GET" })
       .order("requested_at", { ascending: false })
       .limit(500);
     if (data.status && data.status !== "all") q = q.eq("status", data.status);
+    // `null` means "the whole tenant"; a list means a branch admin, and the
+    // request rows follow whichever employees they may see.
+    if (visibleEmployeeIds !== null) q = q.in("employee_id", visibleEmployeeIds);
     const { data: rows, error } = await q;
     if (error) throw new Error(error.message);
 
