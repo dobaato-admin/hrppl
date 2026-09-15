@@ -40,11 +40,10 @@ export const Route = createFileRoute("/admin/duty-reviews")({
   ),
 });
 
-function defaultCycleLabel() {
-  const d = new Date();
-  const q = Math.floor(d.getMonth() / 3) + 1;
-  return `${d.getFullYear()}-Q${q}`;
-}
+// `defaultCycleLabel` lived here and built `2026-Q3` from the clock, which was
+// then filed as a duty score's cycle — a label no cycle necessarily had. The
+// picker below now carries each cycle's id, and the default is whichever cycle
+// actually exists.
 
 function DutyReviewsPage() {
   const { user, roles, loading, rolesLoaded } = useAuth();
@@ -64,7 +63,7 @@ function DutyReviewsPage() {
   const exportDataFn = useServerFn(getDutyReviewExportData);
 
   const [employeeId, setEmployeeId] = useState<string>("");
-  const [cycleLabel, setCycleLabel] = useState<string>(defaultCycleLabel());
+  const [cycleId, setCycleId] = useState<string>("");
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -86,9 +85,19 @@ function DutyReviewsPage() {
     enabled: canAccess,
   });
 
+  const cycles = (cyclesQ.data?.cycles ?? []) as Array<{ id: string; label: string; status: string }>;
+  // Default to a cycle that exists — preferring an open one, since that is the
+  // only kind a score can be filed against. The page used to default to a label
+  // it computed from the clock, which matched a real cycle only by luck.
+  useEffect(() => {
+    if (cycleId || !cycles.length) return;
+    setCycleId((cycles.find((c) => c.status === "open") ?? cycles[0]).id);
+  }, [cycles, cycleId]);
+  const selectedCycle = cycles.find((c) => c.id === cycleId) ?? null;
+
   async function downloadCsv() {
     try {
-      const res: any = await exportFn({ data: { cycleLabel } });
+      const res: any = await exportFn({ data: { cycleId } });
       const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -103,12 +112,12 @@ function DutyReviewsPage() {
 
   async function downloadPdf() {
     try {
-      const payload: any = await exportDataFn({ data: { cycleLabel } });
+      const payload: any = await exportDataFn({ data: { cycleId } });
       const blob = generateDutyReviewPdf(payload);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `duty-review-${cycleLabel}.pdf`;
+      a.download = `duty-review-${selectedCycle?.label ?? "cycle"}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
@@ -117,9 +126,9 @@ function DutyReviewsPage() {
   }
 
   const reviewQ = useQuery({
-    queryKey: ["duty-review", employeeId, cycleLabel],
-    queryFn: () => reviewFn({ data: { employeeId, cycleLabel } }),
-    enabled: canAccess && !!employeeId && !!cycleLabel,
+    queryKey: ["duty-review", employeeId, cycleId],
+    queryFn: () => reviewFn({ data: { employeeId, cycleId } }),
+    enabled: canAccess && !!employeeId && !!cycleId,
   });
 
   const [drafts, setDrafts] = useState<Record<string, { score: string; comments: string }>>({});
@@ -157,9 +166,9 @@ function DutyReviewsPage() {
       return;
     }
     try {
-      await saveFn({ data: { employeeId, dutyId, cycleLabel, score, comments: d.comments || "" } });
+      await saveFn({ data: { employeeId, dutyId, cycleId, score, comments: d.comments || "" } });
       toast.success("Saved");
-      qc.invalidateQueries({ queryKey: ["duty-review", employeeId, cycleLabel] });
+      qc.invalidateQueries({ queryKey: ["duty-review", employeeId, cycleId] });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed");
     }
@@ -174,11 +183,11 @@ function DutyReviewsPage() {
         const score = Number(d.score);
         if (Number.isNaN(score) || score < 0 || score > 100) continue;
         await saveFn({
-          data: { employeeId, dutyId: it.duty.id, cycleLabel, score, comments: d.comments || "" },
+          data: { employeeId, dutyId: it.duty.id, cycleId, score, comments: d.comments || "" },
         });
       }
       toast.success("All scores saved");
-      qc.invalidateQueries({ queryKey: ["duty-review", employeeId, cycleLabel] });
+      qc.invalidateQueries({ queryKey: ["duty-review", employeeId, cycleId] });
     } catch (e: any) {
       toast.error(e?.message ?? "Failed");
     }
@@ -225,13 +234,13 @@ function DutyReviewsPage() {
             </div>
             <div className="space-y-1">
               <Label>Cycle</Label>
-              <Select value={cycleLabel} onValueChange={setCycleLabel}>
+              <Select value={cycleId} onValueChange={setCycleId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select cycle" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(cyclesQ.data?.cycles ?? []).map((c: any) => (
-                    <SelectItem key={c.id} value={c.label}>
+                  {cycles.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
                       {c.label} · {c.status}
                     </SelectItem>
                   ))}
@@ -239,11 +248,11 @@ function DutyReviewsPage() {
               </Select>
             </div>
             <div className="flex flex-wrap items-end justify-end gap-2">
-              <Button variant="outline" onClick={downloadCsv} disabled={!cycleLabel}>
+              <Button variant="outline" onClick={downloadCsv} disabled={!cycleId}>
                 <Download className="h-4 w-4 mr-1" />
                 Export CSV
               </Button>
-              <Button variant="outline" onClick={downloadPdf} disabled={!cycleLabel}>
+              <Button variant="outline" onClick={downloadPdf} disabled={!cycleId}>
                 <FileText className="h-4 w-4 mr-1" />
                 Export PDF
               </Button>

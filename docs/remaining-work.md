@@ -454,10 +454,37 @@ should be measured before it is done.
 
 ## Priority 3 — Named debt, safe to defer
 
-- **Three unconnected review systems.** `performance_reviews`, `review_instances` and
-  `duty_review_scores` share `review_templates` and never reconcile; there is no assignment table.
-  Both previously-orphaned functions now have callers and targeting works, so this is a *modelling*
-  gap, not a dead feature. Reconciling them is a wave of its own.
+- **Three unconnected review systems — mapped 2026-09-15, and the framing was wrong.** They are
+  not one system split three ways. They assess three different **units**, and that may well be
+  correct:
+
+  | System | Assesses | Granularity | Cycle | Rows |
+  | --- | --- | --- | --- | --- |
+  | `performance_reviews` | the **person** | one per employee per cycle | `review_cycles` table | **9** |
+  | `review_instances` | a **competency** | one per employee × competency × scheduled period | none — `period_label` string | 0 |
+  | `duty_review_scores` | a **duty** | one per employee × duty × cycle | none — `cycle_label` **free text** | 0 |
+
+  **"They share `review_templates`" was not true structurally.** Six tables carried a
+  `template_id` with **no foreign key on any of them**. Nothing embeds them yet, so it was latent
+  rather than broken — but it is the PGRST200 shape that silently emptied four training surfaces.
+  Fixed in `20260915090000`, with each target **verified against real rows first**: two of them
+  point at `feedback_question_templates`, not `review_templates`, and an FK to the obvious-looking
+  table would have broken every 360-feedback insert.
+
+  **A live defect was underneath.** `duty_review_scores.cycle_label` was free text supplied by the
+  caller while `kpi_review_cycles` has both an `id` and a `label` — and `upsertCycle` lets an admin
+  **rename** a cycle. Every score filed under the old label then stopped resolving to it: the
+  scores still existed and nothing pointed at them. `/admin/duty-reviews` made it worse by building
+  its default from the clock (`2026-Q3`) while its picker held each cycle's `id` and used
+  `value={c.label}` — so a score could be filed against a label no cycle had ever had.
+
+  Scores are now keyed on `cycle_id`, with the label still written as the record of what the cycle
+  was called at the time. Verified live: after renaming a cycle the score still resolves to it.
+  All three tables were empty, which made this the cheapest possible moment to fix it.
+
+  **Still open, and still a wave:** whether these three should converge at all, and the assignment
+  table that would presume they should. The evidence above makes that less obvious than the
+  original one-line summary assumed — start from the table, not from "reconcile them".
 - **~~Attendance leftovers~~ — three of the four were already done; the fourth is now closed.**
   Checked item by item on 2026-09-15 rather than taken on trust, and the entry was stale:
   - *"`clockOut` records position but does not validate it"* — it does.

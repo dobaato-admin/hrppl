@@ -16,11 +16,36 @@ async function getCtx(context: any) {
   return { tenantId: callerTenantId as string, isReviewer, userId, supabase };
 }
 
+/**
+ * Resolve a cycle id to the cycle, refusing anything outside the tenant.
+ *
+ * Duty scores used to be keyed on a free-text `cycle_label` supplied by the
+ * caller, while `kpi_review_cycles` had both an id and a label. Renaming a cycle
+ * therefore orphaned every score filed under the old name, and the admin page
+ * built its default from the clock (`2026-Q3`) — so a score could be filed
+ * against a label no cycle had ever had. 20260915090000 moved the key to
+ * `cycle_id`; this is the lookup that makes it real, and it is where a cycle id
+ * from another tenant is refused.
+ *
+ * The label is still written alongside, because it is what a CSV export and a
+ * historical row should show, and because a cycle can be deleted.
+ */
+async function requireCycle(supabase: any, tenantId: string, cycleId: string) {
+  const { data } = await supabase
+    .from("kpi_review_cycles")
+    .select("id, label, status")
+    .eq("id", cycleId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!data) throw new Error("That review cycle does not exist in your organisation.");
+  return data as { id: string; label: string; status: string };
+}
+
 export const getDutyReview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
     employeeId: z.string().uuid(),
-    cycleLabel: z.string().trim().min(1).max(60),
+    cycleId: z.string().uuid(),
   }).parse(d))
   .handler(async ({ data, context }) => {
     const { tenantId, isReviewer, supabase } = await getCtx(context);
@@ -42,7 +67,7 @@ export const getDutyReview = createServerFn({ method: "GET" })
       .from("duty_review_scores")
       .select("id, duty_id, score, comments, updated_at")
       .eq("employee_id", data.employeeId)
-      .eq("cycle_label", data.cycleLabel);
+      .eq("cycle_id", data.cycleId);
 
     const scoreByDuty = new Map<string, any>();
     for (const s of (scores ?? []) as any[]) scoreByDuty.set(s.duty_id, s);
@@ -67,20 +92,29 @@ export const getDutyReview = createServerFn({ method: "GET" })
 const upsertSchema = z.object({
   employeeId: z.string().uuid(),
   dutyId: z.string().uuid(),
-  cycleLabel: z.string().trim().min(1).max(60),
+  cycleId: z.string().uuid(),
   score: z.number().min(0).max(100),
   comments: z.string().trim().max(2000).optional().default(""),
 });
 
-async function assertCycleOpen(supabase: any, tenantId: string, cycleLabel: string) {
+/**
+ * The cycle, if it is open and inside its window. Returns it so the caller can
+ * write `cycle_label` alongside `cycle_id` without a second read.
+ *
+ * Keyed on the id since 20260915090000. Looking a cycle up by its name could
+ * not distinguish two cycles sharing one, and silently stopped finding anything
+ * the moment somebody renamed it.
+ */
+async function assertCycleOpen(supabase: any, tenantId: string, cycleId: string) {
   const today = new Date().toISOString().slice(0, 10);
   const { data: cycle } = await supabase
     .from("kpi_review_cycles")
-    .select("status, starts_on, ends_on")
-    .eq("tenant_id", tenantId).eq("label", cycleLabel).maybeSingle();
-  if (!cycle) throw new Error(`Cycle "${cycleLabel}" does not exist. Create it first.`);
-  if (cycle.status !== "open") throw new Error(`Cycle "${cycleLabel}" is not open for submissions.`);
+    .select("id, label, status, starts_on, ends_on")
+    .eq("tenant_id", tenantId).eq("id", cycleId).maybeSingle();
+  if (!cycle) throw new Error("That review cycle does not exist in your organisation.");
+  if (cycle.status !== "open") throw new Error(`Cycle "${cycle.label}" is not open for submissions.`);
   if (today < cycle.starts_on || today > cycle.ends_on) throw new Error("Today is outside the cycle date window.");
+  return cycle as { id: string; label: string; status: string };
 }
 
 export const upsertDutyScore = createServerFn({ method: "POST" })
@@ -89,12 +123,13 @@ export const upsertDutyScore = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { tenantId, isReviewer, supabase, userId } = await getCtx(context);
     if (!isReviewer) throw new Error("Manager / admin only");
-    await assertCycleOpen(supabase, tenantId, data.cycleLabel);
+    const cycle = await assertCycleOpen(supabase, tenantId, data.cycleId);
     const payload = {
       tenant_id: tenantId,
       employee_id: data.employeeId,
       duty_id: data.dutyId,
-      cycle_label: data.cycleLabel,
+      cycle_id: cycle.id,
+      cycle_label: cycle.label,
       score: data.score,
       comments: data.comments || null,
       reviewer_id: userId,
@@ -102,7 +137,7 @@ export const upsertDutyScore = createServerFn({ method: "POST" })
     };
     const { error } = await supabase
       .from("duty_review_scores")
-      .upsert(payload, { onConflict: "employee_id,duty_id,cycle_label" } as any);
+      .upsert(payload, { onConflict: "employee_id,duty_id,cycle_id" } as any);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
@@ -111,7 +146,7 @@ export const submitMyDutyScore = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
     dutyId: z.string().uuid(),
-    cycleLabel: z.string().trim().min(1).max(60),
+    cycleId: z.string().uuid(),
     score: z.number().min(0).max(100),
     comments: z.string().trim().max(2000).optional().default(""),
   }).parse(d))
@@ -120,7 +155,7 @@ export const submitMyDutyScore = createServerFn({ method: "POST" })
     const tenantId = await requireTenantId(supabase, userId);
     const { data: emp } = await supabase.from("employees").select("id, tenant_id").eq("user_id", userId).maybeSingle();
     if (!emp) throw new Error("Employee record not found");
-    await assertCycleOpen(supabase, emp.tenant_id, data.cycleLabel);
+    const cycle = await assertCycleOpen(supabase, emp.tenant_id, data.cycleId);
     const { data: duty } = await supabase.from("employee_duties").select("id, employee_id").eq("id", data.dutyId).maybeSingle();
     if (!duty || duty.employee_id !== emp.id) throw new Error("This duty is not assigned to you.");
     const { error } = await supabase
@@ -129,25 +164,26 @@ export const submitMyDutyScore = createServerFn({ method: "POST" })
         tenant_id: emp.tenant_id,
         employee_id: emp.id,
         duty_id: data.dutyId,
-        cycle_label: data.cycleLabel,
+        cycle_id: cycle.id,
+        cycle_label: cycle.label,
         score: data.score,
         comments: data.comments || null,
         submitter_kind: "self",
-      }, { onConflict: "employee_id,duty_id,cycle_label" } as any);
+      }, { onConflict: "employee_id,duty_id,cycle_id" } as any);
     if (error) throw new Error(error.message);
     return { ok: true };
   });
 
 export const getMyDutyReview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ cycleLabel: z.string().trim().min(1).max(60) }).parse(d))
+  .inputValidator((d: unknown) => z.object({ cycleId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
     const { data: emp } = await supabase.from("employees").select("id, tenant_id, first_name, last_name").eq("user_id", userId).maybeSingle();
     if (!emp) return { items: [], cycle: null };
     const { data: cycle } = await supabase.from("kpi_review_cycles")
       .select("id, label, starts_on, ends_on, status")
-      .eq("tenant_id", emp.tenant_id).eq("label", data.cycleLabel).maybeSingle();
+      .eq("tenant_id", emp.tenant_id).eq("id", data.cycleId).maybeSingle();
     const { data: duties } = await supabase
       .from("employee_duties")
       .select("id, title, description, weight, kpi_target")
@@ -155,7 +191,7 @@ export const getMyDutyReview = createServerFn({ method: "GET" })
     const { data: scores } = await supabase
       .from("duty_review_scores")
       .select("duty_id, score, comments, submitter_kind, updated_at")
-      .eq("employee_id", emp.id).eq("cycle_label", data.cycleLabel);
+      .eq("employee_id", emp.id).eq("cycle_id", data.cycleId);
     const map = new Map<string, any>();
     for (const s of (scores ?? []) as any[]) {
       const existing = map.get(s.duty_id);
@@ -170,15 +206,18 @@ export const getMyDutyReview = createServerFn({ method: "GET" })
 
 export const exportDutyReviewCsv = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ cycleLabel: z.string().trim().min(1).max(60) }).parse(d))
+  .inputValidator((d: unknown) => z.object({ cycleId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { tenantId, isReviewer, supabase } = await getCtx(context);
     if (!isReviewer) throw new Error("Manager / admin only");
+    // The cycle's own label, not one the caller supplied: an export that names
+    // the cycle should name what the cycle is called now.
+    const cycle = await requireCycle(supabase, tenantId, data.cycleId);
     const { data: scores } = await supabase
       .from("duty_review_scores")
       .select("score, comments, submitter_kind, updated_at, cycle_label, employee:employees!inner(id, first_name, last_name, email, job_title), duty:employee_duties!inner(id, title, weight, kpi_target)")
       .eq("tenant_id", tenantId)
-      .eq("cycle_label", data.cycleLabel);
+      .eq("cycle_id", data.cycleId);
     const rows = (scores ?? []) as any[];
 
     // Group by employee to compute weighted final
@@ -206,7 +245,7 @@ export const exportDutyReviewCsv = createServerFn({ method: "GET" })
           `${grp.employee.first_name ?? ""} ${grp.employee.last_name ?? ""}`.trim(),
           grp.employee.email ?? "",
           grp.employee.job_title ?? "",
-          data.cycleLabel,
+          cycle?.label ?? "",
           ln.duty.title,
           w,
           ln.duty.kpi_target ?? "",
@@ -226,31 +265,31 @@ export const exportDutyReviewCsv = createServerFn({ method: "GET" })
       csvLines.push([
         `${s.employee.first_name ?? ""} ${s.employee.last_name ?? ""}`.trim(),
         s.employee.email ?? "",
-        data.cycleLabel,
+        cycle?.label ?? "",
         s.totalW,
         s.final == null ? "" : s.final.toFixed(2),
       ].map(esc).join(","));
     }
-    return { csv: csvLines.join("\n"), filename: `duty-review-${data.cycleLabel}.csv` };
+    return { csv: csvLines.join("\n"), filename: `duty-review-${cycle?.label ?? "cycle"}.csv` };
   });
 
 /** Structured export consumed by the client-side PDF generator. */
 export const getDutyReviewExportData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ cycleLabel: z.string().trim().min(1).max(60) }).parse(d))
+  .inputValidator((d: unknown) => z.object({ cycleId: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { tenantId, isReviewer, supabase } = await getCtx(context);
     if (!isReviewer) throw new Error("Manager / admin only");
 
     const { data: tenant } = await supabase.from("tenants").select("name").eq("id", tenantId).maybeSingle();
     const { data: cycle } = await supabase.from("kpi_review_cycles")
-      .select("label, starts_on, ends_on, status").eq("tenant_id", tenantId).eq("label", data.cycleLabel).maybeSingle();
+      .select("label, starts_on, ends_on, status").eq("tenant_id", tenantId).eq("id", data.cycleId).maybeSingle();
 
     const { data: scores } = await supabase
       .from("duty_review_scores")
       .select("score, comments, submitter_kind, updated_at, employee:employees!inner(id, first_name, last_name, email, job_title), duty:employee_duties!inner(id, title, weight, kpi_target)")
       .eq("tenant_id", tenantId)
-      .eq("cycle_label", data.cycleLabel);
+      .eq("cycle_id", data.cycleId);
 
     const byEmp = new Map<string, any>();
     for (const r of (scores ?? []) as any[]) {
@@ -284,7 +323,7 @@ export const getDutyReviewExportData = createServerFn({ method: "GET" })
 
     return {
       tenant_name: tenant?.name ?? "Organisation",
-      cycle: cycle ?? { label: data.cycleLabel, starts_on: null, ends_on: null, status: null },
+      cycle: cycle ?? { label: null, starts_on: null, ends_on: null, status: null },
       generated_at: new Date().toISOString(),
       employees,
     };

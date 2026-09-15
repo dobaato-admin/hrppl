@@ -3531,7 +3531,8 @@ export type Database = {
         Row: {
           comments: string | null
           created_at: string
-          cycle_label: string
+          cycle_id: string | null
+          cycle_label: string | null
           duty_id: string
           employee_id: string
           id: string
@@ -3544,7 +3545,8 @@ export type Database = {
         Insert: {
           comments?: string | null
           created_at?: string
-          cycle_label: string
+          cycle_id?: string | null
+          cycle_label?: string | null
           duty_id: string
           employee_id: string
           id?: string
@@ -3557,7 +3559,8 @@ export type Database = {
         Update: {
           comments?: string | null
           created_at?: string
-          cycle_label?: string
+          cycle_id?: string | null
+          cycle_label?: string | null
           duty_id?: string
           employee_id?: string
           id?: string
@@ -3568,6 +3571,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "duty_review_scores_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_review_cycles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "duty_review_scores_duty_id_fkey"
             columns: ["duty_id"]
@@ -8945,6 +8955,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "performance_reviews_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "performance_reviews_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
@@ -8957,6 +8974,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "toil_balances"
             referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "performance_reviews_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "review_templates"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -10153,7 +10177,15 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "review_cycles_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "review_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       review_feedback: {
         Row: {
@@ -10195,7 +10227,15 @@ export type Database = {
           tenant_id?: string
           text?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "review_feedback_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "feedback_question_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       review_feedback_requests: {
         Row: {
@@ -10258,7 +10298,15 @@ export type Database = {
           tenant_id?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "review_feedback_requests_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "feedback_question_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       review_instance_versions: {
         Row: {
@@ -10395,7 +10443,29 @@ export type Database = {
           updated_at?: string
           version?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "review_instances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_instances_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "toil_balances"
+            referencedColumns: ["employee_id"]
+          },
+          {
+            foreignKeyName: "review_instances_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "review_templates"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       review_template_audit_log: {
         Row: {
