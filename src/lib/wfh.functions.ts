@@ -376,6 +376,22 @@ export const decideWfhRequest = createServerFn({ method: "POST" })
     //
     // Assert the tenant rather than trusting the row we just read. Reading it
     // proves RLS let us see it, and for super_admin RLS lets us see everything.
+    // The switch has to close the side door as well as the front one.
+    // `createWfhRequest` already refuses when WFH is off, but requests filed
+    // BEFORE it was turned off sat in the queue and could still be approved —
+    // and an approved window authorises remote punches, so the organisation
+    // ended up permitting exactly what it had just said it did not.
+    //
+    // Rejecting stays allowed at all times: an approver must be able to clear a
+    // queue they can no longer say yes to, and refusing both decisions would
+    // strand every pending request forever.
+    if (data.decision === "approved" && !(await isWfhEnabled(supabase, tenantId))) {
+      throw new Error(
+        "Work-from-home is switched off for your organisation, so this request cannot be approved. " +
+          "Turn it back on in Settings, or decline the request.",
+      );
+    }
+
     if (existing.tenant_id !== tenantId) {
       throw new Error("That request belongs to a different organisation.");
     }
@@ -483,6 +499,29 @@ export const setWfhEnabled = createServerFn({ method: "POST" })
       .eq("id", tenantId);
     if (error) throw new Error(error.message);
 
+    // Switching WFH off stops new requests and blocks new approvals. It does
+    // NOT revoke windows already approved: somebody was told they may work from
+    // home on a given day, may have arranged their life around it, and
+    // attendance is the input to pay. That is the same good-faith rule the
+    // lifecycle trigger applies to a request with a punch already taken under
+    // it (20260823060000).
+    //
+    // But a consequence nobody is told about is a consequence nobody accounts
+    // for, so the count comes back and the page says it. An admin who expected
+    // the switch to take effect today can then decline the remaining windows
+    // deliberately, rather than discovering them in next month's attendance.
+    let remainingApprovedWindows = 0;
+    if (!data.enabled) {
+      const today = new Date().toISOString().slice(0, 10);
+      const { count } = await admin
+        .from("wfh_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .eq("status", "approved")
+        .gte("end_date", today);
+      remainingApprovedWindows = count ?? 0;
+    }
+
     try {
       await admin.from("audit_log").insert({
         actor_id: context.userId,
@@ -495,5 +534,5 @@ export const setWfhEnabled = createServerFn({ method: "POST" })
       console.error("[wfh] settings audit log write failed", e);
     }
 
-    return { ok: true, enabled: data.enabled };
+    return { ok: true, enabled: data.enabled, remainingApprovedWindows };
   });

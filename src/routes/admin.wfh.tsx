@@ -116,11 +116,23 @@ function WfhApprovalsPage() {
   async function toggleWfhEnabled(next: boolean) {
     setSettingsBusy(true);
     try {
-      await fnSetEnabled({ data: { enabled: next } });
+      const res = await fnSetEnabled({ data: { enabled: next } });
       setWfhEnabledState(next);
-      toast.success(
-        next ? "Work-from-home requests re-enabled" : "Work-from-home requests disabled",
-      );
+      if (next) {
+        toast.success("Work-from-home requests re-enabled");
+      } else {
+        // Switching off stops new requests and blocks new approvals, but does
+        // not revoke windows already approved — somebody was told they may work
+        // from home that day. Saying how many are still in force is the whole
+        // point: a consequence nobody is told about is one nobody accounts for.
+        const left = res?.remainingApprovedWindows ?? 0;
+        toast.success("Work-from-home requests disabled", {
+          description:
+            left > 0
+              ? `${left} already-approved ${left === 1 ? "window is" : "windows are"} still in force and will continue to allow remote clock-in. Decline them individually if they should not.`
+              : "No approved windows remain, so this takes effect immediately.",
+        });
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Could not update the setting");
     } finally {
