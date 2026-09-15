@@ -458,9 +458,32 @@ should be measured before it is done.
   `duty_review_scores` share `review_templates` and never reconcile; there is no assignment table.
   Both previously-orphaned functions now have callers and targeting works, so this is a *modelling*
   gap, not a dead feature. Reconciling them is a wave of its own.
-- **Attendance leftovers.** `clockOut` records position but does not validate it; WFH decisions
-  notify in-app only; the 24h reconciliation cron does not know the newer WFH mismatch types;
-  there is no tenant-level "remote work allowed" switch.
+- **~~Attendance leftovers~~ — three of the four were already done; the fourth is now closed.**
+  Checked item by item on 2026-09-15 rather than taken on trust, and the entry was stale:
+  - *"`clockOut` records position but does not validate it"* — it does.
+    `classifyClockOutGeofence` has been flagging out-of-fence clock-outs and writing
+    `geofence_reconciliation` rows for some time, with a comment explaining why the punch is
+    recorded and flagged rather than refused (you should not be trapped on site to end a shift).
+  - *"WFH decisions notify in-app only"* — they send email too, reusing `notify_leave_decision`.
+    The code still carries the "In-app only until now" comment from when that was fixed.
+  - *"the 24h reconciliation cron does not know the newer WFH mismatch types"* — it does, and
+    carries a comment describing the exact defect (every WFH punch was re-flagged a second time
+    as an unexplained `no_geofence_for_punch`, mislabelling a sanctioned remote day).
+  - *"there is no tenant-level remote work switch"* — `tenants.wfh_enabled` exists,
+    `createWfhRequest` enforces it, and `/admin/wfh` can toggle it.
+
+  **But the switch only closed the front door.** `decideWfhRequest` never checked it, so requests
+  filed *before* it was turned off stayed in the queue and could still be **approved** — and an
+  approved window authorises remote clock-in. An organisation that had just said "no remote work"
+  went on permitting it, through a queue nobody thought of as a second entrance. Approving now
+  refuses while the switch is off; **rejecting deliberately still works**, because an approver must
+  be able to clear a queue they can no longer say yes to.
+
+  Switching off still does **not** revoke already-approved windows — somebody was told they may
+  work from home that day, and attendance is the input to pay, which is the same good-faith rule
+  `20260823060000`'s lifecycle trigger applies to a request with a punch under it. Instead the
+  count of windows still in force comes back and `/admin/wfh` says so, because a consequence
+  nobody is told about is one nobody accounts for. `tests/wfh-switch.test.ts` pins both halves.
 - **Four deliberately-uncalled server functions**, each waiting on a specific surface:
   `upsertAward` / `upsertAwardClassification` / `upsertAwardRate` need a platform-level catalogue
   editor (parked with D-8); `previewAuPeriod` wants a preview panel on `/org/payroll`. Recorded in
