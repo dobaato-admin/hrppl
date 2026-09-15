@@ -81,6 +81,12 @@ function ReportsPage() {
    * empty state — it is a false statement.
    */
   const [payrollVisible, setPayrollVisible] = useState(true);
+  /**
+   * True for a branch admin, whose `employees` policy is branch-scoped. Every
+   * figure below is then their branches', not the organisation's — and a number
+   * that means something other than its label is worse than a missing one.
+   */
+  const [branchScoped, setBranchScoped] = useState(false);
 
   const fnReports = useServerFn(getOrgReports);
   // W5 · Single source: the same feature key this page's nav row uses.
@@ -102,6 +108,7 @@ function ReportsPage() {
         setKpis(r.kpis as Kpis);
         setSeries(r.series as Row[]);
         setPayrollVisible((r as { payrollVisible?: boolean }).payrollVisible !== false);
+        setBranchScoped((r as { branchScoped?: boolean }).branchScoped === true);
       })
       // Was `.catch(() => {})`. A swallowed failure left the last good numbers
       // on screen, or zeros, with nothing to say either had happened.
@@ -164,6 +171,12 @@ function ReportsPage() {
         </div>
       </header>
 
+      {branchScoped && !failed && (
+        <div className="mx-auto mb-4 max-w-6xl rounded-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          These figures cover the branches you administer, not the whole organisation.
+        </div>
+      )}
+
       {failed && (
         <div className="mx-auto mb-4 max-w-6xl rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-muted-foreground">
           Could not load the organisation report. Every figure below is stale or absent — do not
@@ -220,22 +233,22 @@ function ReportsPage() {
                 Not available for your role.
               </div>
             ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={series}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="payrollCost"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot
-                />
-              </LineChart>
-            </ResponsiveContainer>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={series}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="month" fontSize={11} />
+                  <YAxis fontSize={11} />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="payrollCost"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    dot
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             )}
           </CardContent>
         </Card>

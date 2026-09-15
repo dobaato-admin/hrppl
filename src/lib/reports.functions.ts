@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { requireTenantId } from "@/lib/tenant-scope";
+import { requireTenantId, resolveBranchScope } from "@/lib/tenant-scope";
 
 async function getRoles(supabase: any, userId: string): Promise<string[]> {
   const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
@@ -49,9 +49,13 @@ function monthKey(d: Date | string) {
 
 export const getOrgReports = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({
-    monthsBack: z.number().int().min(1).max(36).default(6),
-  }).parse(d))
+  .inputValidator((d) =>
+    z
+      .object({
+        monthsBack: z.number().int().min(1).max(36).default(6),
+      })
+      .parse(d),
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const roles = await getRoles(supabase, userId);
@@ -59,16 +63,45 @@ export const getOrgReports = createServerFn({ method: "POST" })
     const callerTenantId = await requireTenantId(supabase, userId);
     const tenantId = callerTenantId;
 
+    // `branch_admin` was added to this report to match `org.reports`, and its
+    // policy on `employees` is branch-scoped ("branch admin manages branch
+    // employees" uses has_branch_access). So headcount and the salary bill come
+    // back for THEIR branches, not the organisation — a partial figure under a
+    // heading that says "Organisation". Today every employee is untagged, so
+    // has_branch_access returns true and the numbers are whole; the day a
+    // tenant tags its branches they quietly stop being.
+    //
+    // Same defect as the payroll zero below, and the same answer: say so rather
+    // than let a number mean something other than its label.
+    const branchIds = await resolveBranchScope(supabase, userId, tenantId);
+    const branchScoped = branchIds !== null;
+
     const from = new Date();
     from.setUTCMonth(from.getUTCMonth() - (data.monthsBack - 1));
-    from.setUTCDate(1); from.setUTCHours(0, 0, 0, 0);
+    from.setUTCDate(1);
+    from.setUTCHours(0, 0, 0, 0);
     const fromIso = from.toISOString().slice(0, 10);
 
     const [empRes, runsRes, leaveRes, tsRes] = await Promise.all([
-      supabase.from("employees").select("id,status,hire_date,termination_date,department_id,base_salary").eq("tenant_id", tenantId),
-      supabase.from("payroll_runs").select("id,pay_date,status,totals,currency_code").eq("tenant_id", tenantId).gte("pay_date", fromIso),
-      supabase.from("leave_requests").select("status,start_date,days").eq("tenant_id", tenantId).gte("start_date", fromIso),
-      supabase.from("timesheets").select("status,period_start,total_hours,overtime_hours").eq("tenant_id", tenantId).gte("period_start", fromIso),
+      supabase
+        .from("employees")
+        .select("id,status,hire_date,termination_date,department_id,base_salary")
+        .eq("tenant_id", tenantId),
+      supabase
+        .from("payroll_runs")
+        .select("id,pay_date,status,totals,currency_code")
+        .eq("tenant_id", tenantId)
+        .gte("pay_date", fromIso),
+      supabase
+        .from("leave_requests")
+        .select("status,start_date,days")
+        .eq("tenant_id", tenantId)
+        .gte("start_date", fromIso),
+      supabase
+        .from("timesheets")
+        .select("status,period_start,total_hours,overtime_hours")
+        .eq("tenant_id", tenantId)
+        .gte("period_start", fromIso),
     ]);
 
     const emps = empRes.data ?? [];
@@ -79,7 +112,8 @@ export const getOrgReports = createServerFn({ method: "POST" })
     // Build month buckets
     const months: string[] = [];
     for (let i = 0; i < data.monthsBack; i++) {
-      const m = new Date(from); m.setUTCMonth(m.getUTCMonth() + i);
+      const m = new Date(from);
+      m.setUTCMonth(m.getUTCMonth() + i);
       months.push(monthKey(m));
     }
     const mkBuckets = () => Object.fromEntries(months.map((m) => [m, 0])) as Record<string, number>;
@@ -146,5 +180,6 @@ export const getOrgReports = createServerFn({ method: "POST" })
       // this the page draws a payroll cost of zero, which reads as "this
       // organisation spends nothing on wages" rather than "you cannot see it".
       payrollVisible: canReadPayroll(roles),
+      branchScoped,
     };
   });

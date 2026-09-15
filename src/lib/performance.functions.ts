@@ -452,7 +452,11 @@ export const submitManagerReview = createServerFn({ method: "POST" })
     // Matches `org.performance`, which admits branch_admin and hr. Both hold
     // policies on `performance_reviews` and `review_cycles` already
     // (20260613140101), so this was the guard refusing roles Postgres serves.
-    if (!roles.some((r) => PERFORMANCE_VIEW_ROLES.includes(r as (typeof PERFORMANCE_VIEW_ROLES)[number])))
+    if (
+      !roles.some((r) =>
+        PERFORMANCE_VIEW_ROLES.includes(r as (typeof PERFORMANCE_VIEW_ROLES)[number]),
+      )
+    )
       throw new Error("Not authorized");
     const payload: any = {
       manager_rating: Math.round(data.managerRating),
@@ -762,7 +766,11 @@ export const getReviewAuditTrail = createServerFn({ method: "POST" })
     // Matches `org.performance`, which admits branch_admin and hr. Both hold
     // policies on `performance_reviews` and `review_cycles` already
     // (20260613140101), so this was the guard refusing roles Postgres serves.
-    if (!roles.some((r) => PERFORMANCE_VIEW_ROLES.includes(r as (typeof PERFORMANCE_VIEW_ROLES)[number])))
+    if (
+      !roles.some((r) =>
+        PERFORMANCE_VIEW_ROLES.includes(r as (typeof PERFORMANCE_VIEW_ROLES)[number]),
+      )
+    )
       throw new Error("Not authorized");
     let q = supabase
       .from("audit_log")
