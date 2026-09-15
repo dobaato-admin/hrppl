@@ -1,14 +1,37 @@
 # Remaining work — what is left to call this platform finished
 
 **Written 2026-09-03**, after Wave 5 and audit A1. **Updated 2026-09-07**, after Wave 7.
+**Struck through 2026-09-15**: everything with a line through it is done. What is *not* struck is
+still open. The four genuinely open items are listed in "What is actually left" immediately below.
 
 Waves 1–5 made the product *correct* and *reachable*: no dead links, no orphan server functions,
 no unauthenticated endpoint outside the declared thirteen. Wave 6 built the LMS and closed X-07,
 the last drift axis; Wave 7 built the guided setup, the policy library and Phase 3 provisioning.
-What is left is genuinely unbuilt, plus two pieces of debt with names.
+~~What is left is genuinely unbuilt, plus two pieces of debt with names.~~ As of 2026-09-15 what
+is left is one product decision, one modelling question, some uncached reads, and the parked items.
 
 Each item below carries the same four things, so it can be picked up cold: **what**, **why it
 matters**, **what to build**, and **how you know it is done**.
+
+---
+
+## What is actually left (2026-09-15)
+
+Anything struck through below is done. The rest of the document is either a record of work
+already completed or one of these four, which are the only things still genuinely open:
+
+1. **A `manager` still cannot approve a payroll run** — needs the `/approvals` queue (option 2 in
+   the last section). `org_admin` and `finance` can, so this is no longer an outage.
+2. **Whether the three review systems should converge at all**, and the assignment table that
+   would presume they should. Their keys are fixed; the modelling question is untouched.
+3. **The remaining effect-based loaders** — single uncached reads, no waterfalls left. Caching
+   work, not correctness work, and worth measuring before doing.
+4. **The parked items**, each waiting on something external: SCORM, the cross-tenant course
+   library (D-8), split pay across accounts, the KPI library, ABN Lookup / address autocomplete,
+   T25 (deferred by the client) and T27 (needs scoping).
+
+Also unverified rather than unbuilt: the **QA sweep report is stale** (pre-W5), and the payroll
+Approve button has not been clicked in a browser — there was no `pending_approval` run to click.
 
 ---
 
@@ -31,7 +54,7 @@ defects found underneath X-07 that were larger than X-07, is in `docs/plan-waves
 
 ---
 
-## Priority 1 — Acting-tenant coverage: code half DONE (2026-09-14), RLS half open
+## Priority 1 — Acting-tenant coverage: code half DONE (2026-09-14), ~~RLS half open~~ **RLS half DONE (2026-09-14)**
 
 **The code half is complete.** 92 direct `profiles.tenant_id` reads across 52 server modules
 now resolve through `requireTenantId()` / `getTenantId()`. **65 of 104 `*.functions.ts` modules
@@ -114,42 +137,42 @@ half. A platform admin reading through a module that forgets the filter still se
 
 The original write-up follows.
 
-### The original entry
+### ~~The original entry~~ — every line below is now done; kept for the diagnosis
 
 
 
-**What.** `TenantSwitcher`, `ActingTenantBanner` and `platform_acting_tenant` all exist and work.
+~~**What.** `TenantSwitcher`, `ActingTenantBanner` and `platform_acting_tenant` all exist and work.
 Only the modules calling `requireTenantId()` / `getTenantId()` honour them; the rest read
 `profiles.tenant_id` directly, which is `NULL` for a platform account. Wave 6 converted
 `training.functions.ts` and wrote `training-lessons.functions.ts` on `requireTenantId` from the
-start, taking the count from 13 to 14 — 83 to go.
+start, taking the count from 13 to 14 — 83 to go.~~
 
-**Why it matters.** As `sam.platform` acting as Acme, `/org/payroll` works and `/org/analytics`
+~~**Why it matters.** As `sam.platform` acting as Acme, `/org/payroll` works and `/org/analytics`
 says "No tenant". Same switcher, same account, two different answers page by page. It is the
 largest architectural inconsistency left, and it makes the platform roles undemonstrable on any
-surface that has not been converted.
+surface that has not been converted.~~
 
 It is **not** a leak — the direct read is still tenant-bound. It is a correctness and UX gap.
 
-**What to build.** Mechanical, and worth doing in batches by domain rather than all at once:
+~~**What to build.** Mechanical, and worth doing in batches by domain rather than all at once:~~
 
-1. Replace `const { data: prof } = await supabase.from("profiles").select("tenant_id")…` with
-   `const tenantId = await requireTenantId(supabase, userId)`.
-2. Use `getTenantId` where "no tenant" is a legitimate answer the page should explain, and
-   `requireTenantId` where it is an error.
-3. Carry a `noTenantScope` flag to the UI rather than rendering an unexplained empty page — an
-   empty `<Select>` reads as broken.
+1. ~~Replace `const { data: prof } = await supabase.from("profiles").select("tenant_id")…` with
+   `const tenantId = await requireTenantId(supabase, userId)`.~~
+2. ~~Use `getTenantId` where "no tenant" is a legitimate answer the page should explain, and
+   `requireTenantId` where it is an error.~~
+3. ~~Carry a `noTenantScope` flag to the UI rather than rendering an unexplained empty page — an
+   empty `<Select>` reads as broken.~~
 
-**Done when.** A test asserts no `*.functions.ts` module reads `profiles.tenant_id` outside
-`tenant-scope.ts`. Write that test first and let it fail with the list — it is the work plan.
+~~**Done when.** A test asserts no `*.functions.ts` module reads `profiles.tenant_id` outside
+`tenant-scope.ts`. Write that test first and let it fail with the list — it is the work plan.~~
 
-**A second half nobody had named until W7.** Converting a module to `requireTenantId` fixes the
+~~**A second half nobody had named until W7.** Converting a module to `requireTenantId` fixes the
 *scoping* but not the *reading*: several tables carry RLS keyed on `user_tenant_id(auth.uid())`,
 which is NULL for a platform account, so a correctly-converted module still returns nothing.
 Measured on the setup guide: a super_admin acting as Acme reads **0 of its 7 `training_courses`**,
 so the guide showed 57% for them and 71% for Acme's own admin — same tenant, same day. The
 conversion is a code change; this half is a migration widening those policies to admit an acting
-platform admin. Both are needed, and the second is the larger of the two.
+platform admin. Both are needed, and the second is the larger of the two.~~
 
 ---
 
@@ -234,25 +257,26 @@ This is X-07 exactly: the nav and the route agree with each other, and the *serv
 disagrees with both. Wave 5 converged the first three gate axes and Wave 6 closed the RLS axis for
 training; nothing systematically checks the server-fn axis, which is why this survived.
 
-**What to build.** Decide the direction first — they are not equivalent, and the X-07 write-up sat
-in this document with the direction wrong for months, so check the code before believing either:
+~~**What to build.** Decide the direction first — they are not equivalent, and the X-07 write-up sat
+in this document with the direction wrong for months, so check the code before believing either:~~
+*(Direction chosen: widen the guard AND admit branch_admin — both were done.)*
 
-- *Widen the guard* if HR and managers should administer documents. Replace `getOrgAdminTenant`
+- ~~*Widen the guard* if HR and managers should administer documents. Replace `getOrgAdminTenant`
   with a guard mirroring the RLS write policies on `document_templates` / `document_envelopes`,
   the way `training-guard.ts` mirrors training's — and confirm those policies actually admit the
-  wider set, or the failure just moves from `"Not authorized"` to a Postgres policy error.
-- *Narrow the keys* if they should not. `org.documents` and `org.documentTemplates` drop to
-  `super_admin` + `org_admin`, and four roles stop being offered a page that never worked for them.
+  wider set, or the failure just moves from `"Not authorized"` to a Postgres policy error.~~
+- ~~*Narrow the keys* if they should not. `org.documents` and `org.documentTemplates` drop to
+  `super_admin` + `org_admin`, and four roles stop being offered a page that never worked for them.~~
 
-The comment beside `org.documentTemplates` in `rbac.ts` currently reads "Matches org.documents —
-same domain, same admins", which is true of the two keys and false of the module they gate.
+~~The comment beside `org.documentTemplates` in `rbac.ts` currently reads "Matches org.documents —
+same domain, same admins", which is true of the two keys and false of the module they gate.~~
 
-**Done when.** As `mia.acme` (manager) and `hana.acme` (hr), `/org/documents` either lists
-envelopes or is not offered. No third outcome — and in particular, not an empty table.
+~~**Done when.** As `mia.acme` (manager) and `hana.acme` (hr), `/org/documents` either lists
+envelopes or is not offered. No third outcome — and in particular, not an empty table.~~
 
-**Worth doing at the same time:** a test asserting that every server fn reachable from a page is
+~~**Worth doing at the same time:** a test asserting that every server fn reachable from a page is
 callable by every role that page's feature key admits. That is the axis with no coverage, and it
-is what would have caught both this and X-07 before a human did.
+is what would have caught both this and X-07 before a human did.~~
 
 **DONE 2026-09-14** — `tests/server-fn-role-parity.test.ts`. It resolves each page's feature key,
 finds the server fns that page calls **as it loads** (inside `useQuery` / `useEffect` / a
@@ -266,7 +290,7 @@ being read. A write behind a button that refuses gives an error toast: visible a
 read that refuses gives an empty table: neither. Filtering to on-mount reads takes it from 143 to
 **24**, and the ones hand-checked are all real.
 
-**19 of the 24 are now closed (2026-09-14/15); five remain and are one question.**
+~~**19 of the 24 are now closed (2026-09-14/15); five remain and are one question.**~~ — superseded: all 24 closed, see below.
 
 | Group | What | Outcome |
 | --- | --- | --- |
@@ -392,11 +416,14 @@ without an explicit `staleTime` were never refetching on every mount. Corrected 
   `HANDROLLED_TENANT_LOOKUP` in `tests/tenant-loading-state.test.ts` is empty, and that test's
   scanner now strips comments before matching — a comment explaining what a page *used* to do has
   to quote the code it replaced, and the checker failed on its own documentation otherwise.
-- **39 `useEffect` blocks issue 77 direct Supabase queries**, 15 of them sequential waterfalls of
+- ~~**39 `useEffect` blocks issue 77 direct Supabase queries**, 15 of them sequential waterfalls of
   2–6 queries (`admin.holiday-calendar`, `admin.holidays`, `admin.overtime-rates`,
   `admin.payroll-settings` are 6 each). These bypass React Query entirely: no caching, no
   `isLoading`, refetched on every mount. Converting them is the single largest remaining
-  client-side win, and it fixes correctness as well as speed — see below.
+  client-side win, and it fixes correctness as well as speed — see below.~~ **Partly done** —
+  counts were pre-waterfall; the four admin pages are now 4 each, the two real waterfalls are
+  converted, and the correctness half (§4d) is closed on the five pages that mattered. What is
+  left is single uncached reads. See "Progress on the `useEffect` blocks" below.
 - **Indexes are NOT the current bottleneck.** 69 tenant-scoped tables lack a leading `tenant_id`
   index, but every one is small enough that Postgres correctly prefers a sequential scan, and the
   RLS hot path (`profiles`, `user_roles`, `role_scope`, `platform_acting_tenant`) is already
@@ -407,8 +434,10 @@ without an explicit `staleTime` were never refetching on every mount. Corrected 
 `useState(null)` filled by an effect cannot distinguish "still loading" from "there is none", and
 several rendered the second while in the first. `/org` told a signed-in org admin *"Your account
 isn't linked to an organization yet"* for 400ms on every visit. Fixed on `/org`, `/org/employees`,
-`/org/danger` and `/org/branches`; pinned by `tests/tenant-loading-state.test.ts`. The same shape
-is latent in every one of the 39 effect-based loaders above.
+`/org/danger` and `/org/branches`; pinned by `tests/tenant-loading-state.test.ts`. ~~The same shape
+is latent in every one of the 39 effect-based loaders above.~~ **Closed 2026-09-15 on the five
+employee-facing pages where it mattered** (`/leave`, `/attendance`, `/performance`, `/team`,
+`/my-payslips`); a repo-wide scan found 29 such strings, of which only those five were defects.
 
 **Done when.** ~~No query inside a loop in `payroll.functions.ts`~~ — satisfied, see 4a — and a
 documented default `staleTime` on the query client with per-query overrides where they matter,
@@ -534,6 +563,15 @@ bun run test tests/nav-route-gate-parity.test.ts tests/nav-render-filter.test.ts
              tests/setup-guide.test.ts tests/policies-and-provisioning.test.ts
 ```
 
+Seven more were added 2026-09-14/15 and belong in that list — the command above predates them:
+
+```sh
+bun run test tests/server-fn-role-parity.test.ts tests/documents-access.test.ts \
+             tests/acting-tenant-coverage.test.ts tests/branch-scope.test.ts \
+             tests/payroll-approver.test.ts tests/wfh-switch.test.ts \
+             tests/review-systems-keys.test.ts
+```
+
 Three rules those tests encode, worth stating in prose because the next person will meet them:
 
 1. **One feature key per page**, quoted by the nav row, the route gate and any inline check. If you
@@ -558,7 +596,8 @@ Three rules those tests encode, worth stating in prose because the next person w
 
 ## Baseline
 
-A green test run reads **0 failed / 1,360 passed / 6 skipped**.
+~~A green test run reads **0 failed / 1,360 passed / 6 skipped**.~~ As of 2026-09-15 a green run
+reads **0 failed / 1,451 passed / 6 skipped** — the difference is this session's new tests.
 
 **This changed in Wave 7.** The baseline used to read "4 failed", and those four were stale
 fixtures in `tests/onboarding-readiness.test.ts` describing a table shape that no longer exists —
@@ -618,23 +657,24 @@ so a postcode→suburb flow would match neither the data nor the habit.
 
 ---
 
-## Payroll approval is unreachable through the UI (found 2026-09-13)
+## ~~Payroll approval is unreachable through the UI~~ (found 2026-09-13, **REACHABLE since 2026-09-13**)
 
-**Priority 1.** A payroll run can be created, computed and submitted, and then
-nobody can approve it from the product. Three roles, three different reasons,
+~~**Priority 1.** A payroll run can be created, computed and submitted, and then
+nobody can approve it from the product.~~ Two of the three rows below are fixed;
+row 1 stands deliberately. Three roles, three different reasons,
 none of them visible from inside the app:
 
 | Role | Sees `/org/payroll`? | `assertApproverForTenant` allows? | Result |
 | --- | --- | --- | --- |
 | `manager` | **No** — `can("org.payroll")` admits super_admin, org_admin, branch_admin, finance | **Yes** — it requires `manager` | Cannot open the page |
-| `org_admin`, `finance`, `branch_admin` | Yes | **No** — "Forbidden: manager role required" | Approve button is not rendered for them |
-| `super_admin` | Yes | Yes | Page shows "No runs yet" — see below |
+| ~~`org_admin`, `finance`, `branch_admin`~~ | ~~Yes~~ | ~~**No** — "Forbidden: manager role required"~~ | ~~Approve button is not rendered for them~~ **FIXED** |
+| ~~`super_admin`~~ | ~~Yes~~ | ~~Yes~~ | ~~Page shows "No runs yet"~~ **FIXED** |
 
-The `super_admin` case was gap 1 in CLAUDE.md made concrete: `org.payroll.tsx`
+~~The `super_admin` case was gap 1 in CLAUDE.md made concrete: `org.payroll.tsx`
 resolved its tenant with a direct `profiles.tenant_id` read, which is NULL for
 a platform account, so acting as a tenant through the TenantSwitcher did not
 scope the page — the runs table was empty while the database held three runs
-for that tenant.
+for that tenant.~~
 
 **That third row is now FIXED** (2026-09-13). The page uses `useMyTenantId()`,
 which falls back to the acting tenant, and re-runs when it changes. A
@@ -681,21 +721,29 @@ the button on. The change is pinned by unit tests and the reasoning is closed
 under a real JWT), but nobody has clicked Approve as `fred.acme`.
 
 This is the W5 "nav row vs RLS policy" drift axis, in the one place W5 did not
-reach. **It is a deliberate open finding, not something to fix in passing** —
-each of the three repairs is a different product decision:
+reach. ~~**It is a deliberate open finding, not something to fix in passing** —
+each of the three repairs is a different product decision:~~
+**Decision taken 2026-09-14: option 3 (widen to org_admin and finance).**
 
-1. **Add `manager` to `org.payroll`.** Simplest, but the page shows every
+1. ~~**Add `manager` to `org.payroll`.** Simplest, but the page shows every
    payslip for every employee, so this hands the whole salary list to every
-   manager. Almost certainly wrong.
+   manager. Almost certainly wrong.~~ Rejected, for the stated reason.
 2. **Approve from `/approvals` instead.** The approvals queue already exists
    (T1–T5) and is the right shape: a manager sees only what they may decide.
-   This is the recommended direction.
-3. **Let org_admin approve.** Removes the separation of duties that stops the
+   This is the recommended direction. **← STILL OPEN.** It is the only way a
+   `manager` ever approves, and row 1 of the table above waits on it.
+3. ~~**Let org_admin approve.** Removes the separation of duties that stops the
    person who submitted a run approving it. Needs the client's view on whether
-   that separation is a requirement for them.
+   that separation is a requirement for them.~~ **CHOSEN and done** — and the
+   separation survives, because it was never the role enforcing it:
+   `approvePayrollRun` refuses the submitter by user id.
 
-Alongside (2), `org.payroll.tsx` should move to `requireTenantId()` /
-`useMyTenantId()` so acting-tenant works there at all.
+~~Alongside (2), `org.payroll.tsx` should move to `requireTenantId()` /
+`useMyTenantId()` so acting-tenant works there at all.~~ Done.
 
 The seeded Globex runs are now **approved**, via the fixed super_admin path —
 which is also what gave the new trend charts real data to render.
+
+> **Net position:** approval is reachable today by `org_admin` and `finance`.
+> The one open item in this section is giving a **`manager`** a way to approve —
+> option 2, the `/approvals` queue.
