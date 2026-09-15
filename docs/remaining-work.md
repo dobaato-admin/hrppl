@@ -30,8 +30,17 @@ already completed or one of these four, which are the only things still genuinel
    library (D-8), split pay across accounts, the KPI library, ABN Lookup / address autocomplete,
    T25 (deferred by the client) and T27 (needs scoping).
 
-Also unverified rather than unbuilt: the **QA sweep report is stale** (pre-W5), and the payroll
-Approve button has not been clicked in a browser — there was no `pending_approval` run to click.
+Also unverified rather than unbuilt, and deliberately so:
+
+- **The QA sweep has not been re-run**, so `docs/qa-sweep-report.md` is still the pre-W5 one and
+  says so itself. It was offered on 2026-09-15 and declined — not an oversight, and not to be read
+  as "swept clean". It remains **the outstanding verification step**: it is the only check that
+  exercises all eight roles in a real browser, and the only thing that would confirm the
+  `/settings/billing` and `/me/signatures` console errors really were artefacts of the sweep's own
+  navigation rather than defects. Everything this session changed was verified by tests, by
+  typecheck, and by live SQL under real JWTs — but not by a person or a browser walking the app.
+- **The payroll Approve button has not been clicked in a browser** — every seeded Globex run is
+  already `approved` and Acme has none, so there was no `pending_approval` run to press it on.
 
 ---
 
