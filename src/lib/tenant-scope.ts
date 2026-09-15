@@ -182,3 +182,68 @@ export async function getTenantAndRoles(
   ]);
   return { tenantId, roles };
 }
+
+/**
+ * The branches a caller may see, or `null` when they may see the whole tenant.
+ *
+ * ---------------------------------------------------------------------------
+ * Why a server-side mirror of `has_branch_access`
+ * ---------------------------------------------------------------------------
+ *
+ * `branch_admin` is admitted by `org.teams`, `org.idRequests`, `org.assets` and
+ * `org.employees`, and was refused by every one of those pages' first read.
+ * `timeline.functions.ts` explains why: those endpoints are **tenant-wide by
+ * construction**, and a branch admin is not.
+ *
+ * So the answer is not to widen them but to narrow the rows. This resolves the
+ * same question `has_branch_access` answers in SQL, once per request, so a
+ * query can express it as a filter:
+ *
+ *   - `super_admin` / `org_admin` — the whole tenant, as before.
+ *   - `hr` / `manager` / `finance` — the whole tenant. These roles are not
+ *     branch-scoped in this product; their limits are which COLUMNS and which
+ *     surfaces they get, not which branches.
+ *   - `branch_admin` — the branches named in `role_scope`, unless a row there
+ *     has `branch_id IS NULL`, which grants the whole tenant exactly as the SQL
+ *     function treats it.
+ *
+ * **Callers must include rows whose `branch_id` is NULL.** `has_branch_access`
+ * returns true for an untagged row — "row not yet branch-tagged; defer to the
+ * tenant check" — and most rows in this database are untagged. A plain
+ * `.in("branch_id", ids)` drops every one of them and would turn a scoping fix
+ * into an empty page, which is the defect this whole exercise is about. Use
+ * {@link branchFilter}.
+ */
+export async function resolveBranchScope(
+  supabase: AnySupabase,
+  userId: string,
+  tenantId: string,
+): Promise<string[] | null> {
+  const roles = await getMyRoles(supabase, userId);
+  const unrestricted = ["super_admin", "org_admin", "hr", "manager", "finance"];
+  if (roles.some((r) => unrestricted.includes(r))) return null;
+  if (!roles.includes("branch_admin")) return null;
+
+  const { data } = await supabase
+    .from("role_scope")
+    .select("branch_id")
+    .eq("user_id", userId)
+    .eq("tenant_id", tenantId);
+  const rows = (data ?? []) as Array<{ branch_id: string | null }>;
+  // A tenant-wide scope row is the SQL function's `rs.branch_id IS NULL` case.
+  if (rows.some((r) => r.branch_id === null)) return null;
+  return rows.map((r) => r.branch_id as string);
+}
+
+/**
+ * PostgREST `.or()` filter for a branch scope, or `null` when unrestricted.
+ *
+ * Kept beside {@link resolveBranchScope} because the NULL case is the whole
+ * subtlety: `branch_id.is.null` has to be in the filter or every untagged row
+ * disappears.
+ */
+export function branchFilter(branchIds: string[] | null): string | null {
+  if (branchIds === null) return null;
+  if (branchIds.length === 0) return "branch_id.is.null";
+  return `branch_id.is.null,branch_id.in.(${branchIds.join(",")})`;
+}

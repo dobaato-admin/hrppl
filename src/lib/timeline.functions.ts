@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/lib/auth-guard";
-import { getMyEmployeeId, isNoTenantScope, requireTenantId } from "@/lib/tenant-scope";
+import { branchFilter, getMyEmployeeId, getTenantId, isNoTenantScope, requireTenantId, resolveBranchScope } from "@/lib/tenant-scope";
 
 const ListInput = z.object({
   employeeId: z.string().uuid(),
@@ -16,6 +16,27 @@ export const listEmployeeTimeline = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => ListInput.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
+    // A branch admin reads only their own branches' employees. This endpoint
+    // takes an employeeId straight from the client, so the check has to be here
+    // rather than in a list filter.
+    const tlTenantId = await getTenantId(supabase, context.userId);
+    if (tlTenantId) {
+      const branchIds = await resolveBranchScope(supabase, context.userId, tlTenantId);
+      if (branchIds !== null) {
+        const { data: emp } = await supabase
+          .from("employees")
+          .select("branch_id")
+          .eq("id", data.employeeId)
+          .eq("tenant_id", tlTenantId)
+          .maybeSingle();
+        const branch = (emp as { branch_id: string | null } | null)?.branch_id ?? null;
+        // A NULL branch is untagged and defers to the tenant check, exactly as
+        // `has_branch_access` treats it.
+        if (branch !== null && !branchIds.includes(branch)) {
+          throw new Error("Forbidden: that employee is outside the branches you administer");
+        }
+      }
+    }
     let q = supabase
       .from("employee_events")
       .select("*")
@@ -67,14 +88,26 @@ export const listEmployeeTimeline = createServerFn({ method: "POST" })
  * tenant access to `employees` ("hr manages tenant employees",
  * 20260613140101:7-10). The guard was simply narrower than the policy it fronts.
  *
- * `finance` and `branch_admin` are deliberately excluded — finance holds
+ * `finance` and `branch_admin` were deliberately excluded here — "finance holds
  * read-only access to employees and branch_admin is scoped to a branch, neither
- * of which matches what these endpoints do.
+ * of which matches what these endpoints do". Both halves of that were true, and
+ * `org.employees` and `org.assets` admitted both roles to the PAGES anyway, so
+ * they opened an employee record and read an empty one.
+ *
+ * Resolved 2026-09-15 by making the endpoints fit the roles rather than the
+ * reverse:
+ *
+ *   - `branch_admin` is admitted and the ROWS are narrowed to the branches they
+ *     administer (`resolveBranchScope`). The objection was that these endpoints
+ *     are tenant-wide; they are no longer tenant-wide for that role.
+ *   - `finance` is admitted tenant-wide, because "read-only" was never an
+ *     argument against a READ. Everything reached through this guard is a read;
+ *     the writes in this module have their own.
  */
 async function assertHrOrAdmin(supabase: any, userId: string) {
   const { data: roles } = await supabase
     .from("user_roles").select("role").eq("user_id", userId)
-    .in("role", ["manager", "org_admin", "super_admin", "hr"]);
+    .in("role", ["manager", "org_admin", "super_admin", "hr", "finance", "branch_admin"]);
   if (!roles?.length) throw new Error("Forbidden");
 }
 
@@ -182,11 +215,14 @@ export const listEmployeesForAdmin = createServerFn({ method: "GET" })
       throw e;
     }
 
+    const branchIds = await resolveBranchScope(context.supabase, context.userId, tenantId);
+    const scope = branchFilter(branchIds);
     let q = context.supabase
       .from("employees")
       .select("id, first_name, last_name, email, job_title, department_id, status")
       .eq("tenant_id", tenantId)
       .order("first_name", { ascending: true });
+    if (scope) q = q.or(scope);
     if (!data.includeInactive) q = q.eq("status", "active");
 
     const { data: rows, error } = await q;
