@@ -46,20 +46,20 @@ Also unverified rather than unbuilt, and deliberately so:
 
 ## Done in Wave 6 (2026-09-06) — X-07 and the LMS
 
-Both former Priority 1 and Priority 3. Kept here only as a pointer: the full record, including two
-defects found underneath X-07 that were larger than X-07, is in `docs/plan-waves.md` § Wave 6.
+~~Both former Priority 1 and Priority 3. Kept here only as a pointer: the full record, including two
+defects found underneath X-07 that were larger than X-07, is in `docs/plan-waves.md` § Wave 6.~~
 
-- **X-07 closed.** The description that used to sit here was already stale — `hr` had held manage
+- ~~**X-07 closed.** The description that used to sit here was already stale — `hr` had held manage
   policies on `training_courses` and `training_enrollments` since `20260613140528`. What was
   missing was `training_quiz_questions` and `certifications`, where hr had no policy at all.
-  Widened for hr; `branch_admin` stays read-only behind a second key, `org.trainingManage`.
-- **The LMS shipped**: lessons, per-lesson progress, a private content bucket, a course builder at
-  `/admin/training/$courseId`, a player at `/me/training/$enrollmentId`, and roster progress.
-- **Two silent failures fixed**: the quiz view had been flipped to `security_invoker = on` by a
+  Widened for hr; `branch_admin` stays read-only behind a second key, `org.trainingManage`.~~
+- ~~**The LMS shipped**: lessons, per-lesson progress, a private content bucket, a course builder at
+  `/admin/training/$courseId`, a player at `/me/training/$enrollmentId`, and roster progress.~~
+- ~~**Two silent failures fixed**: the quiz view had been flipped to `security_invoker = on` by a
   linter-driven migration, which meant no learner could read a single quiz question and therefore
   no employee could complete any course; and seven tables embedded `employees(...)` through a
   foreign key that did not exist, leaving four training surfaces and the leave half of both
-  requests inboxes permanently, silently empty.
+  requests inboxes permanently, silently empty.~~
 
 ---
 
@@ -187,26 +187,28 @@ platform admin. Both are needed, and the second is the larger of the two.~~
 
 ## Done in Wave 7 (2026-09-07) — guided setup and the policy library
 
-Former Priority 2. Full record in `docs/plan-waves.md` § Wave 7.
+~~Former Priority 2. Full record in `docs/plan-waves.md` § Wave 7.~~
 
-- `/org/setup-guide` walks seven segments, **computing completion from the
+- ~~`/org/setup-guide` walks seven segments, **computing completion from the
   tenant's data rather than storing a flag** — so a segment reopens when its
   rows are deleted, and the Setup Lock extends `checkPayrollReadiness` instead
-  of inventing a second notion of readiness.
-- The policy document library (§9 item 4) with versioned acknowledgements, which
-  Segment 7 and Phase 3 step 4 both depended on.
-- Phase 3 provisioning: mandatory training and policy sign-offs, dated in the
+  of inventing a second notion of readiness.~~
+- ~~The policy document library (§9 item 4) with versioned acknowledgements, which
+  Segment 7 and Phase 3 step 4 both depended on.~~
+- ~~Phase 3 provisioning: mandatory training and policy sign-offs, dated in the
   tenant's zone. Asset allocation is left to a person on purpose; KPI assignment
-  reports itself **blocked** rather than becoming a fourth review pathway.
-- Two defects found on the way: `tenants` had **no UPDATE policy for org_admin**
+  reports itself **blocked** rather than becoming a fourth review pathway.~~
+- ~~Two defects found on the way: `tenants` had **no UPDATE policy for org_admin**
   (every profile write went through the service-role client, and a zero-row
   UPDATE returned `ok`), and the four long-standing test failures were **stale
-  fixtures**, not a product bug. The suite is now green.
+  fixtures**, not a product bug. The suite is now green.~~
 
-**The blocked items stay blocked, and for the same reasons:** split pay across
+**The blocked items stay blocked, and for the same reasons** — deliberately NOT struck
+through, because this is the one part of Wave 7's entry that is still true: split pay across
 multiple accounts is still gated on reconciling three bank-detail shapes and two
 TFN columns; the KPI library is still gated on the three review systems; ABN
-Lookup and address autocomplete are external APIs needing a key.
+Lookup and address autocomplete are external APIs needing a key. These are the
+"parked items" in the open list at the top.
 
 ---
 
@@ -287,6 +289,52 @@ envelopes or is not offered. No third outcome — and in particular, not an empt
 callable by every role that page's feature key admits. That is the axis with no coverage, and it
 is what would have caught both this and X-07 before a human did.~~
 
+> Built, and it outgrew this section — see **"The fifth gate-drift axis"** below. It is recorded
+> separately because it is not about documents; the documents defect was only what exposed it.
+
+**Two more open observations from the same sweep — CHASED 2026-09-14, and both look like
+artefacts of the sweep itself.**
+
+Neither reproduces. Probed with Playwright against the live dev server, signed in as real seeded
+accounts, both with a clean navigation and with the sweep's own back-to-back `page.goto()`
+pattern: **zero console errors** on `/settings/billing` (org_admin, hr) and on `/me/signatures`
+(hr, branch_admin, manager, employee), and both pages render correctly.
+
+**The likely cause, now fixed.** `AuthRouteGate`'s status check runs on *every* route and is
+cancelled by any navigation — `pathname` is one of its dependencies. The browser reports a
+cancelled request as `TypeError: Failed to fetch`, indistinguishable by type from a server that is
+genuinely down, and the gate logged it at `console.error`. Because the sweep navigates with a full
+page load per route, one page's cancellation was recorded against the page being *navigated to*.
+That explains both shapes: every role hitting it on one page, two roles on another. The gate now
+stays silent for a cancelled or aborted check and still logs real failures.
+
+I saw exactly one such error while probing — `[AuthRouteGate] org status check failed TypeError:
+Failed to fetch` on `/settings/billing` as `hr` — and it did not recur. That is the fingerprint.
+
+**Not proof.** The sweep report is from 2026-09-07 and the code has moved a lot since. If these
+reappear in the next sweep they are real, and the gate is no longer the explanation.
+
+**Two genuine defects were found underneath them anyway**, both of the recurring shape:
+
+- `/settings/billing` never handled `isError`. A failed read fell through to the normal render and
+  drew a plan card with every field blank and an empty payment history — a failure that looks like
+  an answer, on the page where somebody acts on the answer.
+- `/me/signatures` called `list().then(...)` with **no `.catch` and no loading state**, so a failed
+  read raised an unhandled promise rejection *and* left the page saying "All caught up." A contract
+  nobody signs because they were told there was nothing to sign is the expensive version of this
+  defect.
+
+---
+
+
+---
+
+## The fifth gate-drift axis — a page's key vs the server fns it loads with
+
+*Moved here 2026-09-15. It grew inside the documents section above, because it began as that
+entry's "worth doing at the same time". It is not about documents: it is the axis Wave 5 and
+Wave 6 both left uncovered, and the documents defect was only the instance that exposed it.*
+
 **DONE 2026-09-14** — `tests/server-fn-role-parity.test.ts`. It resolves each page's feature key,
 finds the server fns that page calls **as it loads** (inside `useQuery` / `useEffect` / a
 `queryFn`), recovers each fn's guard role set, and fails when the fn refuses a role the page
@@ -357,39 +405,6 @@ and it asserts how much it *can* resolve (36 on-mount call sites) so that a refa
 it fails loudly rather than turning the file green. Verified non-vacuous in both directions:
 widening one guard makes the shrink-check name the exact entry to delete.
 
-**Two more open observations from the same sweep — CHASED 2026-09-14, and both look like
-artefacts of the sweep itself.**
-
-Neither reproduces. Probed with Playwright against the live dev server, signed in as real seeded
-accounts, both with a clean navigation and with the sweep's own back-to-back `page.goto()`
-pattern: **zero console errors** on `/settings/billing` (org_admin, hr) and on `/me/signatures`
-(hr, branch_admin, manager, employee), and both pages render correctly.
-
-**The likely cause, now fixed.** `AuthRouteGate`'s status check runs on *every* route and is
-cancelled by any navigation — `pathname` is one of its dependencies. The browser reports a
-cancelled request as `TypeError: Failed to fetch`, indistinguishable by type from a server that is
-genuinely down, and the gate logged it at `console.error`. Because the sweep navigates with a full
-page load per route, one page's cancellation was recorded against the page being *navigated to*.
-That explains both shapes: every role hitting it on one page, two roles on another. The gate now
-stays silent for a cancelled or aborted check and still logs real failures.
-
-I saw exactly one such error while probing — `[AuthRouteGate] org status check failed TypeError:
-Failed to fetch` on `/settings/billing` as `hr` — and it did not recur. That is the fingerprint.
-
-**Not proof.** The sweep report is from 2026-09-07 and the code has moved a lot since. If these
-reappear in the next sweep they are real, and the gate is no longer the explanation.
-
-**Two genuine defects were found underneath them anyway**, both of the recurring shape:
-
-- `/settings/billing` never handled `isError`. A failed read fell through to the normal render and
-  drew a plan card with every field blank and an empty payment history — a failure that looks like
-  an answer, on the page where somebody acts on the answer.
-- `/me/signatures` called `list().then(...)` with **no `.catch` and no loading state**, so a failed
-  read raised an unhandled promise rejection *and* left the page saying "All caught up." A contract
-  nobody signs because they were told there was nothing to sign is the expensive version of this
-  defect.
-
----
 
 ## Priority 2 — Performance, in the order it will bite
 
@@ -581,7 +596,8 @@ bun run test tests/server-fn-role-parity.test.ts tests/documents-access.test.ts 
              tests/review-systems-keys.test.ts
 ```
 
-Three rules those tests encode, worth stating in prose because the next person will meet them:
+~~Three~~ **Seven** rules those tests encode, worth stating in prose because the next person will
+meet them (it said three and listed five even before 6 and 7 were added):
 
 1. **One feature key per page**, quoted by the nav row, the route gate and any inline check. If you
    are writing a role list by hand, you are creating the next dead link.
@@ -600,6 +616,18 @@ Three rules those tests encode, worth stating in prose because the next person w
    matching zero rows with 200 and no error, so `if (error) throw` passes and the caller reports
    "saved". Add `.select()` and check a row came back — that is what turned an invisible RLS gap on
    `tenants` into a legible error.
+6. **2026-09-15: a role name is only a guard when the statement narrows to the CALLER.** A
+   `.in("role", [...])` over a whole tenant is *data* — `discipline.listHrUsers` reads it to
+   populate an assignment dropdown and gates nobody. A checker that cannot tell the two apart
+   reported a page as locking HR out of a function that has no role check at all, and "fixing"
+   that would have widened a filter and silently changed what the dropdown lists. The same trap
+   is waiting for anyone auditing guards by grep.
+7. **2026-09-15: when you widen a guard, ask what the table's policy narrows by.** Admitting a
+   role to a page is not the same as that role seeing the whole page. `branch_admin` was added to
+   `/org/reports` correctly — the key admits it — but its policy on `employees` is branch-scoped,
+   so headcount and the salary bill came back for its branches under a heading saying
+   "Organisation". A partial figure wearing a whole label is worse than a missing one, and it is
+   invisible until somebody tags a branch. Widen the guard, then check whether the rows narrow.
 
 ---
 
