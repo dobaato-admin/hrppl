@@ -85,7 +85,11 @@ function DutyReviewsPage() {
     enabled: canAccess,
   });
 
-  const cycles = (cyclesQ.data?.cycles ?? []) as Array<{ id: string; label: string; status: string }>;
+  const cycles = (cyclesQ.data?.cycles ?? []) as Array<{
+    id: string;
+    label: string;
+    status: string;
+  }>;
   // Default to a cycle that exists — preferring an open one, since that is the
   // only kind a score can be filed against. The page used to default to a label
   // it computed from the clock, which matched a real cycle only by luck.

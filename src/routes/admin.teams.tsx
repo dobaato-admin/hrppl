@@ -175,7 +175,11 @@ function TeamsPage() {
             {isLoading ? (
               <p className="p-4 text-sm text-muted-foreground">Loading…</p>
             ) : filtered.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No team members found.</p>
+              <p className="p-4 text-sm text-muted-foreground">
+                {data?.noBranchScope
+                  ? "No branches are assigned to you, so no team members are in scope. Ask an organisation admin to assign you a branch."
+                  : "No team members found."}
+              </p>
             ) : (
               <ul className="divide-y divide-border">
                 {filtered.map((e: any) => (

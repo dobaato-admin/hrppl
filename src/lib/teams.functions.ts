@@ -35,10 +35,7 @@ const RETRY_BACKOFF_MIN = [1, 5, 15, 60, 240]; // minutes per attempt
  * Any employee-level caller is rejected with Forbidden.
  */
 async function assertHrOrAdmin(supabase: any, userId: string): Promise<string[]> {
-  const { data } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
+  const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
   const roles = (data ?? []).map((r: any) => r.role as string);
   // 'hr' belongs here despite having been missing: these are the HR-facing
   // document-request and team-record endpoints, and RLS already grants hr full
@@ -61,7 +58,6 @@ async function assertHrOrAdmin(supabase: any, userId: string): Promise<string[]>
   return roles;
 }
 
-
 /**
  * Employee ids this caller may see, or `null` for the whole tenant.
  *
@@ -69,6 +65,12 @@ async function assertHrOrAdmin(supabase: any, userId: string): Promise<string[]>
  * carrying a branch of their own, so they are scoped by resolving the employees
  * first. Returns `null` — not the full list — when unrestricted, so the caller
  * can skip the filter entirely rather than paginate a list of every employee.
+ *
+ * That is not only tidiness. Only a branch admin ever gets a list back, and a
+ * `.in(...)` of several thousand uuids would build a request URL long enough to
+ * be rejected. If a branch admin ever administers a branch that large this has
+ * to become a join rather than an id list; at the scale this product runs at
+ * today it is the simpler correct thing.
  */
 async function employeeIdsInScope(
   supabase: any,
@@ -109,6 +111,13 @@ export const listTeamMembers = createServerFn({ method: "GET" })
 
     const branchIds = await resolveBranchScope(supabase, context.userId, tenantId);
     const scope = branchFilter(branchIds);
+    // A branch admin with no `role_scope` row is scoped to nothing, so in a
+    // tenant whose employees ARE branch-tagged they see an empty list. That is
+    // the correct answer and a terrible way to deliver it — it is exactly the
+    // "renders as emptiness" defect this codebase keeps rediscovering, and
+    // branch scoping would have introduced a fresh one. The page is told, so it
+    // can say "no branches are assigned to you" instead of "no employees".
+    const noBranchScope = Array.isArray(branchIds) && branchIds.length === 0;
     let empQ = supabase
       .from("employees")
       .select(
@@ -120,7 +129,8 @@ export const listTeamMembers = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
 
     const ids = (employees ?? []).map((e) => e.id);
-    if (ids.length === 0) return { employees: [], departments: [], pendingByEmployee: {} };
+    if (ids.length === 0)
+      return { employees: [], departments: [], pendingByEmployee: {}, noBranchScope };
 
     // Profile presence flags are computed server-side; use admin client so we do
     // not require managers/HR to have row-level read access to sensitive PII columns
@@ -163,6 +173,7 @@ export const listTeamMembers = createServerFn({ method: "GET" })
       employees: enriched,
       departments: deps ?? [],
       pendingByEmployee: pendingByEmp,
+      noBranchScope,
     };
   });
 
@@ -189,10 +200,9 @@ export const listEmployeeRecord = createServerFn({ method: "GET" })
 
     let eventsQ = supabase
       .from("employee_events")
-      .select(
-        "id,category,event_type,title,summary,occurred_at,severity,visibility,metadata",
-        { count: "exact" },
-      )
+      .select("id,category,event_type,title,summary,occurred_at,severity,visibility,metadata", {
+        count: "exact",
+      })
       .eq("employee_id", data.employeeId);
 
     if (data.categories?.length) eventsQ = eventsQ.in("category", data.categories as any);
@@ -202,9 +212,17 @@ export const listEmployeeRecord = createServerFn({ method: "GET" })
 
     const [emp, profile, eventsRes, pending, categoryCounts] = await Promise.all([
       supabase.from("employees").select("*").eq("id", data.employeeId).maybeSingle(),
-      supabase.from("staff_onboarding_profiles").select("*").eq("employee_id", data.employeeId).maybeSingle(),
+      supabase
+        .from("staff_onboarding_profiles")
+        .select("*")
+        .eq("employee_id", data.employeeId)
+        .maybeSingle(),
       eventsQ.order("occurred_at", { ascending: false }).range(offset, offset + pageSize - 1),
-      supabase.from("id_document_requests").select("*").eq("employee_id", data.employeeId).order("requested_at", { ascending: false }),
+      supabase
+        .from("id_document_requests")
+        .select("*")
+        .eq("employee_id", data.employeeId)
+        .order("requested_at", { ascending: false }),
       supabase.from("employee_events").select("category").eq("employee_id", data.employeeId),
     ]);
 
@@ -252,7 +270,13 @@ async function writeAudit(
 
 async function sendRequestEmailWithRetry(
   supabase: any,
-  request: { id: string; tenant_id: string; document_type: string; notes?: string | null; send_attempts: number },
+  request: {
+    id: string;
+    tenant_id: string;
+    document_type: string;
+    notes?: string | null;
+    send_attempts: number;
+  },
   emp: { id: string; tenant_id: string; first_name?: string | null; email?: string | null },
 ): Promise<{ ok: boolean; error?: string }> {
   if (!emp.email) {
@@ -411,7 +435,13 @@ export const cancelDocumentRequest = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertHrOrAdmin(context.supabase, context.userId);
-    return await transitionRequest(context.supabase, context.userId, data.id, "cancelled", "cancelled");
+    return await transitionRequest(
+      context.supabase,
+      context.userId,
+      data.id,
+      "cancelled",
+      "cancelled",
+    );
   });
 
 export const approveDocumentRequest = createServerFn({ method: "POST" })
@@ -419,7 +449,13 @@ export const approveDocumentRequest = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertHrOrAdmin(context.supabase, context.userId);
-    return await transitionRequest(context.supabase, context.userId, data.id, "submitted", "approved");
+    return await transitionRequest(
+      context.supabase,
+      context.userId,
+      data.id,
+      "submitted",
+      "approved",
+    );
   });
 
 async function resendOne(supabase: any, userId: string, id: string) {
@@ -446,13 +482,28 @@ async function resendOne(supabase: any, userId: string, id: string) {
 
   const out = await sendRequestEmailWithRetry(
     supabase,
-    { id: req.id, tenant_id: req.tenant_id, document_type: req.document_type, notes: req.notes, send_attempts: req.send_attempts ?? 0 },
+    {
+      id: req.id,
+      tenant_id: req.tenant_id,
+      document_type: req.document_type,
+      notes: req.notes,
+      send_attempts: req.send_attempts ?? 0,
+    },
     emp,
   );
   if (!out.ok) {
-    await writeAudit(supabase, req.tenant_id, req.id, userId, "send_retried", "pending", "pending", {
-      error: out.error,
-    });
+    await writeAudit(
+      supabase,
+      req.tenant_id,
+      req.id,
+      userId,
+      "send_retried",
+      "pending",
+      "pending",
+      {
+        error: out.error,
+      },
+    );
   }
   return out;
 }
@@ -476,7 +527,9 @@ export const bulkApproveDocumentRequests = createServerFn({ method: "POST" })
     const results: any[] = [];
     for (const id of data.ids) {
       try {
-        results.push(await transitionRequest(context.supabase, context.userId, id, "submitted", "approved"));
+        results.push(
+          await transitionRequest(context.supabase, context.userId, id, "submitted", "approved"),
+        );
       } catch (e: any) {
         results.push({ id, error: String(e?.message ?? e) });
       }
@@ -492,7 +545,9 @@ export const bulkCancelDocumentRequests = createServerFn({ method: "POST" })
     const results: any[] = [];
     for (const id of data.ids) {
       try {
-        results.push(await transitionRequest(context.supabase, context.userId, id, "cancelled", "cancelled"));
+        results.push(
+          await transitionRequest(context.supabase, context.userId, id, "cancelled", "cancelled"),
+        );
       } catch (e: any) {
         results.push({ id, error: String(e?.message ?? e) });
       }
@@ -620,7 +675,15 @@ export const exportEmployeeHistoryCsv = createServerFn({ method: "GET" })
       `# Exported at: ${esc(new Date().toISOString())}`,
       ``,
     ];
-    const header = ["Occurred at", "Category", "Event type", "Title", "Summary", "Severity", "Visibility"];
+    const header = [
+      "Occurred at",
+      "Category",
+      "Event type",
+      "Title",
+      "Summary",
+      "Severity",
+      "Visibility",
+    ];
 
     // Group by category for clarity
     const byCat: Record<string, any[]> = {};
