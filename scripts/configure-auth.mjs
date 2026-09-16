@@ -139,21 +139,35 @@ async function show() {
   console.log();
 }
 
-function buildPatch() {
-  const patch = {};
+// The PATCH is atomic, so one rejected field discards every other field in the
+// same request. Sending the URLs and the SMTP block as SEPARATE requests means a
+// problem with the mail settings cannot also throw away the redirect allowlist —
+// which is exactly what happened when smtp_port went out as a number: a 400 on
+// one field, and site_url silently left at its localhost default.
+function buildPatches() {
+  const patches = [];
   if (flag("--urls")) {
-    patch.site_url = target.siteUrl;
-    patch.uri_allow_list = target.allow.join(",");
+    patches.push({
+      label: "redirect URLs",
+      body: { site_url: target.siteUrl, uri_allow_list: target.allow.join(",") },
+    });
   }
   if (flag("--smtp")) {
     const key = process.env.RESEND_API_KEY;
     if (!key) { console.error("--smtp needs RESEND_API_KEY in the environment."); process.exit(1); }
     const from = process.env.EMAIL_FROM_ADDRESS || "noreply@hrppl.io";
-    Object.assign(patch, {
+    patches.push({ label: "Resend SMTP", body: {
       smtp_host: "smtp.resend.com",
       // 465 with implicit TLS. Port 587 also works; 25 is blocked by most
       // hosts and by Supabase.
-      smtp_port: 465,
+      //
+      // A STRING, not a number. The Management API validates this field as
+      // `expected string, received number` and rejects the whole PATCH with a
+      // 400 — and because the PATCH is atomic, sending the port as an integer
+      // also silently discards the site_url and uri_allow_list in the same
+      // request. The GET returns it as a number, which is what invites the
+      // mistake.
+      smtp_port: "465",
       // Resend's SMTP username is the literal string "resend" for every
       // account — the API key is the password. Putting the key in the username
       // authenticates as nobody and fails with a generic 535.
@@ -165,27 +179,80 @@ function buildPatch() {
       // dedicated Resend account it is just a throttle; 30/hour still absorbs
       // an onboarding batch without letting a loop empty the quota.
       rate_limit_email_sent: 30,
-    });
+    }});
   }
-  return patch;
+  return patches;
+}
+
+function redact(body) {
+  const out = { ...body };
+  if (out.smtp_pass) out.smtp_pass = `re_***${String(body.smtp_pass).slice(-4)}`;
+  return out;
+}
+
+/**
+ * Send one PATCH, and on a type-validation 400 coerce the named field and retry
+ * exactly once.
+ *
+ * This exists because the Management API's GET returns `smtp_port` as a NUMBER
+ * and its PATCH requires a STRING — so the value you read back is not a value
+ * you can write, and the error surfaces only at request time. Bounded to one
+ * retry and to type coercion alone: it will not invent a value, and any other
+ * 400 is reported untouched rather than retried into a different shape.
+ */
+async function patchOnce(label, body) {
+  const send = (b) =>
+    fetch(API, { method: "PATCH", headers, body: JSON.stringify(b) });
+
+  let res = await send(body);
+  if (res.ok) return { ok: true, body };
+
+  const text = await res.text();
+  const m = text.match(/"?([a-z_]+)"?: Invalid input: expected (string|number)/i);
+  if (res.status === 400 && m) {
+    const [, field, want] = m;
+    const current = body[field];
+    if (current !== undefined) {
+      const coerced = want === "string" ? String(current) : Number(current);
+      console.log(`  ${label}: API wants ${field} as ${want}; retrying with ${JSON.stringify(coerced)}`);
+      const retryBody = { ...body, [field]: coerced };
+      res = await send(retryBody);
+      if (res.ok) return { ok: true, body: retryBody };
+      return { ok: false, status: res.status, text: await res.text() };
+    }
+  }
+  return { ok: false, status: res.status, text };
 }
 
 async function main() {
   if (flag("--show") || (!flag("--urls") && !flag("--smtp"))) return show();
 
-  const patch = buildPatch();
-  const redacted = { ...patch };
-  if (redacted.smtp_pass) redacted.smtp_pass = `re_***${String(patch.smtp_pass).slice(-4)}`;
-  console.log(`\nPATCH ${envName} (${target.ref}):`);
-  console.log(JSON.stringify(redacted, null, 2));
+  const patches = buildPatches();
+  console.log(`\n${envName} (${target.ref}) — ${patches.length} request(s):`);
+  for (const { label, body } of patches) {
+    console.log(`\n  [${label}]`);
+    console.log(JSON.stringify(redact(body), null, 2).split("\n").map((l) => "  " + l).join("\n"));
+  }
 
-  if (flag("--dry-run")) { console.log("\n--dry-run: not sent.\n"); return; }
+  if (flag("--dry-run")) { console.log("\n--dry-run: nothing sent.\n"); return; }
 
-  const res = await fetch(API, { method: "PATCH", headers, body: JSON.stringify(patch) });
-  const text = await res.text();
-  if (!res.ok) { console.error(`\nFAILED ${res.status}: ${text}`); process.exit(1); }
-  console.log("\nOK. Re-reading to confirm:");
+  let failed = 0;
+  for (const { label, body } of patches) {
+    const r = await patchOnce(label, body);
+    if (r.ok) {
+      console.log(`  ${label}: OK`);
+    } else {
+      failed++;
+      console.error(`  ${label}: FAILED ${r.status} ${r.text}`);
+    }
+  }
+
+  // Report the live state either way. A partial apply is the likely outcome of
+  // a failure here, and guessing which half landed is how a project ends up
+  // with mail configured and redirects still pointing at localhost.
+  console.log("\nRe-reading to confirm:");
   await show();
+  if (failed) process.exit(1);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
