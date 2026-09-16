@@ -1,4 +1,5 @@
 import { sendLovableEmail } from '@lovable.dev/email-js'
+import { isResendConfigured, sendViaResend } from '@/lib/email/resend.server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createFileRoute } from '@tanstack/react-router'
 
@@ -68,8 +69,25 @@ export const Route = createFileRoute("/lovable/email/queue/process")({
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
         const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-        if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
+        // Transport selection. Resend wins when configured; the Lovable sender
+        // stays as a fallback so an environment still carrying LOVABLE_API_KEY
+        // keeps working without a redeploy.
+        const useResend = isResendConfigured()
+
+        if (!supabaseUrl || !supabaseServiceKey) {
           console.error('Missing required environment variables')
+          return Response.json(
+            { error: 'Server configuration error' },
+            { status: 500 }
+          )
+        }
+
+        // Neither transport configured. Return 500 rather than draining the
+        // queue into failures: messages left enqueued are recoverable once a
+        // key is set, whereas five failed attempts each would exhaust the
+        // retry budget and dead-letter mail that was never actually undeliverable.
+        if (!useResend && !apiKey) {
+          console.error('No email transport configured — set RESEND_API_KEY')
           return Response.json(
             { error: 'Server configuration error' },
             { status: 500 }
@@ -221,23 +239,52 @@ export const Route = createFileRoute("/lovable/email/queue/process")({
             }
 
             try {
-              await sendLovableEmail(
-                {
-                  run_id: payload.run_id,
+              if (useResend) {
+                // ResendError carries `status` and `retryAfterSeconds`, which is
+                // what isRateLimited / isForbidden / getRetryAfterSeconds below
+                // already read off the Lovable error — so the 429 backoff, the
+                // 403-to-DLQ shortcut and the retry budget all apply unchanged.
+                await sendViaResend({
                   to: payload.to,
-                  from: payload.from,
-                  sender_domain: payload.sender_domain,
                   subject: payload.subject,
                   html: payload.html,
                   text: payload.text,
-                  purpose: payload.purpose,
-                  label: payload.label,
-                  idempotency_key: payload.idempotency_key,
-                  unsubscribe_token: payload.unsubscribe_token,
-                  message_id: payload.message_id,
-                },
-                { apiKey, sendUrl: process.env.LOVABLE_SEND_URL }
-              )
+                  // payload.from was built for the Lovable sender at enqueue
+                  // time. Honour it only if its domain is one Resend has
+                  // verified; otherwise EMAIL_FROM decides, because a From:
+                  // Resend does not recognise is a hard 403 on every message.
+                  from: process.env.EMAIL_FROM || payload.from,
+                  idempotencyKey: payload.idempotency_key,
+                  unsubscribeUrl: payload.unsubscribe_token
+                    ? `${process.env.PUBLIC_APP_URL || ''}/unsubscribe?token=${payload.unsubscribe_token}`
+                    : undefined,
+                })
+              } else {
+                // The handler already returned 500 when neither transport is
+                // configured, but TypeScript cannot narrow `apiKey` through
+                // that check. Re-asserting here is not redundant: it keeps the
+                // non-null assertion out of the call and, if the guard above is
+                // ever loosened, produces a named failure rather than an
+                // `apiKey: undefined` that Lovable would reject as a generic 401.
+                if (!apiKey) throw new Error('No email transport configured')
+                await sendLovableEmail(
+                  {
+                    run_id: payload.run_id,
+                    to: payload.to,
+                    from: payload.from,
+                    sender_domain: payload.sender_domain,
+                    subject: payload.subject,
+                    html: payload.html,
+                    text: payload.text,
+                    purpose: payload.purpose,
+                    label: payload.label,
+                    idempotency_key: payload.idempotency_key,
+                    unsubscribe_token: payload.unsubscribe_token,
+                    message_id: payload.message_id,
+                  },
+                  { apiKey, sendUrl: process.env.LOVABLE_SEND_URL }
+                )
+              }
 
               // Log success
               await supabase.from('email_send_log').insert({

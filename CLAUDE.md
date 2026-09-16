@@ -602,21 +602,30 @@ Since v1.0.0 this repo feeds **two** Vercel projects. Topology and the full setu
 **`docs/deploy-environments.md`**. Mechanics (build settings, env vars, cron,
 troubleshooting): **`docs/deploy-vercel.md`**.
 
-| Branch | Vercel project | Supabase | Data |
+| Branch | Vercel environment | Supabase | Data |
 | --- | --- | --- | --- |
-| `main` | `hrppl-prod` | `ifitgxscyuabessaoqui` | **real** |
-| `uat` | `hrppl` — `hrppl.vercel.app` | `xnrjfrxzahmfdrqfsnnq` | demo seed |
+| `main` | Production — `hrppl.io`, `hrppl.vercel.app` | `ifitgxscyuabessaoqui` | **real** |
+| `uat` | Preview | `xnrjfrxzahmfdrqfsnnq` | demo seed |
+
+**One Vercel project, two environments**, with the Supabase values set
+per-environment. `hrppl.vercel.app` therefore serves **production** now, not the
+test site. `DEPLOY_TARGET` / `scripts/vercel-ignore-build.sh` belong to the
+earlier two-project shape and are unused.
 
 Promote forward: feature → PR → `uat` → PR → `main`. A direct push to `main` is a
 production release.
 
-**Both projects are connected to the same GitHub repository**, and Vercel's default is
-that every project builds every push. Left alone, `main` would also deploy from the UAT
-project — production code against the development database, under the URL people think
-is live, with nothing erroring. `scripts/vercel-ignore-build.sh` is the Ignored Build
-Step in both, keyed on `DEPLOY_TARGET` (`production` builds only `main`; `uat` builds
-everything except `main`, so PR previews still work against dev). Vercel's convention is
-inverted — **exit 0 skips, exit 1 builds**.
+**Email and auth redirects are not carried by migrations** and were still at Supabase's
+defaults after v1.0.0 — which is why signup confirmation links pointed at
+`http://localhost:3000`. Auth email (signup, reset, magic link) is sent by GoTrue and
+configured in the **Supabase project's SMTP settings**; application email is sent by this
+codebase and configured with `RESEND_API_KEY` / `EMAIL_FROM` in **Vercel**. Both are
+needed; either alone leaves half the mail unsent. See **`docs/email-and-auth-setup.md`**
+and `scripts/configure-auth.mjs`.
+
+`sendInternalEmail` only **enqueues**. `/lovable/email/queue/process` delivers, and
+nothing calls it until a `pg_cron` job is scheduled — so email can be fully configured
+and still never arrive.
 
 Three more things that are easy to break and hard to diagnose:
 
@@ -652,6 +661,7 @@ Read the one you need; they do not repeat each other.
 | Why is the navigation shaped this way? | `docs/w4-information-architecture-design.md` (+ its W5 addendum) |
 | How do I sign in as each role? | `docs/demo-accounts.md` |
 | Which branch deploys where? | **`docs/deploy-environments.md`** — prod/UAT topology |
+| Why didn't that email arrive? | **`docs/email-and-auth-setup.md`** — Resend, SMTP, auth redirects |
 | How do I deploy? | `docs/deploy-vercel.md` — build settings, env vars, cron |
 | Known modelling debt | `docs/schema-audit.md` — **a proposal, not committed state** |
 
