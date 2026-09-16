@@ -3,7 +3,7 @@ name: E2E routing tests
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, uat]
   workflow_dispatch:
 
 # Fail the build if Google-signup routing, the Create organization option,

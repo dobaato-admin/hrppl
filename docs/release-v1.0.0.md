@@ -119,19 +119,25 @@ deploy built against the old values still returns 200 from SSR — the server fa
 `process.env` — while the browser throws and renders the error boundary. Changing them in
 a dashboard does nothing until a rebuild.
 
-The production values are in **`.env.production`** (gitignored, read by nothing
-automatically). Copy them into the hosting environment, then **rebuild**.
+Paste **`.env.vercel.prod`** (gitignored) into the new Vercel project, then **rebuild**.
 
-Also set `VITE_DEV_BYPASS_MFA=false`.
+Use that file, not `.env.production`. `.env.production` holds only the nine Supabase
+values and would deploy a site whose nightly crons 401 silently (`CRON_SECRET` unset
+fails closed) and whose invitation emails link to `https://hrppl.io`, the fallback in
+`staff-invitations.functions.ts:28`. `.env.vercel.prod` is the complete set.
 
 `docs/deploy-vercel.md` §8 has the curl checks for confirming which environment a
 deployed bundle is actually talking to.
 
-### 3. Decide what `hrppl.vercel.app` should point at
+### 3. ~~Decide what `hrppl.vercel.app` should point at~~ — decided 2026-09-16
 
-It currently auto-deploys `main` against the **development** project. Either repoint it at
-production, or stand up a separate production deployment and leave it as a dev preview.
-Until that decision is made, the live site is still the dev database.
+**Two Vercel projects, one repository.** A new project `hrppl-prod` builds `main`
+against production. `hrppl.vercel.app` keeps its URL and its development database, and
+changes only which branch it builds: `uat` instead of `main`.
+
+Setup, and the failure mode that makes it non-obvious — both projects otherwise build
+every push, so `main` would deploy twice, once against the wrong database under the
+URL people think is live — is in **`docs/deploy-environments.md`**.
 
 ### 4. Configure what the migrations cannot
 

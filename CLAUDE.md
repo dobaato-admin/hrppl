@@ -596,13 +596,29 @@ tables in the domains it flags.
 
 ---
 
-## Deployment — Vercel
+## Deployment — two environments, two Vercel projects
 
-Live at **https://hrppl.vercel.app**, auto-deploying from `main` via the GitHub integration,
-pointed at the same dev Supabase project (`xnrjfrxzahmfdrqfsnnq`). Full runbook:
-**`docs/deploy-vercel.md`**.
+Since v1.0.0 this repo feeds **two** Vercel projects. Topology and the full setup:
+**`docs/deploy-environments.md`**. Mechanics (build settings, env vars, cron,
+troubleshooting): **`docs/deploy-vercel.md`**.
 
-Three things that are easy to break and hard to diagnose:
+| Branch | Vercel project | Supabase | Data |
+| --- | --- | --- | --- |
+| `main` | `hrppl-prod` | `ifitgxscyuabessaoqui` | **real** |
+| `uat` | `hrppl` — `hrppl.vercel.app` | `xnrjfrxzahmfdrqfsnnq` | demo seed |
+
+Promote forward: feature → PR → `uat` → PR → `main`. A direct push to `main` is a
+production release.
+
+**Both projects are connected to the same GitHub repository**, and Vercel's default is
+that every project builds every push. Left alone, `main` would also deploy from the UAT
+project — production code against the development database, under the URL people think
+is live, with nothing erroring. `scripts/vercel-ignore-build.sh` is the Ignored Build
+Step in both, keyed on `DEPLOY_TARGET` (`production` builds only `main`; `uat` builds
+everything except `main`, so PR previews still work against dev). Vercel's convention is
+inverted — **exit 0 skips, exit 1 builds**.
+
+Three more things that are easy to break and hard to diagnose:
 
 - **The Nitro preset is `vercel`, set explicitly in `vite.config.ts`.** The Lovable wrapper's
   zero-config default is `cloudflare-module`. Reverting to it ships a Cloudflare Worker that
@@ -635,7 +651,8 @@ Read the one you need; they do not repeat each other.
 | Why is the product shaped this way? | `docs/plan-waves.md` (W1–W6 + audit A1) |
 | Why is the navigation shaped this way? | `docs/w4-information-architecture-design.md` (+ its W5 addendum) |
 | How do I sign in as each role? | `docs/demo-accounts.md` |
-| How do I deploy? | `docs/deploy-vercel.md` |
+| Which branch deploys where? | **`docs/deploy-environments.md`** — prod/UAT topology |
+| How do I deploy? | `docs/deploy-vercel.md` — build settings, env vars, cron |
 | Known modelling debt | `docs/schema-audit.md` — **a proposal, not committed state** |
 
 ## Current status

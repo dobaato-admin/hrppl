@@ -10,9 +10,9 @@ name: SEO regression gate
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, uat]
   push:
-    branches: [main]
+    branches: [main, uat]
   workflow_dispatch:
   deployment_status:
 

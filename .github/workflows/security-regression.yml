@@ -3,7 +3,7 @@ name: Security regression
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, uat]
   workflow_dispatch:
 
 # Fast static checks that fail the build if the super-admin guards,
