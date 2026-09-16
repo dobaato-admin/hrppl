@@ -1,5 +1,30 @@
 # Two environments: production and UAT
 
+> **Updated 2026-09-16 — this is now ONE Vercel project, not two.**
+> `main` is the project's Production environment (production Supabase); `uat`
+> is its Preview environment (development Supabase), with the Supabase values
+> set per-environment in Vercel. That is simpler than two projects and it
+> removes the duplicate-build problem entirely, so `DEPLOY_TARGET` and
+> `scripts/vercel-ignore-build.sh` are no longer needed — the script is kept,
+> unused, because a second project is the obvious thing to reach for again.
+>
+> Two consequences of the single-project shape, both easy to miss:
+>
+> 1. **`hrppl.vercel.app` now serves production**, not UAT. The UAT URL is the
+>    generated preview hostname for the `uat` branch. Anyone who had the old
+>    URL bookmarked as "the test site" is now looking at real data.
+> 2. **Preview variables apply to every preview branch**, not only `uat`, so
+>    any feature-branch deploy also gets the development database. That is the
+>    right default. If a branch ever needs different values, Vercel supports
+>    per-branch overrides.
+>
+> Email and auth-redirect configuration for both: **`docs/email-and-auth-setup.md`**.
+> The sections below still describe the two-project topology; keep them for the
+> env-var, cron and CI detail, which is unchanged.
+
+---
+
+
 From v1.0.0 this repository feeds **two Vercel projects and two Supabase
 projects**. Nothing about the code differs between them — only environment
 variables and which branch each project builds.
