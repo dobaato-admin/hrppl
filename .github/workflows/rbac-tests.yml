@@ -3,7 +3,7 @@ name: RBAC tests
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, uat]
   workflow_dispatch:
 
 jobs:

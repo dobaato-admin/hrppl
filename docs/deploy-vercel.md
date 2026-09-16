@@ -1,5 +1,12 @@
 # Deploying to Vercel
 
+> **Read `docs/deploy-environments.md` first.** Since v1.0.0 there are *two* Vercel
+> projects on this repository: `hrppl-prod` builds `main` against the production
+> Supabase project, and the project described below builds `uat` against the
+> development one. This document remains the mechanical reference — build settings,
+> env vars, cron, the "This page didn't load" troubleshooting — and all of it still
+> applies. What it does not describe is which project builds which branch.
+
 Target: **Vercel Hobby**, GitHub integration, Vercel-assigned `*.vercel.app` domain,
 connected to the existing Supabase dev project `xnrjfrxzahmfdrqfsnnq`.
 
