@@ -98,6 +98,17 @@ Or Dashboard → Project Settings → Authentication → SMTP Settings:
 The username trips people up: putting the API key in the *username* field
 authenticates as nobody and returns a generic `535`.
 
+**`smtp_port` must be sent as a string.** The Management API's GET returns it as
+a number and its PATCH rejects a number — `expected string, received number` —
+so the value you read back is not a value you can write. Worth knowing because
+the PATCH is **atomic**: sending the port as an integer 400s the whole request,
+and the `site_url` and `uri_allow_list` in the same body are discarded with it,
+leaving the project silently still on `http://localhost:3000`. The script now
+sends the URLs and the SMTP block as two separate requests for that reason, and
+coerces a type-mismatched field and retries once before giving up. Either way it
+re-reads and prints the live state afterwards, so a partial apply is visible
+rather than assumed.
+
 **This is urgent, not cosmetic.** With no custom SMTP a project uses Supabase's
 shared sender, and production currently reads `rate_limit_email_sent: 2` —
 **two emails per hour for the entire project**. The third person to sign up in
