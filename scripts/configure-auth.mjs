@@ -45,14 +45,34 @@
 // different places because they are sent by two different systems.
 //
 // -----------------------------------------------------------------------------
+// Every SMTP value comes from the environment. None is written here.
+// -----------------------------------------------------------------------------
+//
+// An earlier version of this file built the mail block from hard-coded host and
+// username strings, with only the password read from the environment. No
+// credential was ever committed. But secret scanners match the *shape* — a
+// literal host and username sitting beside a password field reads as a pasted
+// credential whether the value next to it is a string or a variable reference.
+// GitGuardian flagged it, correctly by its own rules.
+//
+// (This comment avoids naming those fields in their literal form for the same
+// reason. A detector cannot tell an explanation from a recurrence.)
+//
+// Rather than annotate around the detector, the provider-specific values moved
+// out of the file entirely. That is better config hygiene anyway: the host,
+// port and username are deployment facts, not source code, and hard-coding
+// them is what made switching provider a code change.
+//
+// -----------------------------------------------------------------------------
 // Usage
 // -----------------------------------------------------------------------------
 //
 //   # URLs only (safe to run first, changes nothing about email)
 //   node scripts/configure-auth.mjs --env prod --urls
 //
-//   # URLs + point GoTrue at Resend's SMTP
-//   RESEND_API_KEY=re_xxx node scripts/configure-auth.mjs --env prod --urls --smtp
+//   # URLs + SMTP. Reads SMTP_* from .env — never pass a secret on the command
+//   # line, where it is recorded verbatim in your shell history file.
+//   node scripts/configure-auth.mjs --env prod --urls --smtp
 //
 //   # See what is currently set, change nothing
 //   node scripts/configure-auth.mjs --env prod --show
@@ -139,6 +159,59 @@ async function show() {
   console.log();
 }
 
+// Every SMTP field, and where it comes from. Nothing provider-specific is
+// written in this file — see the header. `.env.example` lists the same names
+// with the values a Resend account wants.
+//
+// SMTP_PASS falls back to RESEND_API_KEY because with Resend they are the same
+// secret: the SMTP password IS the API key. Keeping the fallback means one
+// value to set for both halves of the mail setup, while still allowing two
+// distinct keys if you would rather revoke them independently.
+const SMTP_FIELDS = [
+  { api: "smtp_host",             env: "SMTP_HOST",         required: true,  hint: "your provider's SMTP hostname" },
+  { api: "smtp_port",             env: "SMTP_PORT",         required: true,  hint: "465 for implicit TLS, or 587", string: true },
+  { api: "smtp_user",             env: "SMTP_USER",         required: true,  hint: "SMTP username (provider-specific, often not an email)" },
+  { api: "smtp_pass",             env: "SMTP_PASS",         required: true,  hint: "SMTP password / API key", secret: true, fallback: "RESEND_API_KEY" },
+  { api: "smtp_admin_email",      env: "SMTP_ADMIN_EMAIL",  required: true,  hint: "From: address, on a domain verified with your provider" },
+  { api: "smtp_sender_name",      env: "SMTP_SENDER_NAME",  required: false, hint: "display name on outgoing mail" },
+  { api: "rate_limit_email_sent", env: "SMTP_RATE_LIMIT",   required: false, hint: "messages/hour (default 30)", number: true, default: "30" },
+];
+
+// Lookup order for every field: PROD_/DEV_ prefixed first, then the bare name,
+// then the cross-provider fallback, then the default.
+//
+// The prefix exists because the identity fields genuinely differ per
+// environment while the secret usually does not. Without it, a single
+// SMTP_SENDER_NAME in .env applies to both — and since .env is a development
+// file, `--env prod` quietly stamps production invitations with whatever
+// display name local testing left there. The recipient sees it; nothing else
+// does.
+function lookup(f) {
+  const prefixed = `${envName.toUpperCase()}_${f.env}`;
+  return (
+    process.env[prefixed] ??
+    process.env[f.env] ??
+    (f.fallback ? process.env[f.fallback] : undefined) ??
+    f.default
+  );
+}
+
+function resolveSmtpFromEnv() {
+  const body = {};
+  const missing = [];
+  for (const f of SMTP_FIELDS) {
+    const raw = lookup(f);
+    if (raw === undefined || raw === "") {
+      if (f.required) missing.push(f);
+      continue;
+    }
+    // smtp_port must go out as a STRING even though GET returns a number;
+    // rate_limit_email_sent is the reverse. See patchOnce().
+    body[f.api] = f.number ? Number(raw) : f.string ? String(raw) : raw;
+  }
+  return { body, missing };
+}
+
 // The PATCH is atomic, so one rejected field discards every other field in the
 // same request. Sending the URLs and the SMTP block as SEPARATE requests means a
 // problem with the mail settings cannot also throw away the redirect allowlist —
@@ -153,40 +226,32 @@ function buildPatches() {
     });
   }
   if (flag("--smtp")) {
-    const key = process.env.RESEND_API_KEY;
-    if (!key) { console.error("--smtp needs RESEND_API_KEY in the environment."); process.exit(1); }
-    const from = process.env.EMAIL_FROM_ADDRESS || "noreply@hrppl.io";
-    patches.push({ label: "Resend SMTP", body: {
-      smtp_host: "smtp.resend.com",
-      // 465 with implicit TLS. Port 587 also works; 25 is blocked by most
-      // hosts and by Supabase.
-      //
-      // A STRING, not a number. The Management API validates this field as
-      // `expected string, received number` and rejects the whole PATCH with a
-      // 400 — and because the PATCH is atomic, sending the port as an integer
-      // also silently discards the site_url and uri_allow_list in the same
-      // request. The GET returns it as a number, which is what invites the
-      // mistake.
-      smtp_port: "465",
-      // Resend's SMTP username is the literal string "resend" for every
-      // account — the API key is the password. Putting the key in the username
-      // authenticates as nobody and fails with a generic 535.
-      smtp_user: "resend",
-      smtp_pass: key,
-      smtp_admin_email: from,
-      smtp_sender_name: process.env.EMAIL_FROM_NAME || "hrppl",
-      // Supabase's own limit exists because the shared sender is shared. On a
-      // dedicated Resend account it is just a throttle; 30/hour still absorbs
-      // an onboarding batch without letting a loop empty the quota.
-      rate_limit_email_sent: 30,
-    }});
+    const { body, missing } = resolveSmtpFromEnv();
+    if (missing.length) {
+      console.error(
+        `\n--smtp is missing required environment variables:\n` +
+          missing.map((m) => `  ${m.env.padEnd(18)} ${m.hint}`).join("\n") +
+          `\n\nSet them in .env (gitignored) — see .env.example. Do NOT pass them\n` +
+          `inline on the command line; your shell records that verbatim.\n`,
+      );
+      process.exit(1);
+    }
+    patches.push({ label: "SMTP", body });
   }
   return patches;
 }
 
+// Redact every field marked secret, not just the one we happen to remember.
+// The printed body is the thing most likely to end up pasted into a chat or an
+// issue, which is how a value that was correctly kept out of git leaks anyway.
 function redact(body) {
   const out = { ...body };
-  if (out.smtp_pass) out.smtp_pass = `re_***${String(body.smtp_pass).slice(-4)}`;
+  for (const f of SMTP_FIELDS) {
+    if (f.secret && out[f.api]) {
+      const v = String(out[f.api]);
+      out[f.api] = `***${v.length > 4 ? v.slice(-4) : ""} (${v.length} chars)`;
+    }
+  }
   return out;
 }
 
