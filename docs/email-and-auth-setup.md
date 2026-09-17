@@ -80,10 +80,23 @@ directly, so SMTP settings are the only lever.
 
 ### 2a. Auth email — Supabase SMTP
 
+Put the values in `.env` (gitignored) — **never inline on the command line**,
+where your shell records the secret verbatim in its history file. Then:
+
 ```sh
-RESEND_API_KEY=re_xxx node scripts/configure-auth.mjs --env prod --urls --smtp
-RESEND_API_KEY=re_xxx node scripts/configure-auth.mjs --env dev  --urls --smtp
+node scripts/configure-auth.mjs --env prod --urls --smtp
+node scripts/configure-auth.mjs --env dev  --urls --smtp
 ```
+
+`.env.example` lists every name. The script reads them and writes them to the
+Supabase project; nothing SMTP-specific is hard-coded in it any more.
+
+Any `SMTP_*` name may be prefixed with the `--env` value to override it for one
+project: `PROD_SMTP_SENDER_NAME`, `DEV_SMTP_ADMIN_EMAIL`. The prefixed name
+wins. Use it for the identity fields — the secret is usually shared, the display
+name should not be. Without the prefix, one `SMTP_SENDER_NAME` in a development
+`.env` stamps production invitations with whatever local testing left there, and
+the recipient is the only one who ever sees it.
 
 Or Dashboard → Project Settings → Authentication → SMTP Settings:
 
@@ -114,6 +127,22 @@ shared sender, and production currently reads `rate_limit_email_sent: 2` —
 **two emails per hour for the entire project**. The third person to sign up in
 an hour gets nothing, and Supabase documents that sender as not for production.
 The script raises it to 30/hour once a real sender is attached.
+
+### Why none of this is written in the script
+
+GitGuardian flagged `scripts/configure-auth.mjs` for SMTP credentials. On the
+value it was a false positive — the password was always `process.env.RESEND_API_KEY`,
+and a scan of all 187 commits confirms no key has ever been committed. On the
+*shape* it was correct: a literal host and username sitting beside a password
+field is indistinguishable from a pasted credential, and a scanner cannot tell
+which it is looking at.
+
+Annotating around the detector would have been the wrong fix. The host, port and
+username are deployment facts rather than source code, and hard-coding them is
+what made changing provider a code change. They now come from the environment
+like everything else, and `tests/no-committed-credentials.test.ts` fails if they
+come back — along with any provider-shaped secret anywhere in `src/`, `scripts/`,
+`tests/`, the migrations, the workflows, or `.env.example`.
 
 ### 2b. App email — Vercel
 
