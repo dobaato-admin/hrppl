@@ -1,12 +1,24 @@
 name: Security findings gate
 
-# Blocks merges when the persisted security findings portal reports any
-# OPEN error-level (high/critical) findings across any scanner — Wiz,
-# connector_security_scan, supabase_lov, dependency audit, etc.
+# Blocks merges when `security_findings_log` holds any OPEN error-level
+# (high/critical) findings from any scanner — Wiz, connector_security_scan,
+# supabase_lov, dependency audit, etc.
 #
-# Reads the live count from the published API endpoint that backs the
-# /admin/security-findings dashboard. The endpoint requires no auth
-# (count-only, no PII) and is served from the same TanStack route file.
+# Reads the count straight from Postgres via PostgREST with the service-role
+# key, NOT from /_serverFn/countOpenHighSeverityFindings.
+#
+# It used to curl that endpoint unauthenticated, and this comment used to claim
+# the endpoint "requires no auth (count-only, no PII)". That stopped being true
+# on 2026-09-03, when the security audit gave
+# `countOpenHighSeverityFindings` a `requireSupabaseAuth` middleware and an
+# `assertSuperAdmin` check — correctly, because an anonymous caller could
+# otherwise read back a live count of the platform's open criticals.
+#
+# From then on CI got a 401, fell into the "could not reach portal" branch,
+# emitted a ::warning:: and exited 0. The gate could no longer block anything
+# and reported a green check while doing it — the same render-as-emptiness
+# failure mode CLAUDE.md catalogues elsewhere. Hence: query the table directly,
+# and make every non-enforcing state loud (see the second step).
 
 on:
   pull_request:
@@ -24,44 +36,92 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Query findings portal
+      - name: Count open error-level findings
         id: query
         env:
-          # Was defaulting to hrppl.lovable.app — a stale pre-Vercel-migration
-          # domain (see CLAUDE.md "Deployment — Vercel": the live app is
-          # hrppl.vercel.app). That domain 302-redirected with an empty body,
-          # which curl's -f does not treat as a failure (redirects aren't
-          # 4xx/5xx), so the fallback below never triggered and the empty
-          # body reached `python3 -c json.load(...)`, which threw — a hard
-          # script error under `set -e`, not the graceful "not blocking"
-          # path this job's own comment says it should take.
-          API_BASE: ${{ vars.SECURITY_FINDINGS_API_BASE || 'https://hrppl.vercel.app' }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GATE_DISABLED: ${{ vars.SECURITY_GATE_DISABLED }}
         run: |
           set -uo pipefail
-          echo "Querying ${API_BASE}/_serverFn/countOpenHighSeverityFindings"
-          HTTP_CODE=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X GET \
-            "${API_BASE}/_serverFn/countOpenHighSeverityFindings" \
-            -H "Accept: application/json" || echo "000")
-          echo "HTTP status: $HTTP_CODE"
-          cat /tmp/resp.json 2>/dev/null || true
-          echo
-          COUNT=-1
-          if [ "$HTTP_CODE" = "200" ]; then
-            COUNT=$(jq -r '.open_high_critical // .result.open_high_critical // -1' /tmp/resp.json 2>/dev/null || echo -1)
-            case "$COUNT" in ''|*[!0-9-]*) COUNT=-1 ;; esac
-          fi
-          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
-      - name: Fail if any open high/critical findings
-        run: |
-          COUNT="${{ steps.query.outputs.count }}"
-          if [ "$COUNT" = "-1" ]; then
-            echo "::warning::Could not reach security findings portal — not blocking."
+
+          # Deliberately off is a decision somebody made and can be seen in
+          # the repo variables. Silently off is the bug this job used to have.
+          if [ "${GATE_DISABLED:-}" = "true" ]; then
+            echo "::warning::SECURITY_GATE_DISABLED=true — gate explicitly turned off."
+            echo "state=disabled" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "state=no-creds" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # PostgREST returns the row count in Content-Range when asked for it.
+          # Range: 0-0 keeps the body to one row — this job wants the number,
+          # not the findings. The service-role key bypasses RLS, which is
+          # correct for CI: there is no session here to scope, and the
+          # alternative (the /_serverFn endpoint) is super_admin-only by
+          # design. Only the count is ever printed; the rows are not.
+          HTTP_CODE=$(curl -sS -o /dev/null -D /tmp/h -w '%{http_code}' \
+            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+            -H "Prefer: count=exact" \
+            -H "Range: 0-0" \
+            "${SUPABASE_URL}/rest/v1/security_findings_log?select=id&status=eq.open&severity=eq.error" \
+            || echo "000")
+          echo "HTTP status: $HTTP_CODE"
+
+          # e.g. "Content-Range: 0-0/42", or "*/0" when nothing matches.
+          RANGE=$(tr -d '\r' < /tmp/h | awk -F': ' 'tolower($1)=="content-range"{print $2}' | tail -1)
+          echo "Content-Range: ${RANGE:-<none>}"
+          COUNT="${RANGE##*/}"
+          case "$COUNT" in ''|*[!0-9]*) COUNT=-1 ;; esac
+
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "http=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          echo "state=queried" >> "$GITHUB_OUTPUT"
+
+      - name: Fail if any open high/critical findings
+        env:
+          STATE: ${{ steps.query.outputs.state }}
+          COUNT: ${{ steps.query.outputs.count }}
+          HTTP: ${{ steps.query.outputs.http }}
+        run: |
+          set -uo pipefail
+
+          if [ "$STATE" = "disabled" ]; then
+            echo "Gate disabled by repo variable — nothing enforced."
+            exit 0
+          fi
+
+          # A gate with no credentials cannot enforce anything. It says so and
+          # fails, rather than reporting a green check that means nothing.
+          # To stand it down on purpose, set the repo variable
+          # SECURITY_GATE_DISABLED=true — that is visible; silence is not.
+          if [ "$STATE" = "no-creds" ]; then
+            echo "::error::SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set, so open"
+            echo "::error::high/critical findings cannot be checked. Add both repository"
+            echo "::error::secrets (rbac-tests.yml already uses them), or set the repo"
+            echo "::error::variable SECURITY_GATE_DISABLED=true to stand this gate down."
+            exit 1
+          fi
+
+          # Credentials are present but the query did not come back cleanly.
+          # That is a broken gate, not an absent one, so it fails loudly.
+          if [ "$COUNT" = "-1" ]; then
+            echo "::error::Could not read security_findings_log (HTTP $HTTP). The gate is"
+            echo "::error::configured but not working — check SUPABASE_URL, the service-role"
+            echo "::error::key, and that the security_findings_log table still exists."
+            exit 1
+          fi
+
           if [ "$COUNT" -gt 0 ]; then
             echo "::error::Blocking merge: $COUNT open high/critical security finding(s) recorded. Review /admin/security-findings."
             exit 1
           fi
+
           echo "✅ No open high/critical security findings."
 
   deps-cve-gate:
